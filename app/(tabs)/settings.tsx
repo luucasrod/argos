@@ -1,0 +1,443 @@
+import React from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, Switch, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+
+import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useMemoryStore } from '@/stores/useMemoryStore';
+import { useAIStore } from '@/stores/useAIStore';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { useHaptic } from '@/hooks/useHaptic';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { Colors } from '@/constants/colors';
+import { AIPersonality } from '@/types/ai.types';
+import { ANTHROPIC_MODELS } from '@/services/ai/config';
+
+function SettingRow({
+  label,
+  children,
+  description,
+}: {
+  label: string;
+  children: React.ReactNode;
+  description?: string;
+}) {
+  return (
+    <View style={styles.settingRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        {description ? <Text style={styles.settingDesc}>{description}</Text> : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return <Text style={styles.sectionHeader}>{title}</Text>;
+}
+
+function optionPillStyle(active: boolean) {
+  return StyleSheet.flatten([styles.optionPill, active ? styles.optionPillActive : {}]);
+}
+
+function optionTextStyle(active: boolean) {
+  return StyleSheet.flatten([styles.optionText, active ? styles.optionTextActive : {}]);
+}
+
+export default function SettingsScreen() {
+  const { settings, updateSettings, updatePersonality, updateUserProfile } = useSettingsStore();
+  const { memories, insights } = useMemoryStore();
+  const { clearMessages } = useAIStore();
+  const { user, signOut } = useAuthStore();
+  const { light, medium } = useHaptic();
+
+  const toneOptions: AIPersonality['tone'][] = ['formal', 'casual', 'direct', 'friendly', 'playful'];
+  const proactivityOptions: AIPersonality['proactivity'][] = ['low', 'medium', 'high'];
+
+  return (
+    <View style={styles.container}>
+      <LinearGradient colors={[Colors.bg.primary, Colors.bg.secondary]} style={StyleSheet.absoluteFill} />
+      <SafeAreaView style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
+            <Text style={styles.title}>Configurações</Text>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(120)}>
+            <SectionHeader title="🔑 Conta" />
+            <GlassCard style={styles.section}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>{user?.name ?? 'Usuário'}</Text>
+                  <Text style={styles.settingDesc}>{user?.email}</Text>
+                </View>
+                <Pressable
+                  style={styles.signOutBtn}
+                  onPress={() => { medium(); signOut(); }}
+                >
+                  <Text style={styles.signOutText}>Sair</Text>
+                </Pressable>
+              </View>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(130)}>
+            <SectionHeader title="👤 Perfil" />
+            <GlassCard style={styles.section}>
+              <SettingRow label="Seu nome" description="Argos vai te chamar por este nome">
+                <TextInput
+                  style={styles.nameInput}
+                  value={settings.userProfile?.name ?? ''}
+                  onChangeText={(v) => updateUserProfile({ name: v })}
+                  placeholder="Ex: João"
+                  placeholderTextColor={Colors.text.muted}
+                />
+              </SettingRow>
+              <View style={styles.divider} />
+              <SettingRow label="Sua cidade" description="Usada para clima e localização">
+                <TextInput
+                  style={styles.nameInput}
+                  value={settings.userProfile?.city ?? ''}
+                  onChangeText={(v) => updateUserProfile({ city: v })}
+                  placeholder="Ex: São Paulo"
+                  placeholderTextColor={Colors.text.muted}
+                />
+              </SettingRow>
+              <View style={styles.divider} />
+              <SettingRow label="Profissão" description="Contexto para sugestões personalizadas">
+                <TextInput
+                  style={styles.nameInput}
+                  value={settings.userProfile?.profession ?? ''}
+                  onChangeText={(v) => updateUserProfile({ profession: v })}
+                  placeholder="Ex: Desenvolvedor"
+                  placeholderTextColor={Colors.text.muted}
+                />
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(140)}>
+            <SectionHeader title="🎛 Autonomia" />
+            <GlassCard style={styles.section}>
+              <SettingRow
+                label="Nível de autonomia"
+                description={
+                  settings.autonomyLevel === 'autonomous'
+                    ? 'Autônomo: executa ações sem confirmação'
+                    : 'Assistido: pede confirmação antes de agir'
+                }
+              >
+                <View style={styles.optionRow}>
+                  {([
+                    { id: 'autonomous', label: '⚡ Autônomo' },
+                    { id: 'assisted', label: '🛡 Assistido' },
+                  ] as const).map(({ id, label }) => (
+                    <Pressable
+                      key={id}
+                      onPress={() => {
+                        light();
+                        updateSettings({ autonomyLevel: id });
+                      }}
+                      style={optionPillStyle(settings.autonomyLevel === id)}
+                    >
+                      <Text style={optionTextStyle(settings.autonomyLevel === id)}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(150)}>
+            <SectionHeader title="🤖 Assistente" />
+            <GlassCard style={styles.section}>
+              <SettingRow label="Nome da assistente">
+                <TextInput
+                  style={styles.nameInput}
+                  value={settings.personality.name}
+                  onChangeText={(v) => updatePersonality({ name: v })}
+                  placeholder="Argos"
+                  placeholderTextColor={Colors.text.muted}
+                />
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow label="Tom de voz" description="Como a IA se comunica com você">
+                <View style={styles.optionRow}>
+                  {toneOptions.map((tone) => (
+                    <Pressable
+                      key={tone}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ tone });
+                      }}
+                      style={optionPillStyle(settings.personality.tone === tone)}
+                    >
+                      <Text style={optionTextStyle(settings.personality.tone === tone)}>{tone}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow
+                label="Proatividade"
+                description="Com que frequência o Argos sugere ações"
+              >
+                <View style={styles.optionRow}>
+                  {proactivityOptions.map((opt) => (
+                    <Pressable
+                      key={opt}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ proactivity: opt });
+                      }}
+                      style={optionPillStyle(settings.personality.proactivity === opt)}
+                    >
+                      <Text style={optionTextStyle(settings.personality.proactivity === opt)}>
+                        {opt}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow label="Velocidade da voz">
+                <Text style={styles.valueText}>{settings.personality.voiceSpeed}x</Text>
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow label="Gênero da voz">
+                <View style={styles.optionRow}>
+                  {(['female', 'male'] as const).map((gender) => (
+                    <Pressable
+                      key={gender}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ voiceGender: gender });
+                      }}
+                      style={optionPillStyle(settings.personality.voiceGender === gender)}
+                    >
+                      <Text style={optionTextStyle(settings.personality.voiceGender === gender)}>
+                        {gender === 'female' ? '👩 Feminino' : '👨 Masculino'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(200)}>
+            <SectionHeader title="🧠 Inteligência Artificial" />
+            <GlassCard style={styles.section}>
+              <SettingRow
+                label="Modelo"
+                description="Sonnet é mais inteligente; Haiku responde mais rápido"
+              >
+                <View style={styles.optionRow}>
+                  {(
+                    [
+                      { id: ANTHROPIC_MODELS.haiku, label: '⚡ Haiku' },
+                      { id: ANTHROPIC_MODELS.sonnet, label: '🧠 Sonnet' },
+                    ] as const
+                  ).map(({ id, label }) => (
+                    <Pressable
+                      key={id}
+                      onPress={() => {
+                        light();
+                        updateSettings({ model: id });
+                      }}
+                      style={optionPillStyle(settings.model === id)}
+                    >
+                      <Text style={optionTextStyle(settings.model === id)}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow label="Memória ativa" description="A IA aprende seus hábitos e preferências">
+                <Switch
+                  value={settings.memoryEnabled}
+                  onValueChange={(v) => {
+                    light();
+                    updateSettings({ memoryEnabled: v });
+                  }}
+                  trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(250)}>
+            <SectionHeader title="🎙 Voz" />
+            <GlassCard style={styles.section}>
+              <SettingRow label="Resposta por voz" description="Argos fala as respostas em voz alta">
+                <Switch
+                  value={settings.autoListen}
+                  onValueChange={(v) => {
+                    light();
+                    updateSettings({ autoListen: v });
+                  }}
+                  trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </SettingRow>
+              <View style={styles.divider} />
+              <SettingRow label="Idioma">
+                <View style={styles.optionRow}>
+                  {(['pt-BR', 'en-US'] as const).map((lang) => (
+                    <Pressable
+                      key={lang}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ language: lang });
+                      }}
+                      style={optionPillStyle(settings.personality.language === lang)}
+                    >
+                      <Text style={optionTextStyle(settings.personality.language === lang)}>
+                        {lang === 'pt-BR' ? '🇧🇷 PT' : '🇺🇸 EN'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(300)}>
+            <SectionHeader title="🔒 Privacidade" />
+            <GlassCard style={styles.section}>
+              <SettingRow label="Salvar histórico de conversas">
+                <Switch
+                  value={settings.saveHistory}
+                  onValueChange={(v) => {
+                    light();
+                    updateSettings({ saveHistory: v });
+                  }}
+                  trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </SettingRow>
+              <View style={styles.divider} />
+              <SettingRow label="Feedback tátil (haptic)">
+                <Switch
+                  value={settings.hapticFeedback}
+                  onValueChange={(v) => {
+                    light();
+                    updateSettings({ hapticFeedback: v });
+                  }}
+                  trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(350)}>
+            <SectionHeader title="📊 Dados" />
+            <GlassCard style={styles.section}>
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statValue}>{memories.length}</Text>
+                  <Text style={styles.statLabel}>Memórias</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statValue}>{insights.length}</Text>
+                  <Text style={styles.statLabel}>Insights</Text>
+                </View>
+              </View>
+              <View style={styles.divider} />
+              <Pressable
+                onPress={() => {
+                  medium();
+                  clearMessages();
+                }}
+                style={styles.dangerButton}
+              >
+                <Text style={styles.dangerText}>🗑 Limpar histórico de conversas</Text>
+              </Pressable>
+            </GlassCard>
+          </Animated.View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.bg.primary },
+  safe: { flex: 1 },
+  scroll: { paddingBottom: 60 },
+  header: { paddingHorizontal: 24, paddingVertical: 16 },
+  title: { color: Colors.text.primary, fontSize: 28, fontWeight: '800' },
+  sectionHeader: {
+    color: Colors.text.muted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    paddingHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  section: { marginHorizontal: 24, padding: 0, overflow: 'hidden' },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  settingLabel: { color: Colors.text.primary, fontSize: 15, fontWeight: '500' },
+  settingDesc: { color: Colors.text.muted, fontSize: 12, marginTop: 2 },
+  divider: { height: 1, backgroundColor: Colors.glass.border, marginHorizontal: 16 },
+  nameInput: {
+    color: Colors.text.primary,
+    fontSize: 15,
+    backgroundColor: Colors.glass.light,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 120,
+  },
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', flex: 1 },
+  optionPill: {
+    backgroundColor: Colors.glass.light,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  optionPillActive: { backgroundColor: Colors.accent.primary, borderColor: Colors.accent.primary },
+  optionText: { color: Colors.text.muted, fontSize: 12, fontWeight: '500' },
+  optionTextActive: { color: '#FFFFFF', fontWeight: '600' },
+  valueText: { color: Colors.accent.primary, fontSize: 15, fontWeight: '600' },
+  statsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 20 },
+  statBox: { alignItems: 'center' },
+  statValue: { color: Colors.accent.primary, fontSize: 24, fontWeight: '800' },
+  statLabel: { color: Colors.text.muted, fontSize: 12, marginTop: 4 },
+  dangerButton: { paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center' },
+  dangerText: { color: Colors.status.error, fontSize: 14, fontWeight: '500' },
+  signOutBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  signOutText: { color: Colors.status.error, fontWeight: '600', fontSize: 14 },
+});

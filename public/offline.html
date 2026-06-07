@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Argos — Sem conexão</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #050810;
+        color: #f0f4ff;
+        padding: 24px;
+      }
+      .card {
+        text-align: center;
+        background: rgba(16, 24, 40, 0.9);
+        border: 1px solid rgba(124, 58, 237, 0.3);
+        border-radius: 24px;
+        padding: 40px 32px;
+        max-width: 360px;
+        width: 100%;
+      }
+      .orb {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #7C3AED, #4F46E5, #3B82F6);
+        margin: 0 auto 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        box-shadow: 0 0 40px rgba(124, 58, 237, 0.4);
+        animation: pulse 3s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 0.9; }
+        50% { transform: scale(1.05); opacity: 1; }
+      }
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: #C4B5FD;
+      }
+      p {
+        color: #8a94b2;
+        font-size: 15px;
+        line-height: 1.6;
+        margin-bottom: 28px;
+      }
+      button {
+        background: #7C3AED;
+        color: #fff;
+        border: none;
+        border-radius: 14px;
+        padding: 14px 28px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        transition: opacity 0.2s;
+      }
+      button:hover { opacity: 0.85; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="orb">🌐</div>
+      <h1>Sem conexão</h1>
+      <p>
+        O Argos precisa de internet para processar comandos com IA.<br />
+        Verifique sua conexão e tente novamente.
+      </p>
+      <button onclick="window.location.reload()">Tentar novamente</button>
+    </div>
+  </body>
+</html>

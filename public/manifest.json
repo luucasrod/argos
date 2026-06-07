@@ -1,0 +1,34 @@
+{
+  "name": "Argos",
+  "short_name": "Argos",
+  "description": "Seu assistente de IA pessoal — controle por voz, automações e memória inteligente",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "background_color": "#050810",
+  "theme_color": "#7C3AED",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "scope": "/",
+  "id": "/",
+  "icons": [
+    {
+      "src": "/assets/favicon.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/adaptive-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "prefer_related_applications": false
+}
