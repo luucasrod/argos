@@ -13,13 +13,19 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 export default function TabsLayout() {
   return (
     <Tabs
+      detachInactiveScreens
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: false,
         tabBarActiveTintColor: Colors.accent.primary,
         tabBarInactiveTintColor: Colors.text.muted,
-        sceneStyle: { backgroundColor: Colors.bg.primary, flex: 1 },
+        lazy: true,
+        sceneStyle: {
+          backgroundColor: Colors.bg.primary,
+          flex: 1,
+          overflow: 'hidden',
+        },
       }}
     >
       <Tabs.Screen

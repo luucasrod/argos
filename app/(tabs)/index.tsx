@@ -46,7 +46,7 @@ export default function HomeScreen() {
     [sendMessage]
   );
 
-  const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice({
+  const { isListening, transcript, startListening, stopListening } = useVoice({
     onAutoSend: handleVoiceSend,
   });
   const { light, medium } = useHaptic();
@@ -56,6 +56,8 @@ export default function HomeScreen() {
 
   const activeInsights = getActiveInsights();
   const recentAutomations = automations.filter((a) => a.runCount > 0).slice(0, 3);
+  const hasBottomPanel = activeInsights.length > 0 || recentAutomations.length > 0;
+
   const handleOrbPress = useCallback(() => {
     light();
     if (isListening) {
@@ -96,7 +98,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
-          style={{ flex: 1 }}
+          style={styles.keyboard}
         >
           <View style={styles.main}>
             <View style={styles.topSection}>
@@ -108,20 +110,6 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.memoryButtonText}>🧠</Text>
                 </Pressable>
-              </Animated.View>
-
-              <Animated.View entering={enter.down(150)} style={styles.suggestions}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {HOME_SUGGESTIONS.map((suggestion) => (
-                    <Pressable
-                      key={suggestion.label}
-                      onPress={() => handleSuggestion(suggestion.message)}
-                      style={styles.suggestionPill}
-                    >
-                      <Text style={styles.suggestionText}>{suggestion.label}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
               </Animated.View>
             </View>
 
@@ -180,47 +168,71 @@ export default function HomeScreen() {
               </Animated.View>
             </View>
 
-            {activeInsights.length > 0 && (
-              <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
-                <Text style={styles.sectionTitle}>Insights</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {activeInsights.map((insight) => (
-                    <Pressable
-                      key={insight.id}
-                      onPress={() => insight.suggestion && handleSuggestion(insight.suggestion)}
-                    >
-                      <GlassCard style={styles.insightCard}>
-                        <Text style={styles.insightText}>{insight.message}</Text>
-                        {insight.suggestion && (
-                          <Text style={styles.insightSuggestion}>{insight.suggestion} →</Text>
-                        )}
-                      </GlassCard>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </Animated.View>
-            )}
+            <Animated.View entering={enter.down(150)} style={styles.suggestionsSection}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {HOME_SUGGESTIONS.map((suggestion) => (
+                  <Pressable
+                    key={suggestion.label}
+                    onPress={() => handleSuggestion(suggestion.message)}
+                    style={styles.suggestionPill}
+                  >
+                    <Text style={styles.suggestionText}>{suggestion.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Animated.View>
 
-            {recentAutomations.length > 0 && (
-              <Animated.View entering={enter.down(400)} style={styles.quickActions}>
-                <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-                <View style={styles.quickActionsGrid}>
-                  {recentAutomations.map((auto) => (
-                    <Pressable
-                      key={auto.id}
-                      style={styles.quickActionButton}
-                      onPress={() => handleSuggestion(auto.name)}
-                    >
-                      <GlassCard style={styles.quickActionCard}>
-                        <Text style={styles.quickActionEmoji}>{auto.emoji}</Text>
-                        <Text style={styles.quickActionName}>{auto.name}</Text>
-                        <Text style={styles.quickActionCount}>{auto.runCount}x</Text>
-                      </GlassCard>
-                    </Pressable>
-                  ))}
-                </View>
-              </Animated.View>
-            )}
+            {hasBottomPanel ? (
+              <View style={styles.bottomPanel}>
+                {activeInsights.length > 0 && (
+                  <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
+                    <Text style={styles.sectionTitle}>Insights</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {activeInsights.map((insight) => (
+                        <Pressable
+                          key={insight.id}
+                          onPress={() => insight.suggestion && handleSuggestion(insight.suggestion)}
+                        >
+                          <GlassCard style={styles.insightCard}>
+                            <Text style={styles.insightText} numberOfLines={3}>
+                              {insight.message}
+                            </Text>
+                            {insight.suggestion ? (
+                              <Text style={styles.insightSuggestion} numberOfLines={1}>
+                                {insight.suggestion} →
+                              </Text>
+                            ) : null}
+                          </GlassCard>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </Animated.View>
+                )}
+
+                {recentAutomations.length > 0 && (
+                  <Animated.View entering={enter.down(400)} style={styles.quickActions}>
+                    <Text style={styles.sectionTitle}>Ações Rápidas</Text>
+                    <View style={styles.quickActionsGrid}>
+                      {recentAutomations.map((auto) => (
+                        <Pressable
+                          key={auto.id}
+                          style={styles.quickActionButton}
+                          onPress={() => handleSuggestion(auto.name)}
+                        >
+                          <GlassCard style={styles.quickActionCard}>
+                            <Text style={styles.quickActionEmoji}>{auto.emoji}</Text>
+                            <Text style={styles.quickActionName} numberOfLines={2}>
+                              {auto.name}
+                            </Text>
+                            <Text style={styles.quickActionCount}>{auto.runCount}x</Text>
+                          </GlassCard>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </Animated.View>
+                )}
+              </View>
+            ) : null}
           </View>
 
           <Animated.View entering={enter.up(300)} style={styles.inputContainer}>
@@ -255,16 +267,17 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
-  safe: { flex: 1 },
-  main: { flex: 1 },
-  topSection: { flexShrink: 0 },
+  container: { flex: 1, backgroundColor: Colors.bg.primary, overflow: 'hidden' },
+  safe: { flex: 1, backgroundColor: Colors.bg.primary },
+  keyboard: { flex: 1, backgroundColor: Colors.bg.primary },
+  main: { flex: 1, overflow: 'hidden', backgroundColor: Colors.bg.primary },
+  topSection: { flexShrink: 0, zIndex: 2, backgroundColor: Colors.bg.primary },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 12,
   },
   greeting: { fontSize: 26, fontWeight: '700', color: '#C4B5FD', letterSpacing: 0.5 },
   memoryButton: {
@@ -276,15 +289,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memoryButtonText: { fontSize: 20 },
+  suggestionsSection: {
+    flexShrink: 0,
+    paddingLeft: 24,
+    paddingTop: 4,
+    paddingBottom: 10,
+    backgroundColor: Colors.bg.primary,
+  },
+  suggestionPill: {
+    backgroundColor: 'rgba(124, 58, 237, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.3)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 10,
+  },
+  suggestionText: { color: '#C4B5FD', fontSize: 14, fontWeight: '500' },
   orbArea: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+    minHeight: 200,
+    overflow: 'hidden',
+    backgroundColor: Colors.bg.primary,
   },
   orbContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   transcriptText: {
     marginTop: 12,
@@ -294,7 +328,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     fontStyle: 'italic',
   },
-  executionContainer: { width: '100%', marginBottom: 16 },
+  executionContainer: { width: '100%', marginBottom: 12 },
   executionCard: { padding: 16, gap: 10 },
   executionTitle: {
     color: Colors.accent.primary,
@@ -307,38 +341,56 @@ const styles = StyleSheet.create({
   executionStep: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   executionStepIcon: { fontSize: 16 },
   executionStepLabel: { fontSize: 14, flex: 1 },
-  insightsSection: { paddingLeft: 24, paddingBottom: 16, flexShrink: 0 },
+  bottomPanel: {
+    flexShrink: 0,
+    backgroundColor: Colors.bg.primary,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    paddingTop: 12,
+    zIndex: 10,
+    elevation: 10,
+  },
+  insightsSection: { paddingLeft: 24, paddingBottom: 12 },
   sectionTitle: {
     color: 'rgba(255, 255, 255, 0.35)',
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom: 12,
+    marginBottom: 10,
     paddingRight: 24,
   },
-  insightCard: { padding: 14, marginRight: 12, width: 220, gap: 6 },
+  insightCard: { padding: 14, marginRight: 12, width: 220, minHeight: 88, gap: 6 },
   insightText: { color: Colors.text.primary, fontSize: 14, lineHeight: 20 },
   insightSuggestion: { color: '#A78BFA', fontSize: 13, fontWeight: '500' },
-  quickActions: { paddingHorizontal: 24, paddingBottom: 8, flexShrink: 0 },
-  quickActionsGrid: { flexDirection: 'row', gap: 12 },
-  quickActionButton: { flex: 1 },
-  quickActionCard: { padding: 14, alignItems: 'center', gap: 6 },
-  quickActionEmoji: { fontSize: 24 },
-  quickActionName: { color: Colors.text.primary, fontSize: 13, fontWeight: '500', textAlign: 'center' },
-  quickActionCount: { color: Colors.text.muted, fontSize: 11 },
-  suggestions: { paddingLeft: 24, marginTop: 12, marginBottom: 8 },
-  suggestionPill: {
-    backgroundColor: 'rgba(124, 58, 237, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.3)',
-    borderRadius: 20,
-    paddingHorizontal: 16,
+  quickActions: { paddingHorizontal: 24, paddingBottom: 12 },
+  quickActionsGrid: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  quickActionButton: { flex: 1, minWidth: 0 },
+  quickActionCard: {
+    flex: 1,
+    height: 100,
     paddingVertical: 10,
-    marginRight: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  suggestionText: { color: '#C4B5FD', fontSize: 14, fontWeight: '500' },
-  inputContainer: { padding: 16, paddingBottom: 32 },
+  quickActionEmoji: { fontSize: 22, lineHeight: 28, height: 28 },
+  quickActionName: {
+    color: Colors.text.primary,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 14,
+    width: '100%',
+  },
+  quickActionCount: { color: Colors.text.muted, fontSize: 10 },
+  inputContainer: {
+    padding: 16,
+    paddingBottom: Platform.OS === 'web' ? 32 : 96,
+    backgroundColor: Colors.bg.primary,
+    zIndex: 11,
+    elevation: 11,
+  },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {

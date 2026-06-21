@@ -17,19 +17,25 @@ export function AutomationCard({ automation, onToggle, onPress }: AutomationCard
         <View style={styles.header}>
           <Text style={styles.emoji}>{automation.emoji}</Text>
           <View style={styles.info}>
-            <Text style={styles.name}>{automation.name}</Text>
-            <Text style={styles.desc} numberOfLines={1}>
+            <Text style={styles.name} numberOfLines={1}>
+              {automation.name}
+            </Text>
+            <Text style={styles.desc} numberOfLines={2} ellipsizeMode="tail">
               {automation.description}
             </Text>
           </View>
-          <Switch
-            value={automation.isActive}
-            onValueChange={onToggle}
-            trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
-            thumbColor="#FFFFFF"
-          />
+          <View style={styles.switchWrap}>
+            <Switch
+              value={automation.isActive}
+              onValueChange={onToggle}
+              trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
-        <Text style={styles.trigger}>⚡ {automation.trigger.label}</Text>
+        <Text style={styles.trigger} numberOfLines={1}>
+          ⚡ {automation.trigger.label}
+        </Text>
       </GlassCard>
     </Pressable>
   );
@@ -38,10 +44,17 @@ export function AutomationCard({ automation, onToggle, onPress }: AutomationCard
 const styles = StyleSheet.create({
   card: { padding: 14, gap: 10, marginBottom: 10 },
   inactive: { opacity: 0.5 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  emoji: { fontSize: 28 },
-  info: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'flex-start' },
+  emoji: {
+    fontSize: 28,
+    width: 40,
+    lineHeight: 32,
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  info: { flex: 1, minWidth: 0, paddingRight: 8 },
+  switchWrap: { flexShrink: 0, paddingTop: 2 },
   name: { color: Colors.text.primary, fontSize: 15, fontWeight: '600' },
-  desc: { color: Colors.text.muted, fontSize: 13 },
+  desc: { color: Colors.text.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
   trigger: { color: Colors.text.muted, fontSize: 12 },
 });

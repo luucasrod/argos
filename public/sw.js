@@ -4,7 +4,7 @@
  * Fallback offline quando sem conexão.
  */
 
-const CACHE_NAME = 'argos-cache-v1';
+const CACHE_NAME = 'argos-cache-v3';
 const OFFLINE_URL = '/offline.html';
 const SHELL_URL = '/';
 

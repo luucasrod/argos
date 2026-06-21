@@ -21,6 +21,12 @@ import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 import { VoiceInstallHelp } from '@/components/settings/VoiceInstallHelp';
 
+function accountStatusLabel(provider?: string): string {
+  if (provider === 'google') return '✓ Conectado com Google';
+  if (provider === 'email') return '✓ Conectado com e-mail';
+  return '✓ Sessão ativa';
+}
+
 function SettingRow({
   label,
   children,
@@ -126,7 +132,7 @@ export default function SettingsScreen() {
                     {isTestMode() ? (
                       <Text style={styles.accountTest}>⚡ Modo teste — login desativado</Text>
                     ) : (
-                      <Text style={styles.accountOk}>✓ Conectado com Google</Text>
+                      <Text style={styles.accountOk}>{accountStatusLabel(user.provider)}</Text>
                     )}
                   </View>
                   {!isTestMode() ? (

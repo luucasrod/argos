@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 import { supabase, mapUser, type SupabaseUser } from '@/services/auth/supabase';
 import { clearAuthSession } from '@/services/auth/session';
 import { isAuthRequired } from '@/services/auth/config';
@@ -16,6 +17,13 @@ interface AuthStore {
   clearAuthFeedback: () => void;
   signInWithGoogle: () => Promise<string | null>;
   signInWithEmail: (email: string) => Promise<string | null>;
+  signUpWithPassword: (
+    name: string,
+    email: string,
+    birthdate: string,
+    password: string
+  ) => Promise<string | null>;
+  signInWithPassword: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   handleSessionExpired: () => Promise<void>;
   initialize: () => Promise<() => void>;
@@ -30,8 +38,11 @@ async function redirectToLogin() {
   router.replace('/login');
 }
 
-function getRedirectUrl(): string | undefined {
-  return typeof window !== 'undefined' ? window.location.origin : undefined;
+function getRedirectUrl(): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return Linking.createURL('/');
 }
 
 async function resolveUserFromSession(): Promise<SupabaseUser | null> {
@@ -93,17 +104,105 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ loading: true, authError: null, authMessage: null });
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { emailRedirectTo: getRedirectUrl() },
+      options: {
+        emailRedirectTo: getRedirectUrl(),
+        shouldCreateUser: true,
+      },
     });
     set({ loading: false });
 
     if (error) {
-      set({ authError: error.message });
-      return error.message;
+      const msg = error.message.includes('rate limit')
+        ? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.'
+        : error.message;
+      set({ authError: msg });
+      return msg;
     }
 
     const msg = `Link enviado para ${trimmed}. Abra seu e-mail e toque no link para entrar.`;
     set({ authMessage: msg });
+    return null;
+  },
+
+  signUpWithPassword: async (name, email, birthdate, password) => {
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedName) {
+      const msg = 'Digite seu nome.';
+      set({ authError: msg });
+      return msg;
+    }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      const msg = 'Digite um e-mail válido.';
+      set({ authError: msg });
+      return msg;
+    }
+    if (!birthdate) {
+      const msg = 'Digite sua data de nascimento.';
+      set({ authError: msg });
+      return msg;
+    }
+    if (password.length < 6) {
+      const msg = 'A senha precisa ter pelo menos 6 caracteres.';
+      set({ authError: msg });
+      return msg;
+    }
+
+    set({ loading: true, authError: null, authMessage: null });
+
+    const { data, error } = await supabase.auth.signUp({
+      email: trimmedEmail,
+      password,
+      options: { data: { full_name: trimmedName, birthdate } },
+    });
+
+    if (error) {
+      const msg = error.message.includes('already registered')
+        ? 'Esse e-mail já está cadastrado. Faça login.'
+        : error.message;
+      set({ loading: false, authError: msg });
+      return msg;
+    }
+
+    if (!data.session || !data.user) {
+      // Confirmação de e-mail ainda ativa no Supabase — não deveria acontecer em produção.
+      set({
+        loading: false,
+        authMessage: 'Conta criada! Confirme seu e-mail para entrar.',
+      });
+      return null;
+    }
+
+    await supabase
+      .from('profiles')
+      .update({ name: trimmedName, birthdate })
+      .eq('id', data.user.id);
+
+    set({ user: mapUser(data.user), loading: false, initialized: true });
+    return null;
+  },
+
+  signInWithPassword: async (email, password) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) {
+      const msg = 'Digite um e-mail válido.';
+      set({ authError: msg });
+      return msg;
+    }
+
+    set({ loading: true, authError: null, authMessage: null });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+
+    if (error) {
+      const msg = error.message.includes('Invalid login credentials')
+        ? 'E-mail ou senha incorretos.'
+        : error.message;
+      set({ loading: false, authError: msg });
+      return msg;
+    }
+
+    set({ user: mapUser(data.user), loading: false, initialized: true });
     return null;
   },
 
@@ -125,9 +224,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   initialize: async () => {
     if (!isAuthRequired()) {
-      // Modo teste: pula a tela de login, mas ainda cria uma sessão real
-      // (anônima) no Supabase — as rotas de backend (chat, eWeLink) exigem
-      // um JWT válido, então um usuário "fake" sem sessão não funcionaria.
       let user = await resolveUserFromSession();
       if (!user) {
         const { data, error } = await supabase.auth.signInAnonymously();
@@ -142,16 +238,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
       return () => {};
     }
 
-    const user = await resolveUserFromSession();
-    set({ user, initialized: true });
+    let settled = false;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        set({ user: mapUser(session.user), loading: false });
-      } else {
+    const finishInit = (user: SupabaseUser | null) => {
+      if (settled) return;
+      settled = true;
+      set({ user, initialized: true, loading: false });
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        finishInit(session?.user ? mapUser(session.user) : null);
+        return;
+      }
+      if (event === 'SIGNED_OUT') {
         set({ user: null, loading: false });
       }
     });
+
+    const user = await resolveUserFromSession();
+    finishInit(user);
 
     return () => subscription.unsubscribe();
   },

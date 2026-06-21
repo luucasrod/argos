@@ -16,13 +16,53 @@ import { Colors } from '@/constants/colors';
 const SUPABASE_PROVIDERS_URL =
   'https://supabase.com/dashboard/project/qzoknfwfvdqcnbsirwlf/auth/providers';
 
+/** "DD/MM/AAAA" digitado pelo usuário → "AAAA-MM-DD" para o banco. */
+function birthdateToIso(input: string): string | null {
+  const match = input.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
+function formatBirthdateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  return [day, month, year].filter(Boolean).join('/');
+}
+
 export default function LoginScreen() {
-  const { signInWithGoogle, signInWithEmail, loading, authError, authMessage, clearAuthFeedback } =
-    useAuthStore();
-  const [email, setEmail] = useState('');
+  const {
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithPassword,
+    signInWithPassword,
+    loading,
+    authError,
+    authMessage,
+    clearAuthFeedback,
+  } = useAuthStore();
+
+  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
+
+  // Criar conta
+  const [name, setName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [birthdateInput, setBirthdateInput] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Entrar
+  const [signinEmail, setSigninEmail] = useState('');
+  const [signinPassword, setSigninPassword] = useState('');
+
+  // Magic link
+  const [magicEmail, setMagicEmail] = useState('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     const params = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const errorDesc =
@@ -33,19 +73,40 @@ export default function LoginScreen() {
 
     if (errorDesc?.includes('not enabled') || errorDesc?.includes('Unsupported provider')) {
       useAuthStore.setState({
-        authError:
-          'O Google ainda não está ativado no Supabase. Use o login por e-mail abaixo.',
+        authError: 'O Google ainda não está ativado no Supabase. Use o cadastro abaixo.',
       });
       window.history.replaceState({}, '', '/login');
+      return;
+    }
+
+    const hasAuthCallback =
+      hashParams.has('access_token') || hashParams.has('code') || params.has('code');
+
+    if (hasAuthCallback) {
+      useAuthStore.setState({ loading: true, authMessage: 'Entrando…' });
     }
   }, []);
 
+  const handleSignup = () => {
+    if (password !== confirmPassword) {
+      useAuthStore.setState({ authError: 'As senhas não coincidem.' });
+      return;
+    }
+    const iso = birthdateToIso(birthdateInput);
+    if (!iso) {
+      useAuthStore.setState({ authError: 'Digite a data de nascimento no formato DD/MM/AAAA.' });
+      return;
+    }
+    void signUpWithPassword(name, signupEmail, iso, password);
+  };
+
+  const handleSignin = () => {
+    void signInWithPassword(signinEmail, signinPassword);
+  };
+
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#0A0612', '#0D0A1E', '#0A0612']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#0A0612', '#0D0A1E', '#0A0612']} style={StyleSheet.absoluteFill} />
       <View style={styles.orbGlow} />
 
       <ScrollView
@@ -75,35 +136,116 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          {/* Login por e-mail — funciona sem configurar Google */}
-          <View style={styles.emailBox}>
-            <Text style={styles.emailLabel}>Entrar com e-mail</Text>
-            <TextInput
-              style={styles.emailInput}
-              placeholder="seu@email.com"
-              placeholderTextColor={Colors.text.muted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-            />
+          <View style={styles.tabRow}>
             <Pressable
-              style={({ pressed }) => [styles.emailBtn, pressed && styles.btnPressed]}
-              onPress={() => void signInWithEmail(email)}
-              disabled={loading}
+              style={[styles.tabBtn, mode === 'signup' && styles.tabBtnActive]}
+              onPress={() => setMode('signup')}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.emailBtnText}>Enviar link de acesso</Text>
-              )}
+              <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>
+                Criar conta
+              </Text>
             </Pressable>
-            <Text style={styles.emailHint}>
-              Você recebe um link no e-mail. Toque nele para entrar — sem senha.
-            </Text>
+            <Pressable
+              style={[styles.tabBtn, mode === 'signin' && styles.tabBtnActive]}
+              onPress={() => setMode('signin')}
+            >
+              <Text style={[styles.tabText, mode === 'signin' && styles.tabTextActive]}>
+                Entrar
+              </Text>
+            </Pressable>
           </View>
+
+          {mode === 'signup' ? (
+            <View style={styles.formBox}>
+              <TextInput
+                style={styles.input}
+                placeholder="Seu nome"
+                placeholderTextColor={Colors.text.muted}
+                value={name}
+                onChangeText={setName}
+                editable={!loading}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="seu@email.com"
+                placeholderTextColor={Colors.text.muted}
+                value={signupEmail}
+                onChangeText={setSignupEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Data de nascimento (DD/MM/AAAA)"
+                placeholderTextColor={Colors.text.muted}
+                value={birthdateInput}
+                onChangeText={(v) => setBirthdateInput(formatBirthdateInput(v))}
+                keyboardType="number-pad"
+                editable={!loading}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Senha"
+                placeholderTextColor={Colors.text.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirmar senha"
+                placeholderTextColor={Colors.text.muted}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+              <Pressable
+                style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+                onPress={handleSignup}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Criar conta e entrar</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.formBox}>
+              <TextInput
+                style={styles.input}
+                placeholder="seu@email.com"
+                placeholderTextColor={Colors.text.muted}
+                value={signinEmail}
+                onChangeText={setSigninEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Senha"
+                placeholderTextColor={Colors.text.muted}
+                value={signinPassword}
+                onChangeText={setSigninPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+              <Pressable
+                style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+                onPress={handleSignin}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Entrar</Text>}
+              </Pressable>
+            </View>
+          )}
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
@@ -120,11 +262,33 @@ export default function LoginScreen() {
             <Text style={styles.googleText}>Entrar com Google</Text>
           </Pressable>
 
+          <View style={styles.emailBox}>
+            <Text style={styles.emailLabel}>Ou receba um link sem senha</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="seu@email.com"
+              placeholderTextColor={Colors.text.muted}
+              value={magicEmail}
+              onChangeText={setMagicEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loading}
+            />
+            <Pressable
+              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
+              onPress={() => void signInWithEmail(magicEmail)}
+              disabled={loading}
+            >
+              <Text style={styles.secondaryBtnText}>Enviar link de acesso</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.helpBox}>
             <Text style={styles.helpTitle}>Google não funciona?</Text>
             <Text style={styles.helpText}>
               Esse erro significa que o provedor Google ainda não foi ativado no painel do
-              Supabase. Ative em Authentication → Providers → Google, ou use o login por e-mail
+              Supabase. Ative em Authentication → Providers → Google, ou crie sua conta com senha
               acima.
             </Text>
             <Pressable onPress={() => Linking.openURL(SUPABASE_PROVIDERS_URL)}>
@@ -162,12 +326,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   logoArea: { alignItems: 'center', gap: 12, marginBottom: 8 },
-  orbSmall: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#7C3AED',
-  },
+  orbSmall: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#7C3AED' },
   title: { fontSize: 40, fontWeight: '800', color: '#C4B5FD', letterSpacing: 2 },
   subtitle: { fontSize: 16, color: Colors.text.muted, textAlign: 'center' },
 
@@ -190,9 +349,20 @@ const styles = StyleSheet.create({
   },
   feedbackOkText: { color: '#86EFAC', fontSize: 14, lineHeight: 20 },
 
-  emailBox: { gap: 10 },
-  emailLabel: { color: Colors.text.primary, fontSize: 15, fontWeight: '600' },
-  emailInput: {
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: '#7C3AED' },
+  tabText: { color: Colors.text.muted, fontSize: 14, fontWeight: '600' },
+  tabTextActive: { color: '#fff' },
+
+  formBox: { gap: 10 },
+  input: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(124, 58, 237, 0.35)',
@@ -202,14 +372,26 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontSize: 16,
   },
-  emailBtn: {
+  primaryBtn: {
     backgroundColor: '#7C3AED',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+    marginTop: 4,
   },
-  emailBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  emailHint: { color: Colors.text.muted, fontSize: 12, lineHeight: 16 },
+  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  secondaryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryBtnText: { color: Colors.text.primary, fontWeight: '600', fontSize: 14 },
+
+  emailBox: { gap: 10 },
+  emailLabel: { color: Colors.text.muted, fontSize: 13, fontWeight: '600' },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },

@@ -40,27 +40,31 @@ function AutomationCard({
     <Pressable onPress={onPress}>
       <GlassCard style={automationCardStyle(automation.isActive)}>
         <View style={styles.automationHeader}>
-          <View style={styles.automationLeft}>
-            <Text style={styles.automationEmoji}>{automation.emoji}</Text>
-            <View>
-              <Text style={styles.automationName}>{automation.name}</Text>
-              <Text style={styles.automationDesc} numberOfLines={1}>
-                {automation.description}
-              </Text>
-            </View>
+          <Text style={styles.automationEmoji}>{automation.emoji}</Text>
+          <View style={styles.automationTextCol}>
+            <Text style={styles.automationName} numberOfLines={1}>
+              {automation.name}
+            </Text>
+            <Text style={styles.automationDesc} numberOfLines={2} ellipsizeMode="tail">
+              {automation.description}
+            </Text>
           </View>
-          <Switch
-            value={automation.isActive}
-            onValueChange={onToggle}
-            trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
-            thumbColor="#FFFFFF"
-          />
+          <View style={styles.automationSwitch}>
+            <Switch
+              value={automation.isActive}
+              onValueChange={onToggle}
+              trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
         <View style={styles.automationFooter}>
-          <Text style={styles.automationTrigger}>⚡ {automation.trigger.label}</Text>
-          {automation.runCount > 0 && (
+          <Text style={styles.automationTrigger} numberOfLines={1}>
+            ⚡ {automation.trigger.label}
+          </Text>
+          {automation.runCount > 0 ? (
             <Text style={styles.automationCount}>{automation.runCount}x executado</Text>
-          )}
+          ) : null}
         </View>
       </GlassCard>
     </Pressable>
@@ -92,7 +96,7 @@ export default function AutomationsScreen() {
     <View style={styles.container}>
       <LinearGradient colors={[Colors.bg.primary, Colors.bg.secondary]} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
             <View style={styles.headerRow}>
               <View>
@@ -140,15 +144,15 @@ export default function AutomationsScreen() {
               <Animated.View entering={FadeInDown.delay(200)} style={styles.createSection}>
                 <Text style={styles.sectionTitle}>Criar com IA</Text>
                 <GlassCard style={styles.createCard} borderColor={Colors.glass.borderAccent}>
-                  <Text style={styles.createHint}>Descreva o que você quer automatizar...</Text>
+                  <Text style={styles.createLabel}>Descreva o que você quer automatizar</Text>
                   <TextInput
                     style={styles.createInput}
-                    placeholder="Ex: Quando eu conectar no bluetooth do carro, abrir Spotify e mandar mensagem pra minha esposa"
+                    placeholder="Ex: Ao conectar no Bluetooth do carro, abrir o Spotify"
                     placeholderTextColor={Colors.text.muted}
                     value={createInput}
                     onChangeText={setCreateInput}
                     multiline
-                    numberOfLines={3}
+                    numberOfLines={4}
                     textAlignVertical="top"
                   />
                   <Pressable
@@ -169,7 +173,7 @@ export default function AutomationsScreen() {
               <Animated.View entering={FadeInDown.delay(300)} style={styles.section}>
                 <Text style={styles.sectionTitle}>Prontas</Text>
                 {presetAutos.map((auto, i) => (
-                  <Animated.View key={auto.id} entering={FadeInRight.delay(350 + i * 50)}>
+                  <Animated.View key={auto.id} entering={FadeInRight.delay(350 + i * 50)} style={styles.cardWrap}>
                     <AutomationCard
                       automation={auto}
                       onToggle={() => {
@@ -186,7 +190,7 @@ export default function AutomationsScreen() {
                 <Animated.View entering={FadeInDown.delay(400)} style={styles.section}>
                   <Text style={styles.sectionTitle}>Criadas por você</Text>
                   {customAutos.map((auto, i) => (
-                    <Animated.View key={auto.id} entering={FadeInRight.delay(450 + i * 50)}>
+                    <Animated.View key={auto.id} entering={FadeInRight.delay(450 + i * 50)} style={styles.cardWrap}>
                       <AutomationCard
                         automation={auto}
                         onToggle={() => {
@@ -205,7 +209,7 @@ export default function AutomationsScreen() {
           {activeTab === 'routines' && (
             <Animated.View entering={FadeInDown.delay(200)} style={styles.section}>
               {routines.map((routine, i) => (
-                <Animated.View key={routine.id} entering={FadeInRight.delay(250 + i * 50)}>
+                <Animated.View key={routine.id} entering={FadeInRight.delay(250 + i * 50)} style={styles.cardWrap}>
                   <Pressable
                     onPress={() => {
                       light();
@@ -215,25 +219,33 @@ export default function AutomationsScreen() {
                     <GlassCard style={styles.routineCard}>
                       <View style={styles.routineHeader}>
                         <Text style={styles.routineEmoji}>{routine.emoji}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.routineName}>{routine.name}</Text>
-                          <Text style={styles.routineDesc}>{routine.description}</Text>
+                        <View style={styles.routineTextCol}>
+                          <Text style={styles.routineName} numberOfLines={1}>
+                            {routine.name}
+                          </Text>
+                          <Text style={styles.routineDesc} numberOfLines={2} ellipsizeMode="tail">
+                            {routine.description}
+                          </Text>
                         </View>
-                        <Switch
-                          value={routine.isActive}
-                          onValueChange={() => {
-                            light();
-                            toggleRoutine(routine.id);
-                          }}
-                          trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
-                          thumbColor="#FFFFFF"
-                        />
+                        <View style={styles.routineSwitch}>
+                          <Switch
+                            value={routine.isActive}
+                            onValueChange={() => {
+                              light();
+                              toggleRoutine(routine.id);
+                            }}
+                            trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                            thumbColor="#FFFFFF"
+                          />
+                        </View>
                       </View>
                       <View style={styles.routineSteps}>
                         {routine.steps.map((step, j) => (
                           <View key={j} style={styles.routineStep}>
                             <View style={styles.routineStepDot} />
-                            <Text style={styles.routineStepLabel}>{step.label}</Text>
+                            <Text style={styles.routineStepLabel} numberOfLines={1}>
+                              {step.label}
+                            </Text>
                           </View>
                         ))}
                       </View>
@@ -250,9 +262,9 @@ export default function AutomationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary },
+  container: { flex: 1, backgroundColor: Colors.bg.primary, overflow: 'hidden' },
   safe: { flex: 1 },
-  scroll: { paddingBottom: 40 },
+  scroll: { paddingBottom: 100 },
   header: { paddingHorizontal: 24, paddingVertical: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { color: Colors.text.primary, fontSize: 28, fontWeight: '800' },
@@ -287,43 +299,65 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 12,
   },
-  createCard: { padding: 16, gap: 12 },
-  createHint: { color: Colors.accent.primary, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  createCard: { padding: 16 },
+  createLabel: {
+    color: Colors.text.secondary,
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 10,
+  },
   createInput: {
     color: Colors.text.primary,
     fontSize: 14,
-    lineHeight: 22,
-    minHeight: 70,
+    lineHeight: 20,
+    minHeight: 88,
     backgroundColor: Colors.glass.light,
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
+    marginBottom: 14,
   },
   createButton: {
     backgroundColor: Colors.accent.primary,
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   createButtonLoading: { opacity: 0.6 },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  section: { paddingHorizontal: 24, marginBottom: 24, gap: 10 },
+  section: { paddingHorizontal: 24, marginBottom: 24 },
+  cardWrap: { marginBottom: 10 },
   automationCard: { padding: 14, gap: 10 },
   automationCardInactive: { opacity: 0.5 },
-  automationHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  automationLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  automationEmoji: { fontSize: 28 },
+  automationHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+  automationEmoji: {
+    fontSize: 28,
+    width: 40,
+    lineHeight: 32,
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  automationTextCol: { flex: 1, minWidth: 0, paddingRight: 8 },
+  automationSwitch: { flexShrink: 0, paddingTop: 2 },
   automationName: { color: Colors.text.primary, fontSize: 15, fontWeight: '600' },
-  automationDesc: { color: Colors.text.muted, fontSize: 13, marginTop: 2 },
-  automationFooter: { flexDirection: 'row', justifyContent: 'space-between' },
-  automationTrigger: { color: Colors.text.muted, fontSize: 12 },
-  automationCount: { color: Colors.accent.primary, fontSize: 12, fontWeight: '500' },
+  automationDesc: { color: Colors.text.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  automationFooter: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  automationTrigger: { color: Colors.text.muted, fontSize: 12, flex: 1 },
+  automationCount: { color: Colors.accent.primary, fontSize: 12, fontWeight: '500', flexShrink: 0 },
   routineCard: { padding: 16, gap: 12 },
-  routineHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  routineEmoji: { fontSize: 28 },
+  routineHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+  routineEmoji: {
+    fontSize: 28,
+    width: 40,
+    lineHeight: 32,
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  routineTextCol: { flex: 1, minWidth: 0, paddingRight: 8 },
+  routineSwitch: { flexShrink: 0, paddingTop: 2 },
   routineName: { color: Colors.text.primary, fontSize: 16, fontWeight: '600' },
-  routineDesc: { color: Colors.text.muted, fontSize: 13, marginTop: 2 },
+  routineDesc: { color: Colors.text.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
   routineSteps: { gap: 8, paddingLeft: 8 },
   routineStep: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   routineStepDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.accent.primary },
-  routineStepLabel: { color: Colors.text.secondary, fontSize: 13 },
+  routineStepLabel: { color: Colors.text.secondary, fontSize: 13, flex: 1 },
 });

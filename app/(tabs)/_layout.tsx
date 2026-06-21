@@ -32,6 +32,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      detachInactiveScreens
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
@@ -39,9 +40,11 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
         tabBarActiveTintColor: Colors.accent.primary,
         tabBarInactiveTintColor: Colors.text.muted,
+        lazy: true,
         sceneStyle: {
           backgroundColor: Colors.bg.primary,
           flex: 1,
+          overflow: 'hidden',
         },
       }}
     >
