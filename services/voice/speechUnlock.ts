@@ -9,3 +9,6 @@ export function startSpeechKeepAlive(): () => void {
 export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   return Promise.resolve([]);
 }
+export function reloadVoices(): Promise<SpeechSynthesisVoice[]> {
+  return Promise.resolve([]);
+}

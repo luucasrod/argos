@@ -62,9 +62,9 @@ function buildConfirmationInfo(intent: ParsedIntent): {
     case 'open_url': {
       const url = intent.url ?? '';
       return {
-        icon: '🌐',
+        icon: '📱',
         actionLabel: `Abrir ${url}`,
-        description: `Vai abrir "${url}" em uma nova aba do browser.`,
+        description: `Vai abrir o app ou site "${url}". No iPhone você confirma com um toque.`,
       };
     }
     case 'set_reminder':
@@ -98,6 +98,7 @@ export function useArgos() {
     clearExecutionSteps,
     setShowExecutionOverlay,
     setConfirmationRequest,
+    setPendingAppOpen,
   } = useAIStore();
 
   const { settings } = useSettingsStore();
@@ -222,23 +223,43 @@ export function useArgos() {
 
       } else if (intent.type === 'open_url' && intent.url) {
         if (Platform.OS === 'web') {
-          const { openUrl, resolveUrl } = await import('@/services/browser/browserActions');
-          const resolvedUrl = resolveUrl(intent.url);
-          openUrl(intent.url);
-
-          const displayUrl = resolvedUrl.replace(/^https?:\/\//, '').split('/')[0];
+          const { prepareAppOpen, openAppAuto } = await import('@/services/browser/browserActions');
+          const target = prepareAppOpen(intent.url);
+          const mode = openAppAuto(target);
 
           const spoken = resolveIntentSpeech(intent);
           if (spoken) await speak(spoken);
           setStatus('idle');
 
-          addMessage({
-            id: assistantMessageId,
-            role: 'assistant',
-            content: intent.text || `Abrindo ${displayUrl}...`,
-            timestamp: new Date(),
-            type: 'text',
-          });
+          if (mode === 'pending') {
+            setPendingAppOpen({
+              label: target.label,
+              webUrl: target.webUrl,
+              nativeUrl: target.nativeUrl,
+              input: intent.url,
+            });
+            addMessage({
+              id: assistantMessageId,
+              role: 'assistant',
+              content:
+                intent.text ||
+                `📱 Toque em **Abrir ${target.label}** na barra abaixo para abrir o app.`,
+              timestamp: new Date(),
+              type: 'text',
+            });
+          } else {
+            addMessage({
+              id: assistantMessageId,
+              role: 'assistant',
+              content:
+                intent.text ||
+                (mode === 'native'
+                  ? `Abrindo ${target.label}...`
+                  : `Abrindo ${target.label} no navegador...`),
+              timestamp: new Date(),
+              type: 'text',
+            });
+          }
         } else {
           await speak('Abrir URLs só está disponível na versão web.', settings.personality);
           setStatus('idle');
@@ -386,6 +407,7 @@ export function useArgos() {
       setShowExecutionOverlay,
       success,
       speak,
+      setPendingAppOpen,
     ]
   );
 

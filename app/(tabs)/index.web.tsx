@@ -24,6 +24,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
+import { OpenAppBanner } from '@/components/apps/OpenAppBanner';
 
 export default function HomeScreenWeb() {
   const { sendMessage, status, confirmPendingAction, cancelPendingAction } = useArgos();
@@ -242,6 +243,8 @@ export default function HomeScreenWeb() {
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <OpenAppBanner />
 
       {/* ─── Modal de Confirmação (Modo Assistido) ─── */}
       <Modal

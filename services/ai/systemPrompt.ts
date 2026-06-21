@@ -3,6 +3,7 @@ import { Automation } from '@/types/automation.types';
 import { Device } from '@/types/device.types';
 import { AIPersonality } from '@/types/ai.types';
 import { UserProfile } from '@/types/settings.types';
+import { getSupportedAppNames } from '@/services/browser/appLinks';
 
 export function buildSystemPrompt(
   personality: AIPersonality,
@@ -116,14 +117,18 @@ Para ROTINA:
   "routineId": "id-da-rotina"
 }
 
-Para ABRIR URL ou APP:
+Para ABRIR URL ou APP (iPhone/PWA abre o app nativo quando instalado):
 {
   "type": "open_url",
-  "speech": "Abrindo [nome do app/site]",
-  "text": "Abrindo [nome do app/site]",
+  "speech": "Abrindo [nome do app]",
+  "text": "Toque no botão para abrir [nome do app]",
   "url": "spotify"
 }
-Use quando o usuário pedir para abrir um site, app ou pesquisar algo. O campo "url" pode ser: um nome de app (spotify, youtube, whatsapp, instagram, netflix, gmail, google, twitter, twitch, discord, telegram, notion, github, chatgpt, linkedin), uma URL completa (https://...), ou um termo de pesquisa qualquer.
+Use quando o usuário pedir para abrir um app, site ou pesquisar. O campo "url" pode ser:
+- Nome de app: ${getSupportedAppNames().slice(0, 40).join(', ')}...
+- URL completa (https://...)
+- Termo de pesquisa no Google
+No iPhone, apps nativos abrem após o usuário tocar no botão de confirmação (limitação do sistema).
 
 Para CLIMA:
 {

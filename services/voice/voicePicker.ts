@@ -9,49 +9,141 @@ export type VoiceLike = {
   identifier?: string;
 };
 
+export interface VoiceAnalysis {
+  femaleVoiceName: string | null;
+  maleVoiceName: string | null;
+  hasDistinctMale: boolean;
+  ptBrVoices: string[];
+}
+
+/* ─── Feminino: lógica estável (Luciana etc.) ─── */
 const FEMALE_RE =
   /female|femin|mulher|woman|girl|senhora|maria|lucia|luciana|francisca|fernanda|vit[oó]ria|amanda|gabriela|helo[ií]sa|camila|leticia|let[ií]cia|raquel|m[oô]nica|paula|sandra|\bana\b|zira|samantha|catarina|beatriz|juliana|isabela|carolina|google portugu[eê]s do brasil.*feminino/i;
 
-const MALE_RE =
-  /male|masc|homem|man|boy|senhor|jo[aã]o|jos[eé]|carlos|paulo|pedro|ricardo|daniel|felipe|bruno|lucas|tiago|miguel|david|james|thomas|antonio|ant[oô]nio|marcos|rafael|gustavo|google portugu[eê]s do brasil.*masculino/i;
+/* Masculino BR — Felipe (iPhone), Google/Microsoft BR, etc. */
+const MALE_BR_RE =
+  /masculino|felipe|tiago|leonardo|thiag|antonio|ant[oô]nio|bruno|gustavo|rafael|marcos|miguel|carlos|jo[aã]o|jos[eé]|pedro|paulo|ricardo|google portugu[eê]s do brasil.*male|portugu[eê]s.*brasil.*masculino|microsoft.*portugu[eê]s.*brasil|pt-br\.felipe|pt_br.*felipe|compact\.pt-br\.felipe|enhanced\.pt-br\.felipe|siri.*male/i;
+
+const FEMALE_HINT_IN_NAME =
+  /female|femin|mulher|maria|lucia|luciana|francisca|fernanda|vit[oó]ria|amanda|gabriela|camila|leticia|raquel|m[oô]nica|siri.*female/i;
 
 function voiceLang(voice: VoiceLike): string {
-  return voice.lang ?? voice.language ?? '';
+  return (voice.lang ?? voice.language ?? '').toLowerCase().replace('_', '-');
 }
 
 function voiceKey(voice: VoiceLike): string {
   return `${voice.name}|${voice.voiceURI ?? voice.identifier ?? ''}`.toLowerCase();
 }
 
+function sameVoice(a: VoiceLike | null, b: VoiceLike | null): boolean {
+  if (!a || !b) return false;
+  return voiceKey(a) === voiceKey(b);
+}
+
+export function isClearlyFemaleVoice(voice: VoiceLike): boolean {
+  return FEMALE_HINT_IN_NAME.test(voiceKey(voice));
+}
+
+export function isMaleBrazilianVoice(voice: VoiceLike): boolean {
+  if (isClearlyFemaleVoice(voice)) return false;
+  return MALE_BR_RE.test(voiceKey(voice));
+}
+
 export function voiceMatchesGender(voice: VoiceLike, gender: AIPersonality['voiceGender']): boolean {
-  const key = voiceKey(voice);
-  const female = FEMALE_RE.test(key);
-  const male = MALE_RE.test(key);
-  if (gender === 'female') return female && !male;
-  return male && !female;
-}
-
-function langScore(voice: VoiceLike, lang: string): number {
-  const vlang = voiceLang(voice);
-  const prefix = lang.split('-')[0];
-  if (vlang === lang) return 30;
-  if (vlang.startsWith(prefix)) return 20;
-  if (vlang.includes(prefix)) return 10;
-  return 0;
-}
-
-function genderScore(voice: VoiceLike, gender: AIPersonality['voiceGender']): number {
-  const key = voiceKey(voice);
-  const female = FEMALE_RE.test(key);
-  const male = MALE_RE.test(key);
   if (gender === 'female') {
-    if (female && !male) return 40;
-    if (male && !female) return -40;
-  } else {
-    if (male && !female) return 40;
-    if (female && !male) return -40;
+    return FEMALE_RE.test(voiceKey(voice)) && !isMaleBrazilianVoice(voice);
   }
-  return 0;
+  return isMaleBrazilianVoice(voice);
+}
+
+function isForeignAccentForBrazil(voice: VoiceLike, targetLang: string): boolean {
+  if (!targetLang.toLowerCase().startsWith('pt')) return false;
+
+  const vlang = voiceLang(voice);
+  const key = voiceKey(voice);
+
+  if (vlang.startsWith('en-gb') || vlang.startsWith('en-')) return true;
+  if (vlang === 'pt-pt') return true;
+
+  if (
+    /en-gb|en_uk|english.*\(uk\)|british english|google uk english|uk english/i.test(key)
+  ) {
+    return true;
+  }
+
+  if (/daniel/.test(key) && vlang !== 'pt-br' && !/brasil|brazil|pt-br|portugu[eê]s.*brasil/i.test(key)) {
+    return true;
+  }
+
+  if (
+    /george|harry|arthur|ryan|oliver|guy|thomas|james|david/.test(key) &&
+    !/brasil|brazil|pt-br|portugu[eê]s|felipe|tiago/i.test(key)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPtBrVoice(voice: VoiceLike): boolean {
+  const vlang = voiceLang(voice);
+  const key = voiceKey(voice);
+  return (
+    vlang === 'pt-br' ||
+    vlang.startsWith('pt') ||
+    /brasil|brazil|pt-br|portugu[eê]s do brasil|felipe|luciana/i.test(key)
+  );
+}
+
+function femaleScore(voice: VoiceLike, lang: string): number {
+  const key = voiceKey(voice);
+  let score = 0;
+  const vlang = voiceLang(voice);
+  if (vlang === lang.toLowerCase()) score += 30;
+  else if (vlang.startsWith('pt')) score += 15;
+  if (FEMALE_RE.test(key)) score += 40;
+  if (isMaleBrazilianVoice(voice)) score -= 50;
+  if (voice.default) score += 3;
+  return score;
+}
+
+function maleBrazilScore(voice: VoiceLike): number {
+  const key = voiceKey(voice);
+  let score = 0;
+  if (voiceLang(voice) === 'pt-br') score += 55;
+  if (/brasil|brazil|pt-br|portugu[eê]s do brasil/i.test(key)) score += 35;
+  if (MALE_BR_RE.test(key)) score += 60;
+  if (isClearlyFemaleVoice(voice)) score -= 100;
+  return score;
+}
+
+function pickFemaleVoice<T extends VoiceLike>(voices: T[], lang: string): T | null {
+  const ptVoices = voices.filter((v) => isPtBrVoice(v) && !isForeignAccentForBrazil(v, lang));
+  const pool = ptVoices.length > 0 ? ptVoices : voices;
+  const ranked = [...pool].sort((a, b) => femaleScore(b, lang) - femaleScore(a, lang));
+  return ranked[0] ?? null;
+}
+
+function pickMaleBrazilianVoice<T extends VoiceLike>(
+  voices: T[],
+  lang: string,
+  femaleVoice: T | null
+): T | null {
+  const eligible = voices.filter(
+    (v) =>
+      !isForeignAccentForBrazil(v, lang) &&
+      !isClearlyFemaleVoice(v) &&
+      !sameVoice(v, femaleVoice)
+  );
+
+  const explicitMale = eligible.filter(isMaleBrazilianVoice);
+  if (explicitMale.length > 0) {
+    explicitMale.sort((a, b) => maleBrazilScore(b) - maleBrazilScore(a));
+    return explicitMale[0];
+  }
+
+  /* Sem Felipe/outra voz masculina instalada — não reutiliza Luciana */
+  return null;
 }
 
 /** Escolhe a melhor voz do sistema para idioma + gênero. */
@@ -62,20 +154,48 @@ export function pickVoiceForPersonality<T extends VoiceLike>(
   if (voices.length === 0) return null;
 
   const lang = personality.language ?? 'pt-BR';
-  const ranked = [...voices].sort((a, b) => {
-    const scoreA =
-      langScore(a, lang) + genderScore(a, personality.voiceGender) + (a.default ? 3 : 0);
-    const scoreB =
-      langScore(b, lang) + genderScore(b, personality.voiceGender) + (b.default ? 3 : 0);
-    return scoreB - scoreA;
-  });
+  const femaleVoice = pickFemaleVoice(voices, lang);
 
-  return ranked[0] ?? null;
+  if (personality.voiceGender === 'male') {
+    const femaleVoice = pickFemaleVoice(voices, lang);
+    const male = pickMaleBrazilianVoice(voices, lang, femaleVoice);
+    if (male) return male;
+    const felipe = voices.find(
+      (v) => /felipe/i.test(voiceKey(v)) && !isClearlyFemaleVoice(v)
+    );
+    return felipe ?? null;
+  }
+
+  return femaleVoice;
 }
 
-/** Pitch de reforço quando não há voz do gênero no dispositivo. */
+export function analyzeDeviceVoices(
+  voices: VoiceLike[],
+  lang = 'pt-BR'
+): VoiceAnalysis {
+  const female = pickFemaleVoice(voices, lang);
+  const male = pickMaleBrazilianVoice(voices, lang, female);
+
+  /* iOS: Felipe pode vir só no nome */
+  const felipe = voices.find((v) => /felipe/i.test(voiceKey(v)) && !isClearlyFemaleVoice(v));
+  const resolvedMale = male ?? felipe ?? null;
+
+  const ptBrVoices = voices
+    .filter(isPtBrVoice)
+    .map((v) => v.name)
+    .filter((n, i, arr) => arr.indexOf(n) === i);
+
+  return {
+    femaleVoiceName: female?.name ?? null,
+    maleVoiceName: resolvedMale?.name ?? null,
+    hasDistinctMale: resolvedMale !== null && !sameVoice(resolvedMale, female),
+    ptBrVoices,
+  };
+}
+
+/** Pitch quando não há voz masculina dedicada no aparelho. */
 export function fallbackPitch(gender: AIPersonality['voiceGender']): number {
-  return gender === 'female' ? 1.2 : 0.78;
+  return gender === 'female' ? 1.15 : 0.72;
 }
 
 export function pitchForUtterance(
@@ -83,10 +203,10 @@ export function pitchForUtterance(
   gender: AIPersonality['voiceGender']
 ): number {
   if (voice && voiceMatchesGender(voice, gender)) return 1.0;
+  if (gender === 'male') return 0.72;
   return fallbackPitch(gender);
 }
 
-/** Arredonda velocidade para a opção mais próxima. */
 export function snapVoiceSpeed(speed: number): number {
   const options = [0.75, 0.9, 1.0, 1.2, 1.4];
   return options.reduce((best, v) =>

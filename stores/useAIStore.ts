@@ -11,6 +11,13 @@ export interface ConfirmationRequest {
   icon: string;        // emoji do modal
 }
 
+export interface PendingAppOpen {
+  label: string;
+  webUrl: string;
+  nativeUrl: string | null;
+  input: string;
+}
+
 interface AIStore {
   status: AIStatus;
   setStatus: (status: AIStatus) => void;
@@ -31,6 +38,8 @@ interface AIStore {
   // Confirmação de autonomia
   confirmationRequest: ConfirmationRequest | null;
   setConfirmationRequest: (req: ConfirmationRequest | null) => void;
+  pendingAppOpen: PendingAppOpen | null;
+  setPendingAppOpen: (req: PendingAppOpen | null) => void;
 }
 
 export const useAIStore = create<AIStore>()(
@@ -64,6 +73,8 @@ export const useAIStore = create<AIStore>()(
       // Confirmação
       confirmationRequest: null,
       setConfirmationRequest: (req) => set({ confirmationRequest: req }),
+      pendingAppOpen: null,
+      setPendingAppOpen: (req) => set({ pendingAppOpen: req }),
     }),
     {
       name: 'argos-ai',

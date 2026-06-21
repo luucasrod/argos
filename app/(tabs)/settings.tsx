@@ -19,6 +19,7 @@ import { getEwelinkAuthorizeUrl } from '@/services/devices/ewelinkService';
 import { VOICE_SPEED_OPTIONS, VOICE_PREVIEW_PHRASE } from '@/constants/voice';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
+import { VoiceInstallHelp } from '@/components/settings/VoiceInstallHelp';
 
 function SettingRow({
   label,
@@ -356,6 +357,8 @@ export default function SettingsScreen() {
                   ))}
                 </View>
               </SettingRow>
+
+              <VoiceInstallHelp voiceGender={settings.personality.voiceGender} />
 
               <View style={styles.divider} />
 

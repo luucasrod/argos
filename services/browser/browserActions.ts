@@ -1,60 +1,75 @@
 /**
- * browserActions.ts — Ações disponíveis no browser/PWA
- * Abre URLs, gerencia notificações, agendamentos, hora/data
+ * browserActions.ts — Ações no browser/PWA (abrir apps, lembretes, etc.)
  */
+import {
+  resolveAppTarget,
+  type AppOpenTarget,
+} from '@/services/browser/appLinks';
 
-/** Atalhos para apps e sites comuns */
-const URL_SHORTCUTS: Record<string, string> = {
-  spotify: 'https://open.spotify.com',
-  youtube: 'https://youtube.com',
-  'youtube music': 'https://music.youtube.com',
-  whatsapp: 'https://web.whatsapp.com',
-  gmail: 'https://mail.google.com',
-  google: 'https://google.com',
-  instagram: 'https://instagram.com',
-  twitter: 'https://twitter.com',
-  x: 'https://x.com',
-  netflix: 'https://netflix.com',
-  amazon: 'https://amazon.com.br',
-  maps: 'https://maps.google.com',
-  'google maps': 'https://maps.google.com',
-  notion: 'https://notion.so',
-  github: 'https://github.com',
-  chatgpt: 'https://chat.openai.com',
-  'chat gpt': 'https://chat.openai.com',
-  linkedin: 'https://linkedin.com',
-  twitch: 'https://twitch.tv',
-  discord: 'https://discord.com/app',
-  telegram: 'https://web.telegram.org',
-};
+export type { AppOpenTarget };
 
-/** Resolve um nome de app ou URL parcial para URL completa */
+/** @deprecated Use resolveAppTarget */
 export function resolveUrl(input: string): string {
-  const lower = input.toLowerCase().trim();
-
-  // Atalho direto
-  const shortcut = URL_SHORTCUTS[lower];
-  if (shortcut) return shortcut;
-
-  // Já é URL com protocolo
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return input;
-
-  // Parece um domínio
-  if (lower.includes('.') && !lower.includes(' ')) return 'https://' + input;
-
-  // Pesquisa no Google
-  return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+  return resolveAppTarget(input).webUrl;
 }
 
-/** Abre uma URL ou app no browser */
-export function openUrl(urlOrApp: string): boolean {
+/** Abre URL web em nova aba (desktop / fallback). */
+export function openWebUrl(url: string): boolean {
   if (typeof window === 'undefined') return false;
-  const url = resolveUrl(urlOrApp);
   window.open(url, '_blank', 'noopener,noreferrer');
   return true;
 }
 
-/** Retorna hora e data atual formatadas em pt-BR */
+/**
+ * Abre app nativo — deve ser chamado direto de um toque do usuário (iOS PWA).
+ */
+export function openNativeApp(target: AppOpenTarget): boolean {
+  if (typeof window === 'undefined' || !target.nativeUrl) return false;
+
+  const url = target.nativeUrl;
+
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return true;
+  } catch {
+    window.location.assign(url);
+    return true;
+  }
+}
+
+/** Abre automaticamente (Android/desktop) ou web quando não há app nativo. */
+export function openAppAuto(target: AppOpenTarget): 'native' | 'web' | 'pending' {
+  if (target.requiresUserTap) {
+    return 'pending';
+  }
+
+  if (target.nativeUrl) {
+    const ok = openNativeApp(target);
+    if (ok) return 'native';
+  }
+
+  openWebUrl(target.webUrl);
+  return 'web';
+}
+
+/** Prepara abertura — use com banner/modal no iOS. */
+export function prepareAppOpen(input: string): AppOpenTarget {
+  return resolveAppTarget(input);
+}
+
+/** Compat: abre web (comportamento antigo). */
+export function openUrl(urlOrApp: string): boolean {
+  const target = prepareAppOpen(urlOrApp);
+  const mode = openAppAuto(target);
+  if (mode === 'pending') return false;
+  return mode === 'native' || mode === 'web';
+}
+
 export function getCurrentDateTime(): {
   time: string;
   date: string;
@@ -74,7 +89,6 @@ export function getCurrentDateTime(): {
   return { time, date, weekday, fullFormatted };
 }
 
-/** Pede permissão de notificação ao usuário */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === 'undefined' || !('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
@@ -82,7 +96,6 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return perm === 'granted';
 }
 
-/** Agendamento de lembrete via setTimeout + Notification API */
 export async function scheduleReminder(
   title: string,
   message: string,
@@ -90,9 +103,7 @@ export async function scheduleReminder(
 ): Promise<void> {
   if (typeof window === 'undefined') return;
 
-  // Pede permissão antes de agendar
   const hasPermission = await requestNotificationPermission();
-
   const delayMinutes = Math.round(delayMs / 60000);
   console.log(`[Argos] Lembrete agendado: "${title}" em ${delayMinutes} min`);
 
@@ -106,7 +117,6 @@ export async function scheduleReminder(
           requireInteraction: true,
         });
       } catch {
-        // Fallback para alert
         alert(`⏰ ${title}\n${message}`);
       }
     } else {

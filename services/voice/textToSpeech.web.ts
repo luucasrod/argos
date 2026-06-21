@@ -21,11 +21,14 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
   await waitForMicRelease(150);
 
   const synth = window.speechSynthesis;
-  const rate = Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
   const voices = await loadVoices();
   const selected = pickVoiceForPersonality(voices, personality);
   const pitch = pitchForUtterance(selected, personality.voiceGender);
   const lang = selected?.lang ?? personality.language ?? 'pt-BR';
+  const rate =
+    !selected && personality.voiceGender === 'male'
+      ? Math.min(2, Math.max(0.5, (personality.voiceSpeed ?? 1.0) * 0.92))
+      : Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
 
   return new Promise((resolve) => {
     let settled = false;

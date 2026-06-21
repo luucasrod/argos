@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 
 export const ANTHROPIC_MODELS = {
@@ -11,18 +10,8 @@ export type AnthropicModelId =
 
 const MODEL_IDS = new Set<string>(Object.values(ANTHROPIC_MODELS));
 
-function getExpoExtra(): Record<string, unknown> {
-  const manifest = Constants.expoConfig ?? Constants.manifest;
-  return (manifest as { extra?: Record<string, unknown> } | null)?.extra ?? {};
-}
-
-/** Chave Anthropic: app.config extra → EXPO_PUBLIC → legado nas settings. */
+/** Chave Anthropic: apenas para uso em __DEV__ (SDK direta). Em produção o chat passa por /api/chat. */
 export function getAnthropicApiKey(): string {
-  const fromExtra = getExpoExtra().anthropicApiKey;
-  if (typeof fromExtra === 'string' && fromExtra.trim()) {
-    return fromExtra.trim();
-  }
-
   const fromEnv = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY?.trim() ?? '';
   if (fromEnv) return fromEnv;
 
