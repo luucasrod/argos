@@ -16,6 +16,9 @@ import { Colors } from '@/constants/colors';
 import { AIPersonality } from '@/types/ai.types';
 import { ANTHROPIC_MODELS } from '@/services/ai/config';
 import { getEwelinkAuthorizeUrl } from '@/services/devices/ewelinkService';
+import { VOICE_SPEED_OPTIONS, VOICE_PREVIEW_PHRASE } from '@/constants/voice';
+import { textToSpeech } from '@/services/voice/textToSpeech';
+import { unlockSpeech } from '@/services/voice/speechUnlock';
 
 function SettingRow({
   label,
@@ -76,6 +79,12 @@ export default function SettingsScreen() {
   const toneOptions: AIPersonality['tone'][] = ['formal', 'casual', 'direct', 'friendly', 'playful'];
   const proactivityOptions: AIPersonality['proactivity'][] = ['low', 'medium', 'high'];
 
+  const previewVoice = () => {
+    medium();
+    unlockSpeech();
+    void textToSpeech(VOICE_PREVIEW_PHRASE, settings.personality);
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={[Colors.bg.primary, Colors.bg.secondary]} style={StyleSheet.absoluteFill} />
@@ -88,11 +97,11 @@ export default function SettingsScreen() {
           <Animated.View entering={FadeInDown.delay(120)}>
             <SectionHeader title="🔑 Conta" />
             <GlassCard style={styles.section}>
-              {user?.email ? (
+              {user && (user.email || isTestMode()) ? (
                 <View style={styles.settingRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.settingLabel}>{user.name ?? user.email}</Text>
-                    <Text style={styles.settingDesc}>{user.email}</Text>
+                    <Text style={styles.settingLabel}>{user.name ?? user.email ?? 'Sessão de teste'}</Text>
+                    <Text style={styles.settingDesc}>{user.email ?? 'Sem e-mail (modo teste)'}</Text>
                     {isTestMode() ? (
                       <Text style={styles.accountTest}>⚡ Modo teste — login desativado</Text>
                     ) : (
@@ -244,7 +253,10 @@ export default function SettingsScreen() {
 
               <View style={styles.divider} />
 
-              <SettingRow label="Tom de voz" description="Como a IA se comunica com você">
+              <SettingRow
+                label="Tom da conversa"
+                description="Estilo do texto — não altera o timbre da voz"
+              >
                 <View style={styles.optionRow}>
                   {toneOptions.map((tone) => (
                     <Pressable
@@ -287,13 +299,39 @@ export default function SettingsScreen() {
 
               <View style={styles.divider} />
 
-              <SettingRow label="Velocidade da voz">
-                <Text style={styles.valueText}>{settings.personality.voiceSpeed}x</Text>
+              <SettingRow label="Velocidade da voz" description="Ritmo da fala em voz alta">
+                <View style={styles.optionRow}>
+                  {VOICE_SPEED_OPTIONS.map((opt) => (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ voiceSpeed: opt.value });
+                        unlockSpeech();
+                        void textToSpeech('Velocidade da voz atualizada.', {
+                          ...settings.personality,
+                          voiceSpeed: opt.value,
+                        });
+                      }}
+                      style={optionPillStyle(
+                        Math.abs(settings.personality.voiceSpeed - opt.value) < 0.01
+                      )}
+                    >
+                      <Text
+                        style={optionTextStyle(
+                          Math.abs(settings.personality.voiceSpeed - opt.value) < 0.01
+                        )}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </SettingRow>
 
               <View style={styles.divider} />
 
-              <SettingRow label="Gênero da voz">
+              <SettingRow label="Gênero da voz" description="Escolhe voz masculina ou feminina do sistema">
                 <View style={styles.optionRow}>
                   {(['female', 'male'] as const).map((gender) => (
                     <Pressable
@@ -301,6 +339,13 @@ export default function SettingsScreen() {
                       onPress={() => {
                         light();
                         updatePersonality({ voiceGender: gender });
+                        unlockSpeech();
+                        void textToSpeech(
+                          gender === 'female'
+                            ? 'Voz feminina selecionada.'
+                            : 'Voz masculina selecionada.',
+                          { ...settings.personality, voiceGender: gender }
+                        );
                       }}
                       style={optionPillStyle(settings.personality.voiceGender === gender)}
                     >
@@ -311,6 +356,12 @@ export default function SettingsScreen() {
                   ))}
                 </View>
               </SettingRow>
+
+              <View style={styles.divider} />
+
+              <Pressable style={styles.previewVoiceBtn} onPress={previewVoice}>
+                <Text style={styles.previewVoiceText}>🔊 Testar voz</Text>
+              </Pressable>
             </GlassCard>
           </Animated.View>
 
@@ -539,4 +590,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   googleLoginText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  previewVoiceBtn: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(124, 58, 237, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.4)',
+    alignItems: 'center',
+  },
+  previewVoiceText: { color: '#C4B5FD', fontWeight: '700', fontSize: 15 },
 });

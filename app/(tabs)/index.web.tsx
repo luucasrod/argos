@@ -23,6 +23,7 @@ import { useVoice } from '@/hooks/useVoice.web';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
+import { unlockSpeech } from '@/services/voice/speechUnlock';
 
 export default function HomeScreenWeb() {
   const { sendMessage, status, confirmPendingAction, cancelPendingAction } = useArgos();
@@ -42,6 +43,7 @@ export default function HomeScreenWeb() {
 
   const handleVoiceSend = useCallback(
     (text: string) => {
+      unlockSpeech();
       sendMessage(text);
     },
     [sendMessage]
@@ -63,12 +65,14 @@ export default function HomeScreenWeb() {
   /* ─── Envio de texto ─── */
   const handleSend = useCallback(() => {
     if (!textInput.trim()) return;
+    unlockSpeech();
     sendMessage(textInput);
     setTextInput('');
   }, [textInput, sendMessage]);
 
   /* ─── Toque no orb ou botão de microfone ─── */
   const handleOrbPress = useCallback(() => {
+    unlockSpeech();
     if (isListening) {
       stopListening(true);
     } else {
@@ -119,7 +123,10 @@ export default function HomeScreenWeb() {
                   <Pressable
                     key={suggestion.label}
                     style={styles.pill}
-                    onPress={() => sendMessage(suggestion.message)}
+                    onPress={() => {
+                      unlockSpeech();
+                      sendMessage(suggestion.message);
+                    }}
                   >
                     <Text style={styles.pillText}>{suggestion.label}</Text>
                   </Pressable>

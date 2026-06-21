@@ -125,8 +125,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   initialize: async () => {
     if (!isAuthRequired()) {
+      // Modo teste: pula a tela de login, mas ainda cria uma sessão real
+      // (anônima) no Supabase — as rotas de backend (chat, eWeLink) exigem
+      // um JWT válido, então um usuário "fake" sem sessão não funcionaria.
+      let user = await resolveUserFromSession();
+      if (!user) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (!error && data.user) {
+          user = mapUser(data.user);
+        }
+      }
       set({
-        user: { id: 'test-mode', name: 'Modo teste', email: 'teste@argos.local' },
+        user: user ?? { id: 'test-mode', name: 'Modo teste', email: 'teste@argos.local' },
         initialized: true,
       });
       return () => {};

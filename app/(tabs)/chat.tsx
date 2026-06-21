@@ -21,6 +21,7 @@ import { useHaptic } from '@/hooks/useHaptic';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
+import { unlockSpeech } from '@/services/voice/speechUnlock';
 
 export default function ChatScreen() {
   const { messages, clearMessages, currentInput, setCurrentInput } = useAIStore();
@@ -33,6 +34,7 @@ export default function ChatScreen() {
   const handleSend = useCallback(() => {
     if (!currentInput.trim() || status === 'thinking') return;
     medium();
+    unlockSpeech();
     sendMessage(currentInput);
     setCurrentInput('');
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
@@ -40,6 +42,7 @@ export default function ChatScreen() {
 
   const handleVoiceToggle = useCallback(() => {
     light();
+    unlockSpeech();
     if (isListening) {
       stopListening();
       if (transcript) {

@@ -3,64 +3,93 @@
  */
 import { AIPersonality } from '@/types/ai.types';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
+import { loadVoices, startSpeechKeepAlive, unlockSpeech } from '@/services/voice/speechUnlock';
+import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
 
-function getBestVoice(lang: string): SpeechSynthesisVoice | null {
-  if (typeof window === 'undefined') return null;
-  const voices = window.speechSynthesis.getVoices();
-  return (
-    voices.find((v) => v.lang === lang) ??
-    voices.find((v) => v.lang.startsWith(lang.split('-')[0])) ??
-    null
-  );
+function estimateDurationMs(text: string, rate: number): number {
+  const words = text.split(/\s+/).length;
+  const wpm = 150 * rate;
+  return Math.max(3000, (words / wpm) * 60_000 + 1500);
 }
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
   const spoken = text?.trim();
   if (!spoken || typeof window === 'undefined' || !window.speechSynthesis) return;
 
+  unlockSpeech();
   pauseVoiceInput();
-  await waitForMicRelease(200);
+  await waitForMicRelease(150);
+
+  const synth = window.speechSynthesis;
+  const rate = Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
+  const voices = await loadVoices();
+  const selected = pickVoiceForPersonality(voices, personality);
+  const pitch = pitchForUtterance(selected, personality.voiceGender);
+  const lang = selected?.lang ?? personality.language ?? 'pt-BR';
 
   return new Promise((resolve) => {
-    const synth = window.speechSynthesis;
-    synth.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.lang = personality.language ?? 'pt-BR';
-    utterance.pitch = personality.voiceGender === 'female' ? 1.1 : 0.85;
-    utterance.rate = personality.voiceSpeed ?? 1.0;
-    utterance.volume = 1;
-
     let settled = false;
+    let started = false;
+    let attempts = 0;
+    let stopKeepAlive = () => {};
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+
     const finish = () => {
       if (settled) return;
       settled = true;
+      stopKeepAlive();
+      if (safetyTimer) clearTimeout(safetyTimer);
       resolve();
     };
 
-    utterance.onend = finish;
-    utterance.onerror = finish;
+    const runSpeak = () => {
+      if (settled) return;
+      attempts += 1;
 
-    const speak = () => {
-      const voice = getBestVoice(utterance.lang);
-      if (voice) utterance.voice = voice;
+      if (synth.speaking) synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(spoken);
+      utterance.lang = lang;
+      utterance.pitch = pitch;
+      utterance.rate = rate;
+      utterance.volume = 1;
+
+      if (selected) utterance.voice = selected;
+
+      utterance.onstart = () => {
+        started = true;
+        stopKeepAlive = startSpeechKeepAlive();
+      };
+
+      utterance.onend = finish;
+
+      utterance.onerror = (e) => {
+        if (__DEV__) {
+          console.warn('[Argos TTS] erro:', (e as SpeechSynthesisErrorEvent).error);
+        }
+        if (!started && attempts < 3) {
+          setTimeout(runSpeak, 200 * attempts);
+          return;
+        }
+        finish();
+      };
+
       if (synth.paused) synth.resume();
-      /* Chrome precisa de um tick após cancel() */
+
       setTimeout(() => {
         synth.speak(utterance);
-        /* Fallback se onend não disparar */
-        setTimeout(finish, Math.max(4000, spoken.length * 80));
-      }, 80);
+
+        setTimeout(() => {
+          if (!started && !settled && attempts < 3) {
+            runSpeak();
+          }
+        }, 600);
+      }, attempts === 1 ? 50 : 120);
+
+      safetyTimer = setTimeout(finish, estimateDurationMs(spoken, rate));
     };
 
-    if (synth.getVoices().length === 0) {
-      synth.onvoiceschanged = () => {
-        synth.onvoiceschanged = null;
-        speak();
-      };
-    } else {
-      speak();
-    }
+    runSpeak();
   });
 }
 
@@ -75,4 +104,10 @@ export function isSpeaking(): Promise<boolean> {
     return Promise.resolve(false);
   }
   return Promise.resolve(window.speechSynthesis.speaking);
+}
+
+/** Lista vozes disponíveis (útil para debug nas configurações). */
+export async function listAvailableVoices(): Promise<string[]> {
+  const voices = await loadVoices();
+  return voices.map((v) => `${v.name} (${v.lang})`);
 }

@@ -10,6 +10,7 @@ import {
   unregisterVoicePause,
   waitForMicRelease,
 } from '@/services/voice/voiceSession';
+import { unlockSpeech } from '@/services/voice/speechUnlock';
 
 export type { UseVoiceOptions };
 
@@ -245,6 +246,8 @@ export function useVoice(options?: UseVoiceOptions) {
       setError('Permissão do microfone negada. Libere nas configurações do navegador.');
       return;
     }
+
+    unlockSpeech();
 
     modeRef.current = 'active';
     transcriptRef.current = '';

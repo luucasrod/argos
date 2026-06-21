@@ -1,22 +1,40 @@
 import * as Speech from 'expo-speech';
 import { AIPersonality } from '@/types/ai.types';
+import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
+
+async function getVoices() {
+  try {
+    return await Speech.getAvailableVoicesAsync();
+  } catch {
+    return [];
+  }
+}
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
-  return new Promise((resolve) => {
-    Speech.stop();
+  const spoken = text?.trim();
+  if (!spoken) return;
 
+  Speech.stop();
+
+  const voices = await getVoices();
+  const selected = pickVoiceForPersonality(voices, personality);
+  const rate = Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
+  const pitch = pitchForUtterance(selected ?? null, personality.voiceGender);
+
+  return new Promise((resolve) => {
     const options: Speech.SpeechOptions = {
       language: personality.language,
-      pitch: personality.voiceGender === 'female' ? 1.2 : 0.9,
-      rate: personality.voiceSpeed,
+      pitch,
+      rate,
       onDone: resolve,
-      onError: (error) => {
-        console.warn('TTS error:', error);
-        resolve();
-      },
+      onError: () => resolve(),
     };
 
-    Speech.speak(text, options);
+    if (selected?.identifier) {
+      options.voice = selected.identifier;
+    }
+
+    Speech.speak(spoken, options);
   });
 }
 
@@ -26,4 +44,9 @@ export function stopSpeaking() {
 
 export function isSpeaking(): Promise<boolean> {
   return Speech.isSpeakingAsync();
+}
+
+export async function listAvailableVoices(): Promise<string[]> {
+  const voices = await getVoices();
+  return voices.map((v) => `${v.name ?? v.identifier} (${v.language})`);
 }

@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Settings, UserProfile } from '@/types/settings.types';
 import { AIPersonality } from '@/types/ai.types';
 import { ANTHROPIC_MODELS, resolveAnthropicModel } from '@/services/ai/config';
+import { snapVoiceSpeed } from '@/services/voice/voicePicker';
 
 const defaultPersonality: AIPersonality = {
   name: 'Argos',
@@ -68,19 +69,24 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'argos-settings',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const data = persisted as { settings?: Settings & { apiKey?: string } };
         if (data?.settings) {
           const { apiKey: _legacy, ...rest } = data.settings;
-          // v2→v3: adiciona autonomyLevel e userProfile se ausentes
+          const personality = {
+            ...defaultPersonality,
+            ...rest.personality,
+            voiceSpeed: snapVoiceSpeed(rest.personality?.voiceSpeed ?? 1.0),
+          };
           data.settings = {
             ...defaultSettings,
             ...rest,
             model: resolveAnthropicModel(rest.model),
             autonomyLevel: rest.autonomyLevel ?? 'autonomous',
             userProfile: rest.userProfile ?? {},
+            personality,
           };
         }
         return data;

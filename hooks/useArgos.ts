@@ -110,6 +110,8 @@ export function useArgos() {
   const speak = useCallback(
     async (text: string, personality: AIPersonality = settings.personality) => {
       if (!text.trim()) return;
+      const { unlockSpeech } = await import('@/services/voice/speechUnlock');
+      unlockSpeech();
       setStatus('speaking');
       await textToSpeech(text, personality);
     },
