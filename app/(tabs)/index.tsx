@@ -39,7 +39,16 @@ export default function HomeScreen() {
   const { showExecutionOverlay, executionSteps } = useAIStore();
   const { getActiveInsights } = useMemoryStore();
   const { automations } = useAutomationStore();
-  const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice();
+  const handleVoiceSend = useCallback(
+    (text: string) => {
+      sendMessage(text);
+    },
+    [sendMessage]
+  );
+
+  const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice({
+    onAutoSend: handleVoiceSend,
+  });
   const { light, medium } = useHaptic();
 
   const [textInput, setTextInput] = useState('');
@@ -50,15 +59,11 @@ export default function HomeScreen() {
   const handleOrbPress = useCallback(() => {
     light();
     if (isListening) {
-      stopListening();
-      if (transcript) {
-        sendMessage(transcript);
-        setTranscript('');
-      }
+      stopListening(true);
     } else {
       startListening();
     }
-  }, [isListening, transcript, light, stopListening, sendMessage, setTranscript, startListening]);
+  }, [isListening, light, stopListening, startListening]);
 
   const handleSend = useCallback(() => {
     if (!textInput.trim()) return;

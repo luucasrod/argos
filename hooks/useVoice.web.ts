@@ -1,13 +1,18 @@
 /**
- * useVoice.web.ts — Hook de reconhecimento de voz para web via Web Speech API.
- * Metro resolve este arquivo no lugar de useVoice.ts quando bundlando para web.
- * Interface compatível com useVoice.ts (nativo) + campos extras para wake word.
+ * useVoice.web.ts — Web Speech API
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAIStore } from '@/stores/useAIStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { VOICE_SILENCE_MS, type UseVoiceOptions } from '@/constants/voice';
+import {
+  registerVoicePause,
+  unregisterVoicePause,
+  waitForMicRelease,
+} from '@/services/voice/voiceSession';
 
-/* ─── Tipos internos da Web Speech API ─── */
+export type { UseVoiceOptions };
+
 interface SRInstance extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -38,30 +43,105 @@ function getSpeechRecognitionCtor(): (new () => SRInstance) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** Palavra de ativação — detectada em qualquer caixa */
-const WAKE_REGEX = /\bargos\b/i;
+async function requestMicPermission(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    return true;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-export function useVoice() {
+export function useVoice(options?: UseVoiceOptions) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
-  /** true quando a wake word foi detectada no modo background */
-  const [wakeWordDetected, setWakeWordDetected] = useState(false);
 
   const { setStatus } = useAIStore();
   const { settings } = useSettingsStore();
 
   const srRef = useRef<SRInstance | null>(null);
-  /** 'idle' | 'wake' | 'active' */
-  const modeRef = useRef<'idle' | 'wake' | 'active'>('idle');
-  /** flag para saber se o loop de wake word deve continuar */
-  const wakeLoopRef = useRef(false);
+  const modeRef = useRef<'idle' | 'active'>('idle');
+  const transcriptRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onAutoSendRef = useRef(options?.onAutoSend);
+  const startingRef = useRef(false);
+  const submittedRef = useRef(false);
+  const silenceMs = options?.silenceMs ?? VOICE_SILENCE_MS;
+
+  onAutoSendRef.current = options?.onAutoSend;
 
   const SRCtor = getSpeechRecognitionCtor();
   const isSupported = SRCtor !== null;
   const lang = settings.personality.language ?? 'pt-BR';
 
-  /* ─── Cria instância de reconhecimento ─── */
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
+  const killSR = useCallback(() => {
+    if (srRef.current) {
+      try {
+        srRef.current.abort();
+      } catch {}
+      srRef.current = null;
+    }
+  }, []);
+
+  const releaseMic = useCallback(() => {
+    clearSilenceTimer();
+    killSR();
+    modeRef.current = 'idle';
+    startingRef.current = false;
+    setIsListening(false);
+  }, [clearSilenceTimer, killSR]);
+
+  const submitTranscript = useCallback(
+    (text: string) => {
+      if (!text || !onAutoSendRef.current || submittedRef.current) return;
+      submittedRef.current = true;
+      onAutoSendRef.current(text);
+      setTimeout(() => {
+        submittedRef.current = false;
+      }, 3000);
+    },
+    []
+  );
+
+  const finalizeActiveListening = useCallback(
+    (submit: boolean) => {
+      const text = transcriptRef.current.trim();
+      releaseMic();
+      transcriptRef.current = '';
+      setTranscript('');
+
+      if (submit && text) {
+        submitTranscript(text);
+      } else if (!submit) {
+        setStatus('idle');
+      }
+    },
+    [releaseMic, setStatus, submitTranscript]
+  );
+
+  const scheduleAutoSend = useCallback(() => {
+    if (!onAutoSendRef.current) return;
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      if (modeRef.current !== 'active') return;
+      const text = transcriptRef.current.trim();
+      if (!text) return;
+      finalizeActiveListening(true);
+    }, silenceMs);
+  }, [clearSilenceTimer, finalizeActiveListening, silenceMs]);
+
   const buildSR = useCallback((): SRInstance | null => {
     if (!SRCtor) return null;
     const r = new SRCtor();
@@ -72,154 +152,164 @@ export function useVoice() {
     return r;
   }, [SRCtor, lang]);
 
-  /* ─── Mata a instância atual ─── */
-  const killSR = useCallback(() => {
-    if (srRef.current) {
-      try { srRef.current.abort(); } catch {}
-      srRef.current = null;
-    }
-  }, []);
+  const attachHandlersRef = useRef<(rec: SRInstance) => void>(() => {});
 
-  /* ─── ESCUTA ATIVA (botão do microfone) ─── */
-  const startListening = useCallback(() => {
+  const restartActiveSession = useCallback(() => {
+    if (modeRef.current !== 'active') return;
+    const rec = buildSR();
+    if (!rec) return;
+    attachHandlersRef.current(rec);
+    srRef.current = rec;
+    try {
+      rec.start();
+    } catch {
+      releaseMic();
+      setStatus('idle');
+    }
+  }, [buildSR, releaseMic, setStatus]);
+
+  const attachHandlers = useCallback(
+    (rec: SRInstance) => {
+      rec.onstart = () => {
+        startingRef.current = false;
+        setIsListening(true);
+        setStatus('listening');
+        setError(null);
+      };
+
+      rec.onresult = (e: SRResultEvent) => {
+        let text = '';
+        for (let i = 0; i < e.results.length; i++) {
+          text += e.results[i][0].transcript;
+        }
+        if (!text.trim()) return;
+        transcriptRef.current = text.trim();
+        setTranscript(text.trim());
+        scheduleAutoSend();
+      };
+
+      rec.onerror = (e: SRErrorEvent) => {
+        if (e.error === 'aborted' || e.error === 'no-speech') return;
+
+        if (e.error === 'audio-capture') {
+          setError('Microfone indisponível. Verifique permissões e tente de novo.');
+        } else if (e.error === 'not-allowed') {
+          setError('Permissão do microfone negada. Libere nas configurações do navegador.');
+        } else {
+          setError('Erro no microfone: ' + e.error);
+        }
+
+        releaseMic();
+        setStatus('idle');
+      };
+
+      rec.onend = () => {
+        if (modeRef.current !== 'active') return;
+
+        const text = transcriptRef.current.trim();
+        if (text) {
+          finalizeActiveListening(true);
+          return;
+        }
+
+        /* Chrome encerra sessões longas — reinicia enquanto o usuário ainda escuta */
+        srRef.current = null;
+        setTimeout(() => restartActiveSession(), 250);
+      };
+    },
+    [finalizeActiveListening, releaseMic, restartActiveSession, scheduleAutoSend, setStatus]
+  );
+
+  attachHandlersRef.current = attachHandlers;
+
+  const startListening = useCallback(async () => {
     if (!isSupported) {
       setError('Reconhecimento de voz não suportado. Use Chrome ou Edge.');
       return;
     }
-    if (modeRef.current === 'active') return;
+    if (modeRef.current === 'active' || startingRef.current) return;
 
-    // Para o modo wake word enquanto o usuário está falando
-    wakeLoopRef.current = false;
-    killSR();
+    const aiStatus = useAIStore.getState().status;
+    if (aiStatus === 'thinking' || aiStatus === 'executing' || aiStatus === 'speaking') {
+      return;
+    }
+
+    startingRef.current = true;
+    submittedRef.current = false;
+    releaseMic();
+    await waitForMicRelease();
+
+    const micOk = await requestMicPermission();
+    if (!micOk) {
+      startingRef.current = false;
+      setError('Permissão do microfone negada. Libere nas configurações do navegador.');
+      return;
+    }
+
     modeRef.current = 'active';
+    transcriptRef.current = '';
     setTranscript('');
     setError(null);
 
     const rec = buildSR();
-    if (!rec) return;
+    if (!rec) {
+      startingRef.current = false;
+      modeRef.current = 'idle';
+      return;
+    }
 
-    rec.onstart = () => {
-      setIsListening(true);
-      setStatus('listening');
-    };
-
-    rec.onresult = (e: SRResultEvent) => {
-      let text = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        text += e.results[i][0].transcript;
-      }
-      if (text) setTranscript(text);
-    };
-
-    rec.onerror = (e: SRErrorEvent) => {
-      if (e.error !== 'aborted' && e.error !== 'no-speech') {
-        setError('Erro no microfone: ' + e.error);
-      }
-    };
-
-    rec.onend = () => {
-      if (modeRef.current === 'active') {
-        modeRef.current = 'idle';
-        setIsListening(false);
-        setStatus('idle');
-      }
-    };
-
+    attachHandlers(rec);
     srRef.current = rec;
-    try { rec.start(); } catch (err) {
+
+    try {
+      rec.start();
+    } catch (err) {
       console.warn('[Argos Voice] falha ao iniciar:', err);
+      startingRef.current = false;
       modeRef.current = 'idle';
+      setError('Não foi possível acessar o microfone. Tente de novo.');
     }
-  }, [isSupported, buildSR, killSR, setStatus]);
+  }, [isSupported, attachHandlers, buildSR, releaseMic]);
 
-  /* ─── PARA escuta ativa ─── */
-  const stopListening = useCallback(() => {
-    killSR();
-    modeRef.current = 'idle';
-    setIsListening(false);
-    setStatus('idle');
-  }, [killSR, setStatus]);
+  const stopListening = useCallback(
+    (submit = false) => {
+      if (modeRef.current === 'active') {
+        finalizeActiveListening(submit);
+        return;
+      }
+      releaseMic();
+      setStatus('idle');
+    },
+    [finalizeActiveListening, releaseMic, setStatus]
+  );
 
-  /* ─── MODO WAKE WORD (escuta em background) ─── */
-  const startWakeWordDetection = useCallback(() => {
-    if (!isSupported || modeRef.current !== 'idle') return;
+  useEffect(() => {
+    registerVoicePause(() => {
+      releaseMic();
+      if (useAIStore.getState().status === 'listening') {
+        useAIStore.getState().setStatus('idle');
+      }
+    });
+    return () => unregisterVoicePause();
+  }, [releaseMic]);
 
-    wakeLoopRef.current = true;
-
-    const launch = () => {
-      if (!wakeLoopRef.current || modeRef.current !== 'idle') return;
-
-      const rec = buildSR();
-      if (!rec) return;
-
-      modeRef.current = 'wake';
-
-      rec.onresult = (e: SRResultEvent) => {
-        if (modeRef.current !== 'wake') return;
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const text = e.results[i][0].transcript;
-          if (WAKE_REGEX.test(text)) {
-            // Wake word detectada!
-            wakeLoopRef.current = false;
-            killSR();
-            modeRef.current = 'idle';
-            setWakeWordDetected(true);
-            return;
-          }
-        }
-      };
-
-      // Erros silenciosos em modo background
-      rec.onerror = () => {};
-
-      rec.onend = () => {
-        if (modeRef.current === 'wake') {
-          modeRef.current = 'idle';
-          srRef.current = null;
-          // Reinicia após pequena pausa (evita spam)
-          if (wakeLoopRef.current) {
-            setTimeout(launch, 800);
-          }
-        }
-      };
-
-      srRef.current = rec;
-      try { rec.start(); } catch {}
-    };
-
-    launch();
-  }, [isSupported, buildSR, killSR]);
-
-  /* ─── Para o loop de wake word ─── */
-  const stopWakeWordDetection = useCallback(() => {
-    wakeLoopRef.current = false;
-    if (modeRef.current === 'wake') {
-      killSR();
-      modeRef.current = 'idle';
-    }
-  }, [killSR]);
-
-  /* ─── Cleanup ao desmontar ─── */
   useEffect(() => {
     return () => {
-      wakeLoopRef.current = false;
-      killSR();
+      releaseMic();
     };
-  }, [killSR]);
+  }, [releaseMic]);
 
   return {
-    /* interface compatível com useVoice.ts nativo */
     isListening,
     transcript,
     error,
     startListening,
     stopListening,
     setTranscript,
-    /* extras para web */
-    startWakeWordDetection,
-    stopWakeWordDetection,
-    wakeWordDetected,
-    setWakeWordDetected,
     isSupported,
+    startWakeWordDetection: () => {},
+    stopWakeWordDetection: () => releaseMic(),
+    wakeWordDetected: false,
+    setWakeWordDetected: () => {},
   };
 }

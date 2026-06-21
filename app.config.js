@@ -9,8 +9,8 @@ module.exports = ({ config }) => {
     ...base,
     extra: {
       ...base.extra,
-      // Lido do .env pelo Expo CLI antes de bundlar — nunca vazio se .env estiver correto
       anthropicApiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? '',
+      skipAuth: process.env.EXPO_PUBLIC_SKIP_AUTH === 'true',
     },
   };
 };

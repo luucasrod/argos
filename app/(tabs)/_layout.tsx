@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Colors } from '@/constants/colors';
 import { useSupabaseSync } from '@/hooks/useSupabaseSync';
+import { useDeviceStore } from '@/stores/useDeviceStore';
 
 function TabBarBackground() {
   if (Platform.OS === 'ios') {
@@ -22,6 +24,11 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabsLayout() {
   useSupabaseSync(); // sincroniza memórias do Supabase ao entrar nos tabs
+  const { syncEwelinkDevices } = useDeviceStore();
+
+  useEffect(() => {
+    syncEwelinkDevices();
+  }, [syncEwelinkDevices]);
 
   return (
     <Tabs

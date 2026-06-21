@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Switch, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Switch, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,11 +8,14 @@ import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { isTestMode } from '@/services/auth/config';
+import { useDeviceStore } from '@/stores/useDeviceStore';
 import { useHaptic } from '@/hooks/useHaptic';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
 import { AIPersonality } from '@/types/ai.types';
 import { ANTHROPIC_MODELS } from '@/services/ai/config';
+import { getEwelinkAuthorizeUrl } from '@/services/devices/ewelinkService';
 
 function SettingRow({
   label,
@@ -50,8 +53,25 @@ export default function SettingsScreen() {
   const { settings, updateSettings, updatePersonality, updateUserProfile } = useSettingsStore();
   const { memories, insights } = useMemoryStore();
   const { clearMessages } = useAIStore();
-  const { user, signOut } = useAuthStore();
+  const { user, signOut, loading: authLoading } = useAuthStore();
+  const { devices, ewelinkConnected, syncEwelinkDevices } = useDeviceStore();
   const { light, medium } = useHaptic();
+  const [connectingEwelink, setConnectingEwelink] = React.useState(false);
+
+  const ewelinkDeviceCount = devices.filter((d) => d.source === 'ewelink').length;
+
+  const handleConnectEwelink = async () => {
+    medium();
+    setConnectingEwelink(true);
+    try {
+      const url = await getEwelinkAuthorizeUrl();
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.assign(url);
+      }
+    } catch {
+      setConnectingEwelink(false);
+    }
+  };
 
   const toneOptions: AIPersonality['tone'][] = ['formal', 'casual', 'direct', 'friendly', 'playful'];
   const proactivityOptions: AIPersonality['proactivity'][] = ['low', 'medium', 'high'];
@@ -68,18 +88,52 @@ export default function SettingsScreen() {
           <Animated.View entering={FadeInDown.delay(120)}>
             <SectionHeader title="🔑 Conta" />
             <GlassCard style={styles.section}>
-              <View style={styles.settingRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.settingLabel}>{user?.name ?? 'Usuário'}</Text>
-                  <Text style={styles.settingDesc}>{user?.email}</Text>
+              {user?.email ? (
+                <View style={styles.settingRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>{user.name ?? user.email}</Text>
+                    <Text style={styles.settingDesc}>{user.email}</Text>
+                    {isTestMode() ? (
+                      <Text style={styles.accountTest}>⚡ Modo teste — login desativado</Text>
+                    ) : (
+                      <Text style={styles.accountOk}>✓ Conectado com Google</Text>
+                    )}
+                  </View>
+                  {!isTestMode() ? (
+                    <Pressable
+                      style={styles.signOutBtn}
+                      onPress={async () => {
+                        medium();
+                        await signOut();
+                      }}
+                      disabled={authLoading}
+                    >
+                      <Text style={styles.signOutText}>{authLoading ? '...' : 'Sair'}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-                <Pressable
-                  style={styles.signOutBtn}
-                  onPress={() => { medium(); signOut(); }}
-                >
-                  <Text style={styles.signOutText}>Sair</Text>
-                </Pressable>
-              </View>
+              ) : (
+                <View style={styles.accountGuest}>
+                  <Text style={styles.settingLabel}>Não conectado</Text>
+                  <Text style={styles.settingDesc}>
+                    Faça login com e-mail ou Google para conversar com o Argos.
+                  </Text>
+                  <Pressable
+                    style={styles.googleLoginBtn}
+                    onPress={async () => {
+                      medium();
+                      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                        window.location.assign('/login');
+                      } else {
+                        const { router } = await import('expo-router');
+                        router.replace('/login');
+                      }
+                    }}
+                  >
+                    <Text style={styles.googleLoginText}>Ir para login</Text>
+                  </Pressable>
+                </View>
+              )}
             </GlassCard>
           </Animated.View>
 
@@ -115,6 +169,31 @@ export default function SettingsScreen() {
                   placeholderTextColor={Colors.text.muted}
                 />
               </SettingRow>
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(135)}>
+            <SectionHeader title="🔌 Dispositivos" />
+            <GlassCard style={styles.section}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>eWeLink (tomadas inteligentes)</Text>
+                  <Text style={styles.settingDesc}>
+                    {ewelinkConnected
+                      ? `Conectado · ${ewelinkDeviceCount} dispositivo${ewelinkDeviceCount !== 1 ? 's' : ''}`
+                      : 'Conecte sua conta para controlar tomadas por voz'}
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.connectBtn}
+                  onPress={ewelinkConnected ? () => syncEwelinkDevices() : handleConnectEwelink}
+                  disabled={connectingEwelink}
+                >
+                  <Text style={styles.connectText}>
+                    {connectingEwelink ? '...' : ewelinkConnected ? 'Atualizar' : 'Conectar'}
+                  </Text>
+                </Pressable>
+              </View>
             </GlassCard>
           </Animated.View>
 
@@ -440,4 +519,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   signOutText: { color: Colors.status.error, fontWeight: '600', fontSize: 14 },
+  connectBtn: {
+    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  connectText: { color: '#A78BFA', fontWeight: '600', fontSize: 14 },
+  accountOk: { color: Colors.status.success, fontSize: 12, marginTop: 6, fontWeight: '500' },
+  accountTest: { color: '#A78BFA', fontSize: 12, marginTop: 6, fontWeight: '500' },
+  accountGuest: { paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  googleLoginBtn: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  googleLoginText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

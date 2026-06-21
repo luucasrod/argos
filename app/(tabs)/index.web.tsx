@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,15 +20,32 @@ import { useAIStore } from '@/stores/useAIStore';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useVoice } from '@/hooks/useVoice.web';
+import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 
 export default function HomeScreenWeb() {
   const { sendMessage, status, confirmPendingAction, cancelPendingAction } = useArgos();
-  const { showExecutionOverlay, executionSteps, confirmationRequest } = useAIStore();
+  const { messages, showExecutionOverlay, executionSteps, confirmationRequest } = useAIStore();
   const { getActiveInsights } = useMemoryStore();
   const { automations } = useAutomationStore();
   const [textInput, setTextInput] = useState('');
+  const chatScrollRef = useRef<ScrollView>(null);
+
+  const recentMessages = messages.slice(-6);
+
+  useEffect(() => {
+    if (recentMessages.length > 0) {
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [recentMessages.length, status]);
+
+  const handleVoiceSend = useCallback(
+    (text: string) => {
+      sendMessage(text);
+    },
+    [sendMessage]
+  );
 
   const {
     isListening,
@@ -37,41 +54,11 @@ export default function HomeScreenWeb() {
     startListening,
     stopListening,
     setTranscript,
-    startWakeWordDetection,
-    wakeWordDetected,
-    setWakeWordDetected,
     isSupported: voiceSupported,
-  } = useVoice();
+  } = useVoice({ onAutoSend: handleVoiceSend });
 
   const activeInsights = getActiveInsights();
   const recentAutomations = automations.filter((a) => a.runCount > 0).slice(0, 3);
-
-  /* ─── Wake word detectada → ativa escuta ─── */
-  useEffect(() => {
-    if (wakeWordDetected) {
-      setWakeWordDetected(false);
-      startListening();
-    }
-  }, [wakeWordDetected, startListening, setWakeWordDetected]);
-
-  /* ─── Inicia detecção de wake word ao montar ─── */
-  useEffect(() => {
-    if (!voiceSupported) return;
-    const timer = setTimeout(() => {
-      startWakeWordDetection();
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [voiceSupported, startWakeWordDetection]);
-
-  /* ─── Reinicia wake word quando fica idle ─── */
-  useEffect(() => {
-    if (!isListening && voiceSupported && status === 'idle') {
-      const timer = setTimeout(() => {
-        startWakeWordDetection();
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [isListening, voiceSupported, status, startWakeWordDetection]);
 
   /* ─── Envio de texto ─── */
   const handleSend = useCallback(() => {
@@ -83,15 +70,11 @@ export default function HomeScreenWeb() {
   /* ─── Toque no orb ou botão de microfone ─── */
   const handleOrbPress = useCallback(() => {
     if (isListening) {
-      stopListening();
-      if (transcript.trim()) {
-        sendMessage(transcript);
-        setTranscript('');
-      }
+      stopListening(true);
     } else {
       startListening();
     }
-  }, [isListening, transcript, stopListening, startListening, sendMessage, setTranscript]);
+  }, [isListening, stopListening, startListening]);
 
   const currentStatus = isListening ? 'listening' : status;
 
@@ -114,10 +97,19 @@ export default function HomeScreenWeb() {
             </View>
 
             {voiceSupported && !isListening && status === 'idle' && (
-              <Text style={styles.wakeHint}>🎙 Diga "Argos" para ativar</Text>
+              <Text style={styles.wakeHint}>🎙 Toque no orb para falar</Text>
             )}
             {isListening && (
-              <Text style={styles.wakeHintActive}>🔴 Ouvindo... Toque no orb para enviar</Text>
+              <Text style={styles.wakeHintActive}>🔴 Ouvindo... Pare de falar para enviar</Text>
+            )}
+            {status === 'thinking' && !isListening && (
+              <Text style={styles.wakeHintActive}>🧠 Pensando...</Text>
+            )}
+            {status === 'executing' && (
+              <Text style={styles.wakeHintActive}>⚡ Executando...</Text>
+            )}
+            {status === 'speaking' && (
+              <Text style={styles.wakeHintActive}>🔊 Falando...</Text>
             )}
 
             {/* ─── Sugestões ─── */}
@@ -162,6 +154,19 @@ export default function HomeScreenWeb() {
                 <Text style={styles.errorText}>{voiceError}</Text>
               ) : null}
             </View>
+
+            {recentMessages.length > 0 && (
+              <ScrollView
+                ref={chatScrollRef}
+                style={styles.chatFeed}
+                contentContainerStyle={styles.chatFeedContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {recentMessages.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
+              </ScrollView>
+            )}
           </View>
 
           {/* ─── Insights ─── */}
@@ -330,6 +335,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   orbSection: { alignItems: 'center' },
+  chatFeed: {
+    width: '100%',
+    maxHeight: 220,
+    marginTop: 16,
+  },
+  chatFeedContent: {
+    paddingBottom: 8,
+  },
   transcriptText: {
     color: Colors.text.secondary,
     fontSize: 15,

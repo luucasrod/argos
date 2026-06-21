@@ -32,4 +32,6 @@ export interface Device {
   room: string;
   brand: string;
   lastSeen?: Date;
+  source?: 'mock' | 'ewelink';
+  ewelinkDeviceId?: string;
 }

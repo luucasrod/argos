@@ -1,8 +1,8 @@
 /**
  * textToSpeech.web.ts — TTS via Web Speech Synthesis API
- * Metro resolve este arquivo no lugar de textToSpeech.ts quando bundlando para web.
  */
 import { AIPersonality } from '@/types/ai.types';
+import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 
 function getBestVoice(lang: string): SpeechSynthesisVoice | null {
   if (typeof window === 'undefined') return null;
@@ -15,38 +15,47 @@ function getBestVoice(lang: string): SpeechSynthesisVoice | null {
 }
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
+  const spoken = text?.trim();
+  if (!spoken || typeof window === 'undefined' || !window.speechSynthesis) return;
+
+  pauseVoiceInput();
+  await waitForMicRelease(200);
+
   return new Promise((resolve) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      resolve();
-      return;
-    }
+    const synth = window.speechSynthesis;
+    synth.cancel();
 
-    // Cancela qualquer fala em andamento
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.lang = personality.language ?? 'pt-BR';
     utterance.pitch = personality.voiceGender === 'female' ? 1.1 : 0.85;
     utterance.rate = personality.voiceSpeed ?? 1.0;
     utterance.volume = 1;
 
-    // Tenta usar voz no idioma certo
-    const voice = getBestVoice(utterance.lang);
-    if (voice) utterance.voice = voice;
-
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-
-    // Chrome bug: vozes podem não estar carregadas ainda
-    const speak = () => {
-      const bestVoice = getBestVoice(utterance.lang);
-      if (bestVoice && !utterance.voice) utterance.voice = bestVoice;
-      window.speechSynthesis.speak(utterance);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
     };
 
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.onvoiceschanged = null;
+    utterance.onend = finish;
+    utterance.onerror = finish;
+
+    const speak = () => {
+      const voice = getBestVoice(utterance.lang);
+      if (voice) utterance.voice = voice;
+      if (synth.paused) synth.resume();
+      /* Chrome precisa de um tick após cancel() */
+      setTimeout(() => {
+        synth.speak(utterance);
+        /* Fallback se onend não disparar */
+        setTimeout(finish, Math.max(4000, spoken.length * 80));
+      }, 80);
+    };
+
+    if (synth.getVoices().length === 0) {
+      synth.onvoiceschanged = () => {
+        synth.onvoiceschanged = null;
         speak();
       };
     } else {

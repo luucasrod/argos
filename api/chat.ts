@@ -1,21 +1,29 @@
 /**
  * api/chat.ts — Vercel Serverless Function
  * Valida o token Supabase + repassa para a Anthropic API.
- * A chave Anthropic fica SOMENTE no servidor.
+ * SKIP_AUTH=true → modo teste, sem login.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
+const skipAuth = process.env.SKIP_AUTH === 'true';
 
 const supabase = createClient(
   process.env.SUPABASE_URL ?? 'https://qzoknfwfvdqcnbsirwlf.supabase.co',
   process.env.SUPABASE_ANON_KEY ?? ''
 );
 
+function setCorsHeaders(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS preflight
+  setCorsHeaders(res);
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -24,20 +32,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Valida se o usuário está autenticado via Supabase
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'unauthorized', message: 'Token de autenticação ausente' });
+  if (!skipAuth) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'unauthorized', message: 'Token de autenticação ausente' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'unauthorized', message: 'Sessão inválida ou expirada' });
+    }
   }
 
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return res.status(401).json({ error: 'unauthorized', message: 'Sessão inválida ou expirada' });
-  }
-
-  // Verifica chave Anthropic
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'server_error', message: 'API key não configurada no servidor' });
   }

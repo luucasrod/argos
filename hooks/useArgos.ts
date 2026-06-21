@@ -1,20 +1,34 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useAIStore } from '@/stores/useAIStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useDeviceStore } from '@/stores/useDeviceStore';
-import { getApiErrorMessage } from '@/services/ai/anthropic';
+import { getApiErrorMessage, getSpeechErrorMessage } from '@/services/ai/anthropic';
 import { createMessage, isConfigured as isAnthropicConfigured } from '@/services/ai/anthropicProxy';
 import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
 import { textToSpeech } from '@/services/voice/textToSpeech';
+import { pauseVoiceInput } from '@/services/voice/voiceSession';
+import { resolveIntentSpeech } from '@/services/voice/speechText';
+import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
 import { useHaptic } from './useHaptic';
 import { Platform } from 'react-native';
+import type { AIPersonality } from '@/types/ai.types';
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
 
 /** Determina se um intent precisa de confirmação no modo assistido */
 function needsConfirmation(intent: ParsedIntent): boolean {
@@ -91,12 +105,25 @@ export function useArgos() {
   const { automations, addAutomation } = useAutomationStore();
   const { devices, toggleDevice, updateDeviceState } = useDeviceStore();
   const { heavy, success } = useHaptic();
+  const processingRef = useRef(false);
+
+  const speak = useCallback(
+    async (text: string, personality: AIPersonality = settings.personality) => {
+      if (!text.trim()) return;
+      setStatus('speaking');
+      await textToSpeech(text, personality);
+    },
+    [setStatus, settings.personality]
+  );
 
   const processIntent = useCallback(
     async (intent: ParsedIntent) => {
       const assistantMessageId = `msg-${Date.now()}-assistant`;
 
       if (intent.type === 'device_control' && intent.actions && intent.actions.length > 0) {
+        const spoken = resolveIntentSpeech(intent);
+        if (spoken) await speak(spoken);
+
         setStatus('executing');
 
         const steps = intent.actions.map((a) => ({
@@ -127,21 +154,10 @@ export function useArgos() {
 
         success();
 
-        if (intent.speech) {
-          setStatus('speaking');
-          await textToSpeech(intent.speech, settings.personality);
-        }
-
-        setTimeout(() => {
-          setShowExecutionOverlay(false);
-          clearExecutionSteps();
-          setStatus('idle');
-        }, 2000);
-
         addMessage({
           id: assistantMessageId,
           role: 'assistant',
-          content: intent.text || intent.speech,
+          content: intent.text || intent.speech || spoken,
           timestamp: new Date(),
           type: 'action',
           metadata: {
@@ -153,6 +169,12 @@ export function useArgos() {
             })),
           },
         });
+
+        setTimeout(() => {
+          setShowExecutionOverlay(false);
+          clearExecutionSteps();
+          setStatus('idle');
+        }, 2000);
 
       } else if (intent.type === 'automation' && intent.automation) {
         setStatus('executing');
@@ -182,10 +204,8 @@ export function useArgos() {
 
         addAutomation(newAutomation);
 
-        if (intent.speech) {
-          setStatus('speaking');
-          await textToSpeech(intent.speech, settings.personality);
-        }
+        const spoken = resolveIntentSpeech(intent);
+        if (spoken) await speak(spoken);
 
         setStatus('idle');
 
@@ -206,10 +226,8 @@ export function useArgos() {
 
           const displayUrl = resolvedUrl.replace(/^https?:\/\//, '').split('/')[0];
 
-          if (intent.speech) {
-            setStatus('speaking');
-            await textToSpeech(intent.speech, settings.personality);
-          }
+          const spoken = resolveIntentSpeech(intent);
+          if (spoken) await speak(spoken);
           setStatus('idle');
 
           addMessage({
@@ -220,10 +238,7 @@ export function useArgos() {
             type: 'text',
           });
         } else {
-          if (intent.speech) {
-            setStatus('speaking');
-            await textToSpeech('Abrir URLs só está disponível na versão web.', settings.personality);
-          }
+          await speak('Abrir URLs só está disponível na versão web.', settings.personality);
           setStatus('idle');
           addMessage({
             id: assistantMessageId,
@@ -235,13 +250,9 @@ export function useArgos() {
         }
 
       } else if (intent.type === 'get_weather') {
+        const intro = resolveIntentSpeech(intent) || 'Verificando o clima...';
+        await speak(intro);
         setStatus('executing');
-
-        if (intent.speech) {
-          setStatus('speaking');
-          await textToSpeech(intent.speech, settings.personality);
-        }
-        setStatus('thinking');
 
         try {
           let weatherText: string;
@@ -261,7 +272,7 @@ export function useArgos() {
           }
 
           setStatus('speaking');
-          await textToSpeech(weatherText, settings.personality);
+          await speak(weatherText);
           setStatus('idle');
 
           addMessage({
@@ -275,7 +286,7 @@ export function useArgos() {
           const errorMsg =
             err instanceof Error ? err.message : 'Não consegui obter o clima agora.';
           setStatus('speaking');
-          await textToSpeech(errorMsg, settings.personality);
+          await speak(errorMsg);
           setStatus('idle');
           addMessage({
             id: assistantMessageId,
@@ -298,11 +309,10 @@ export function useArgos() {
         }
 
         const speechText =
-          intent.speech ||
+          intent.speech?.trim() ||
           `Lembrete criado! Vou te avisar em ${delayMinutes} minuto${delayMinutes !== 1 ? 's' : ''}.`;
 
-        setStatus('speaking');
-        await textToSpeech(speechText, settings.personality);
+        await speak(speechText);
         setStatus('idle');
 
         addMessage({
@@ -334,9 +344,8 @@ export function useArgos() {
           // Ignora erros de storage
         }
 
-        const speechText = intent.speech || 'Nota salva!';
-        setStatus('speaking');
-        await textToSpeech(speechText, settings.personality);
+        const speechText = intent.speech?.trim() || 'Nota salva!';
+        await speak(speechText);
         setStatus('idle');
 
         addMessage({
@@ -348,18 +357,15 @@ export function useArgos() {
         });
 
       } else {
-        // chat / routine / fallback
-        if (intent.speech) {
-          setStatus('speaking');
-          await textToSpeech(intent.speech, settings.personality);
-        }
+        const spoken = resolveIntentSpeech(intent);
+        if (spoken) await speak(spoken);
 
         setStatus('idle');
 
         addMessage({
           id: assistantMessageId,
           role: 'assistant',
-          content: intent.text || intent.speech,
+          content: intent.text || intent.speech || spoken,
           timestamp: new Date(),
           type: 'text',
         });
@@ -377,6 +383,7 @@ export function useArgos() {
       clearExecutionSteps,
       setShowExecutionOverlay,
       success,
+      speak,
     ]
   );
 
@@ -406,12 +413,21 @@ export function useArgos() {
 
   const sendMessage = useCallback(
     async (userInput: string) => {
-      if (!userInput.trim() || status === 'thinking' || status === 'executing') return;
+      const trimmed = userInput.trim();
+      if (!trimmed) return;
+
+      if (processingRef.current) return;
+
+      const currentStatus = useAIStore.getState().status;
+      if (currentStatus === 'executing') return;
+
+      processingRef.current = true;
+      pauseVoiceInput();
 
       const userMessage: Message = {
         id: `msg-${Date.now()}-user`,
         role: 'user',
-        content: userInput,
+        content: trimmed,
         timestamp: new Date(),
         type: 'text',
       };
@@ -420,24 +436,26 @@ export function useArgos() {
       setStatus('thinking');
       heavy();
 
-      if (!isAnthropicConfigured()) {
-        if (__DEV__) {
-          console.error('[Argos] API key ausente no runtime (extra/env)');
-        }
-        setStatus('error');
-        addMessage({
-          id: `msg-${Date.now()}-error`,
-          role: 'assistant',
-          content:
-            'IA não configurada neste build. Confira o .env em argos/ e reinicie o servidor Expo na pasta argos.',
-          timestamp: new Date(),
-          type: 'error',
-        });
-        setTimeout(() => setStatus('idle'), 2500);
-        return;
-      }
-
       try {
+        if (!isAnthropicConfigured()) {
+          if (__DEV__) {
+            console.error('[Argos] API key ausente no runtime (extra/env)');
+          }
+          setStatus('error');
+          const msg =
+            'IA não configurada neste ambiente. Confira o .env e reinicie o Expo.';
+          await speak('Desculpe, não estou configurado neste ambiente.');
+          addMessage({
+            id: `msg-${Date.now()}-error`,
+            role: 'assistant',
+            content: msg,
+            timestamp: new Date(),
+            type: 'error',
+          });
+          setTimeout(() => setStatus('idle'), 2500);
+          return;
+        }
+
         const model = resolveAnthropicModel(settings.model);
         const systemPrompt = buildSystemPrompt(
           settings.personality,
@@ -450,18 +468,21 @@ export function useArgos() {
         const { messages } = useAIStore.getState();
         const historyMessages = buildApiMessageHistory(messages);
 
-        const response = await createMessage({
-          model,
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: historyMessages,
-        });
+        const response = await withTimeout(
+          createMessage({
+            model,
+            max_tokens: 1024,
+            system: systemPrompt,
+            messages: historyMessages,
+          }),
+          60000,
+          'A requisição demorou demais. Tente de novo.'
+        );
 
         const rawText =
           response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
         const intent = parseAIResponse(rawText);
 
-        // Extração automática de memória (quando Claude detecta informação relevante)
         if (intent.newMemory && settings.memoryEnabled) {
           addMemory({
             id: `mem-auto-${Date.now()}`,
@@ -476,23 +497,15 @@ export function useArgos() {
           });
         }
 
-        // Modo assistido: pede confirmação antes de ações que modificam estado
-        if (
-          settings.autonomyLevel === 'assisted' &&
-          needsConfirmation(intent)
-        ) {
+        if (settings.autonomyLevel === 'assisted' && needsConfirmation(intent)) {
           const confirmInfo = buildConfirmationInfo(intent);
-          // Fala o texto antes de mostrar o modal
-          if (intent.speech) {
-            setStatus('speaking');
-            await textToSpeech(intent.speech, settings.personality);
-          }
+          const spoken = resolveIntentSpeech(intent);
+          if (spoken) await speak(spoken);
           setStatus('idle');
-          // Adiciona mensagem de "aguardando confirmação"
           addMessage({
             id: `msg-${Date.now()}-confirm`,
             role: 'assistant',
-            content: intent.text || intent.speech,
+            content: intent.text || intent.speech || spoken,
             timestamp: new Date(),
             type: 'text',
           });
@@ -509,20 +522,39 @@ export function useArgos() {
         if (__DEV__) {
           console.error('[Argos] Falha ao falar com a IA:', err);
         }
+        const content = getApiErrorMessage(err);
+        const speech = getSpeechErrorMessage(err, content);
+        try {
+          await speak(speech);
+        } catch {
+          // TTS indisponível — segue com mensagem no chat
+        }
         setStatus('error');
-        const errorMessage: Message = {
+        addMessage({
           id: `msg-${Date.now()}-error`,
           role: 'assistant',
-          content: getApiErrorMessage(err),
+          content,
           timestamp: new Date(),
           type: 'error',
-        };
-        addMessage(errorMessage);
+        });
         setTimeout(() => setStatus('idle'), 2500);
+
+        const isAuthError =
+          isAuthRequired() &&
+          (content.includes('logado') ||
+            content.includes('login') ||
+            content.includes('sessão') ||
+            (err as { status?: number })?.status === 401);
+        if (isAuthError) {
+          setTimeout(() => {
+            void useAuthStore.getState().handleSessionExpired();
+          }, 2000);
+        }
+      } finally {
+        processingRef.current = false;
       }
     },
     [
-      status,
       settings,
       memories,
       automations,
@@ -533,6 +565,7 @@ export function useArgos() {
       heavy,
       processIntent,
       setConfirmationRequest,
+      speak,
     ]
   );
 

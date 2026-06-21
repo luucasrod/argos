@@ -9,6 +9,7 @@ import { Platform, View, Text, StyleSheet, ActivityIndicator } from 'react-nativ
 import React, { useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { isAuthRequired } from '@/services/auth/config';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -67,6 +68,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!initialized) return;
+    if (!isAuthRequired()) return;
 
     const inLogin = segments[0] === 'login';
 
