@@ -40,6 +40,23 @@ export async function exchangeEwelinkCode(code: string, region: string, state?: 
   }
 }
 
+export async function loginEwelinkWithPassword(
+  email: string,
+  password: string,
+  countryCode: string
+): Promise<void> {
+  const headers = await authHeader();
+  const res = await fetch('/api/ewelink/login', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email, password, countryCode }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? 'Falha ao fazer login no eWeLink.');
+  }
+}
+
 export async function fetchEwelinkDevices(): Promise<{ connected: boolean; devices: EwelinkDevice[] }> {
   const headers = await authHeader();
   const res = await fetch('/api/ewelink/devices', { headers });

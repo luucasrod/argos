@@ -134,6 +134,61 @@ export async function exchangeCodeForTokens(
   return json.data;
 }
 
+const ALL_REGIONS = ['eu', 'us', 'as', 'cn'];
+
+/** Login direto com e-mail/senha (sem passar pela página OAuth). */
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  countryCode: string,
+  preferredRegion?: string
+): Promise<{ accessToken: string; refreshToken: string; region: string }> {
+  const regionsToTry = preferredRegion
+    ? [preferredRegion, ...ALL_REGIONS.filter((r) => r !== preferredRegion)]
+    : ALL_REGIONS;
+
+  let lastError = 'Falha ao fazer login no eWeLink';
+
+  for (const region of regionsToTry) {
+    const host = apiHost(region);
+    const body = { email, password, countryCode };
+    const bodyStr = JSON.stringify(body);
+    const authorization = hmacBase64(APP_SECRET, bodyStr);
+
+    const res = await fetch(`https://${host}/v2/user/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CK-Appid': APP_ID,
+        Authorization: `Sign ${authorization}`,
+      },
+      body: bodyStr,
+    });
+
+    const json = (await res.json()) as {
+      error: number;
+      msg: string;
+      data: { at?: string; rt?: string; region?: string };
+    };
+
+    if (json.error === 0 && json.data.at && json.data.rt) {
+      return {
+        accessToken: json.data.at,
+        refreshToken: json.data.rt,
+        region: json.data.region ?? region,
+      };
+    }
+
+    // 10004 = conta não está nesta região, tenta a próxima
+    if (json.error !== 10004) {
+      throw new Error(json.msg || 'Falha ao fazer login no eWeLink');
+    }
+    lastError = json.msg || lastError;
+  }
+
+  throw new Error(lastError);
+}
+
 /** Atualiza o access token usando o refresh token. */
 export async function refreshTokens(
   region: string,

@@ -15,7 +15,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
 import { AIPersonality } from '@/types/ai.types';
 import { ANTHROPIC_MODELS } from '@/services/ai/config';
-import { getEwelinkAuthorizeUrl } from '@/services/devices/ewelinkService';
+import { getEwelinkAuthorizeUrl, loginEwelinkWithPassword } from '@/services/devices/ewelinkService';
 import { VOICE_SPEED_OPTIONS, VOICE_PREVIEW_PHRASE } from '@/constants/voice';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
@@ -61,6 +61,10 @@ export default function SettingsScreen() {
   const { devices, ewelinkConnected, syncEwelinkDevices } = useDeviceStore();
   const { light, medium } = useHaptic();
   const [connectingEwelink, setConnectingEwelink] = React.useState(false);
+  const [showEwelinkForm, setShowEwelinkForm] = React.useState(false);
+  const [ewelinkEmail, setEwelinkEmail] = React.useState('');
+  const [ewelinkPassword, setEwelinkPassword] = React.useState('');
+  const [ewelinkError, setEwelinkError] = React.useState<string | null>(null);
 
   const ewelinkDeviceCount = devices.filter((d) => d.source === 'ewelink').length;
 
@@ -73,6 +77,22 @@ export default function SettingsScreen() {
         window.location.assign(url);
       }
     } catch {
+      setConnectingEwelink(false);
+    }
+  };
+
+  const handleEwelinkPasswordLogin = async () => {
+    medium();
+    setEwelinkError(null);
+    setConnectingEwelink(true);
+    try {
+      await loginEwelinkWithPassword(ewelinkEmail.trim(), ewelinkPassword, '+351');
+      setEwelinkPassword('');
+      setShowEwelinkForm(false);
+      await syncEwelinkDevices();
+    } catch (err) {
+      setEwelinkError(err instanceof Error ? err.message : 'Falha ao conectar.');
+    } finally {
       setConnectingEwelink(false);
     }
   };
@@ -204,6 +224,52 @@ export default function SettingsScreen() {
                   </Text>
                 </Pressable>
               </View>
+
+              {!ewelinkConnected && (
+                <>
+                  <View style={styles.divider} />
+                  <Pressable
+                    style={{ paddingHorizontal: 16, paddingVertical: 10 }}
+                    onPress={() => { light(); setShowEwelinkForm((v) => !v); }}
+                  >
+                    <Text style={styles.linkText}>
+                      {showEwelinkForm ? 'Cancelar' : 'Problemas para conectar? Entrar com e-mail e senha'}
+                    </Text>
+                  </Pressable>
+
+                  {showEwelinkForm && (
+                    <View style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 10 }}>
+                      <TextInput
+                        style={styles.nameInput}
+                        value={ewelinkEmail}
+                        onChangeText={setEwelinkEmail}
+                        placeholder="E-mail do eWeLink"
+                        placeholderTextColor={Colors.text.muted}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                      />
+                      <TextInput
+                        style={styles.nameInput}
+                        value={ewelinkPassword}
+                        onChangeText={setEwelinkPassword}
+                        placeholder="Senha"
+                        placeholderTextColor={Colors.text.muted}
+                        secureTextEntry
+                      />
+                      {ewelinkError && <Text style={styles.errorText}>{ewelinkError}</Text>}
+                      <Pressable
+                        style={[styles.connectBtn, { alignItems: 'center' }]}
+                        onPress={handleEwelinkPasswordLogin}
+                        disabled={connectingEwelink || !ewelinkEmail || !ewelinkPassword}
+                      >
+                        <Text style={styles.connectText}>
+                          {connectingEwelink ? 'Conectando...' : 'Entrar'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              )}
             </GlassCard>
           </Animated.View>
 
@@ -582,6 +648,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   connectText: { color: '#A78BFA', fontWeight: '600', fontSize: 14 },
+  linkText: { color: '#A78BFA', fontSize: 13, fontWeight: '500', textDecorationLine: 'underline' },
+  errorText: { color: Colors.status.error, fontSize: 12 },
   accountOk: { color: Colors.status.success, fontSize: 12, marginTop: 6, fontWeight: '500' },
   accountTest: { color: '#A78BFA', fontSize: 12, marginTop: 6, fontWeight: '500' },
   accountGuest: { paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
