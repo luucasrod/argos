@@ -43,11 +43,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((t) => {
         const d = t.itemData;
         const params = (d.params as Record<string, unknown>) ?? {};
+        // Dispositivos multi-canal (ex.: tomadas com várias saídas) reportam o
+        // estado em params.switches (array por outlet), não em params.switch.
+        const switches = params.switches as Array<{ switch: string; outlet: number }> | undefined;
+        const isOn = switches?.length
+          ? switches.some((s) => s.switch === 'on')
+          : params.switch === 'on';
         return {
           deviceid: d.deviceid as string,
           name: d.name as string,
           online: d.online as boolean,
-          isOn: params.switch === 'on',
+          isOn,
           productModel: d.productModel as string | undefined,
         };
       });

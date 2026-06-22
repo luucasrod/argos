@@ -34,16 +34,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Dispositivos multi-canal (várias saídas/outlets) esperam params no formato
+    // { switches: [{ switch, outlet }] }, não { switch: 'on'|'off' }. Detecta o
+    // formato real do dispositivo antes de enviar o comando.
+    let outgoingParams = params;
+    if (typeof params.switch === 'string') {
+      const thingResult = await ewelinkRequest(tokenInfo.region, '/v2/device/thing?num=0', {
+        accessToken: tokenInfo.accessToken,
+      });
+      const thingList =
+        (thingResult.data?.thingList as Array<{ itemData: Record<string, unknown> }>) ?? [];
+      const thing = thingList.find((t) => (t.itemData as { deviceid?: string }).deviceid === deviceId);
+      const currentParams = (thing?.itemData as { params?: Record<string, unknown> })?.params;
+      const switches = currentParams?.switches as Array<{ switch: string; outlet: number }> | undefined;
+      if (switches?.length) {
+        outgoingParams = { switches: switches.map((s) => ({ switch: params.switch, outlet: s.outlet })) };
+      }
+    }
+
     const result = await ewelinkRequest(tokenInfo.region, '/v2/device/thing/status', {
       method: 'POST',
       accessToken: tokenInfo.accessToken,
-      body: { type: 1, id: deviceId, params },
+      body: { type: 1, id: deviceId, params: outgoingParams },
     });
 
     if (result.error !== 0) {
       console.error('[ewelink/control] erro da API eWeLink', {
         deviceId,
-        params,
+        outgoingParams,
         region: tokenInfo.region,
         ewelinkError: result.error,
         ewelinkMsg: result.msg,
