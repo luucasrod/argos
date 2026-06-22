@@ -41,12 +41,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (result.error !== 0) {
+      console.error('[ewelink/control] erro da API eWeLink', {
+        deviceId,
+        params,
+        region: tokenInfo.region,
+        ewelinkError: result.error,
+        ewelinkMsg: result.msg,
+      });
       return res.status(502).json({ error: 'ewelink_error', message: result.msg });
     }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao controlar dispositivo eWeLink';
+    console.error('[ewelink/control] exceção', { deviceId, params, message });
     return res.status(502).json({ error: 'ewelink_error', message });
   }
 }
