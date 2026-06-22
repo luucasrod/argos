@@ -2,12 +2,14 @@
  * ewelinkService.ts — cliente para as rotas /api/ewelink/* (Vercel).
  * Mantém o App Secret eWeLink fora do bundle web.
  */
-import { supabase } from '@/services/auth/supabase';
+import { getAccessToken } from '@/services/auth/session';
 
 async function authHeader(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('Faça login para conectar dispositivos.');
+  // getAccessToken valida a sessão e renova o token se estiver expirado —
+  // getSession() puro pode devolver um access_token velho logo ao reabrir o
+  // app, fazendo as chamadas eWeLink falharem com 401 e o app achar (errado)
+  // que a conta eWeLink foi desconectada.
+  const token = await getAccessToken();
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
