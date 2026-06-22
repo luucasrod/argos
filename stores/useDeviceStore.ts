@@ -27,7 +27,9 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
       devices: state.devices.map((d) => (d.id === id ? { ...d, isOn: !d.isOn } : d)),
     }));
     if (device?.source === 'ewelink' && device.ewelinkDeviceId) {
-      controlEwelinkDevice(device.ewelinkDeviceId, { switch: device.isOn ? 'off' : 'on' }).catch(() => {});
+      controlEwelinkDevice(device.ewelinkDeviceId, { switch: device.isOn ? 'off' : 'on' }).catch((err) => {
+        if (__DEV__) console.error('[eWeLink] Falha ao controlar dispositivo:', err);
+      });
     }
   },
 
@@ -40,7 +42,9 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
     }));
     if (device?.source === 'ewelink' && device.ewelinkDeviceId) {
       if (stateKey === 'isOn') {
-        controlEwelinkDevice(device.ewelinkDeviceId, { switch: value ? 'on' : 'off' }).catch(() => {});
+        controlEwelinkDevice(device.ewelinkDeviceId, { switch: value ? 'on' : 'off' }).catch((err) => {
+          if (__DEV__) console.error('[eWeLink] Falha ao controlar dispositivo:', err);
+        });
       }
     }
   },
@@ -49,7 +53,6 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
     try {
       const { connected, devices } = await fetchEwelinkDevices();
       set((state) => {
-        const nonEwelink = state.devices.filter((d) => d.source !== 'ewelink');
         const mapped: Device[] = devices.map((ed) => ({
           id: `ewelink:${ed.deviceid}`,
           name: ed.name,
@@ -64,7 +67,16 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
           source: 'ewelink',
           ewelinkDeviceId: ed.deviceid,
         }));
-        return { devices: [...nonEwelink, ...mapped], ewelinkConnected: connected };
+
+        // Categorias com pelo menos um dispositivo real conectado: os mocks
+        // dessas categorias somem para não haver dois cards "iguais" na tela
+        // (ex.: tomada mock vs. tomada real) e o usuário nunca controlar o card errado.
+        const realCategories = new Set(mapped.map((d) => d.category));
+        const remainingMocks = state.devices.filter(
+          (d) => d.source !== 'ewelink' && !realCategories.has(d.category)
+        );
+
+        return { devices: [...remainingMocks, ...mapped], ewelinkConnected: connected };
       });
     } catch {
       // Falha silenciosa — mantém estado anterior

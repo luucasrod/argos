@@ -1,6 +1,6 @@
 import { Device } from '@/types/device.types';
 
-export const MOCK_DEVICES: Device[] = [
+const RAW_MOCK_DEVICES: Device[] = [
   {
     id: 'light-sala',
     name: 'Luz da Sala',
@@ -126,3 +126,7 @@ export const MOCK_DEVICES: Device[] = [
     state: { motionDetection: true, recording: false },
   },
 ];
+
+// Marca explicitamente como 'mock' para que useDeviceStore saiba removê-los
+// da categoria correspondente quando um dispositivo real (ex.: eWeLink) for sincronizado.
+export const MOCK_DEVICES: Device[] = RAW_MOCK_DEVICES.map((d) => ({ ...d, source: 'mock' }));
