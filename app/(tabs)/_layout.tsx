@@ -28,6 +28,11 @@ export default function TabsLayout() {
 
   useEffect(() => {
     syncEwelinkDevices();
+    // Mantém o estado dos dispositivos eWeLink atualizado com a nuvem (alguém
+    // pode ligar/desligar pelo app oficial, fisicamente, etc.) — sem isso o
+    // card podia ficar "congelado" no estado de quando o app abriu.
+    const interval = setInterval(syncEwelinkDevices, 5000);
+    return () => clearInterval(interval);
   }, [syncEwelinkDevices]);
 
   return (
