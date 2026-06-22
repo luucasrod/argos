@@ -104,7 +104,7 @@ export function useArgos() {
   const { settings } = useSettingsStore();
   const { memories, addMemory } = useMemoryStore();
   const { automations, addAutomation } = useAutomationStore();
-  const { devices, toggleDevice, updateDeviceState } = useDeviceStore();
+  const { devices, toggleDevice, updateDeviceState, syncEwelinkDevices, ewelinkConnected } = useDeviceStore();
   const { heavy, success } = useHaptic();
   const processingRef = useRef(false);
 
@@ -480,12 +480,19 @@ export function useArgos() {
           return;
         }
 
+        // Confirma o estado real dos dispositivos eWeLink antes do Argos decidir
+        // qualquer coisa — sem isso ele podia responder com base num estado
+        // antigo guardado localmente (ex.: dizer "já está desligada" estando ligada).
+        if (ewelinkConnected) {
+          await syncEwelinkDevices();
+        }
+
         const model = resolveAnthropicModel(settings.model);
         const systemPrompt = buildSystemPrompt(
           settings.personality,
           memories,
           automations,
-          devices,
+          useDeviceStore.getState().devices,
           settings.userProfile
         );
 
