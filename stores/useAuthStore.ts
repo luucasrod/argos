@@ -45,9 +45,17 @@ function getRedirectUrl(): string {
   return Linking.createURL('/');
 }
 
-async function resolveUserFromSession(): Promise<SupabaseUser | null> {
+async function resolveUserFromSession(opts?: { allowAnonymous?: boolean }): Promise<SupabaseUser | null> {
+  const allowAnonymous = opts?.allowAnonymous ?? true;
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return null;
+
+  if (!allowAnonymous && session.user.is_anonymous) {
+    // Sessão fantasma do modo de teste — não vale como login real.
+    await clearAuthSession();
+    return null;
+  }
 
   const { data: { user }, error } = await supabase.auth.getUser();
   if (!error && user) return mapUser(user);
@@ -247,8 +255,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const isRealUser = session?.user && !session.user.is_anonymous;
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        finishInit(session?.user ? mapUser(session.user) : null);
+        finishInit(isRealUser ? mapUser(session.user) : null);
         return;
       }
       if (event === 'SIGNED_OUT') {
@@ -256,7 +265,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }
     });
 
-    const user = await resolveUserFromSession();
+    const user = await resolveUserFromSession({ allowAnonymous: false });
     finishInit(user);
 
     return () => subscription.unsubscribe();
