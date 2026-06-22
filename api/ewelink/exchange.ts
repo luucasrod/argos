@@ -22,13 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'unauthorized', message: 'Sessão inválida ou expirada' });
   }
 
-  const { code, region, state } = req.body as { code?: string; region?: string; state?: string };
+  const { code, region } = req.body as { code?: string; region?: string; state?: string };
   if (!code || !region) {
     return res.status(400).json({ error: 'invalid_request', message: 'code e region são obrigatórios' });
   }
-  if (state && state !== user.userId) {
-    return res.status(400).json({ error: 'invalid_state', message: 'State não corresponde ao usuário logado' });
-  }
+  // Não bloqueia em "state" desatualizado (ex.: aba antiga do eWeLink reaberta) —
+  // quem autoriza a gravação é o Bearer token da requisição (user.userId), não o state.
 
   try {
     const origin = `https://${req.headers.host}`;
