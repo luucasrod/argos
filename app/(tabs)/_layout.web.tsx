@@ -1,25 +1,58 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/colors';
+import { useSupabaseSync } from '@/hooks/useSupabaseSync';
+import { useDeviceStore } from '@/stores/useDeviceStore';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
-    <View style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-      <Text style={styles.tabEmoji}>{emoji}</Text>
+    <View style={styles.tabIcon}>
+      <Text style={[styles.tabEmoji, focused && styles.tabEmojiFocused]}>{emoji}</Text>
+      {focused ? <View style={styles.tabIndicator} /> : null}
     </View>
   );
 }
 
 export default function TabsLayout() {
+  useSupabaseSync();
+  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
+  const insets = useSafeAreaInsets();
+  const tabBarBottom = Math.max(insets.bottom, 4);
+  const tabContentHeight = 52;
+
+  useEffect(() => {
+    syncEwelinkDevices();
+    syncAlexaDevices();
+    syncWizDevices();
+    syncTuyaDevices();
+    syncHueLights();
+    syncTapoDevices();
+    syncXiaomiDevices();
+    syncWizLocalDevices();
+    const interval = setInterval(syncEwelinkDevices, 5000);
+    return () => clearInterval(interval);
+  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
+
   return (
     <Tabs
       detachInactiveScreens
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        title: '',
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: tabContentHeight + tabBarBottom,
+            paddingBottom: tabBarBottom,
+          },
+        ],
         tabBarShowLabel: false,
         tabBarActiveTintColor: Colors.accent.primary,
         tabBarInactiveTintColor: Colors.text.muted,
+        tabBarItemStyle: [styles.tabBarItem, { height: tabContentHeight }],
+        tabBarIconStyle: [styles.tabBarIconSlot, { height: tabContentHeight }],
         lazy: true,
         sceneStyle: {
           backgroundColor: Colors.bg.primary,
@@ -28,26 +61,37 @@ export default function TabsLayout() {
         },
       }}
     >
+      {/* === NOVAS 6 ABAS === */}
       <Tabs.Screen
         name="index"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} /> }}
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="chat"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="💬" focused={focused} /> }}
+        name="conversar"
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="💬" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="automations"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚡" focused={focused} /> }}
+        name="inteligencia"
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="🧠" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="devices"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🏡" focused={focused} /> }}
+        name="casa"
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="🏡" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="settings"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} /> }}
+        name="agenda"
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="📅" focused={focused} /> }}
       />
+      <Tabs.Screen
+        name="perfil"
+        options={{ title: '', tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} /> }}
+      />
+
+      {/* === ANTIGAS (ocultas da tab bar) === */}
+      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="automations" options={{ href: null }} />
+      <Tabs.Screen name="devices" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -57,16 +101,39 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.elevated,
     borderTopWidth: 1,
     borderTopColor: Colors.glass.border,
-    height: 64,
-    paddingBottom: 8,
+    paddingTop: 0,
+  },
+  tabBarItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 0,
+    margin: 0,
+  },
+  tabBarIconSlot: {
+    marginTop: 0,
+    marginBottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabIcon: {
+    width: 48,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
   },
-  tabIconFocused: { backgroundColor: Colors.glass.medium },
-  tabEmoji: { fontSize: 22 },
+  tabEmoji: {
+    fontSize: 22,
+    lineHeight: 26,
+    opacity: 0.65,
+    textAlign: 'center',
+  },
+  tabEmojiFocused: { opacity: 1 },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 7,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.accent.primary,
+  },
 });

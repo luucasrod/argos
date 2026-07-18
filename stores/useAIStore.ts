@@ -40,6 +40,9 @@ interface AIStore {
   setConfirmationRequest: (req: ConfirmationRequest | null) => void;
   pendingAppOpen: PendingAppOpen | null;
   setPendingAppOpen: (req: PendingAppOpen | null) => void;
+  // Modo de entrada: determina se Argos responde com voz ou só texto
+  lastInputMode: 'text' | 'voice';
+  setLastInputMode: (mode: 'text' | 'voice') => void;
 }
 
 export const useAIStore = create<AIStore>()(
@@ -75,6 +78,8 @@ export const useAIStore = create<AIStore>()(
       setConfirmationRequest: (req) => set({ confirmationRequest: req }),
       pendingAppOpen: null,
       setPendingAppOpen: (req) => set({ pendingAppOpen: req }),
+      lastInputMode: 'voice',
+      setLastInputMode: (mode) => set({ lastInputMode: mode }),
     }),
     {
       name: 'argos-ai',

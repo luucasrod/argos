@@ -17,12 +17,15 @@ export interface Memory {
   lastConfirmed?: Date;
   tags: string[];
   isActive: boolean;
+  status?: 'pending' | 'confirmed' | 'rejected';
 }
 
 export interface Insight {
   id: string;
   message: string;
   suggestion?: string;
+  /** Se definido, toque no insight navega em vez de enviar mensagem ao chat */
+  navigateTo?: string;
   automationId?: string;
   type: 'habit' | 'preference' | 'anomaly' | 'suggestion';
   confidence: number;

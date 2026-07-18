@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Memory, Insight } from '@/types/memory.types';
 import { supabase } from '@/services/auth/supabase';
+import { normalizeInsight } from '@/services/insights/handleInsightPress';
 
 interface MemoryStore {
   memories: Memory[];
@@ -10,6 +11,9 @@ interface MemoryStore {
   updateMemory: (id: string, partial: Partial<Memory>) => void;
   deleteMemory: (id: string) => void;
   syncFromSupabase: (userId: string) => Promise<void>;
+  confirmMemory: (id: string) => void;
+  rejectMemory: (id: string) => void;
+  getPendingMemories: () => Memory[];
   insights: Insight[];
   addInsight: (insight: Insight) => void;
   dismissInsight: (id: string) => void;
@@ -29,6 +33,7 @@ const defaultMemories: Memory[] = [
     createdAt: new Date(),
     tags: ['sono', 'rotina'],
     isActive: true,
+    status: 'confirmed',
   },
   {
     id: 'mem-2',
@@ -40,6 +45,43 @@ const defaultMemories: Memory[] = [
     createdAt: new Date(),
     tags: ['música', 'trabalho', 'foco'],
     isActive: true,
+    status: 'confirmed',
+  },
+  {
+    id: 'mem-pending-1',
+    category: 'habit',
+    title: 'Café pela manhã',
+    content: 'Parece que você toma café todos os dias entre 8h e 9h',
+    confidence: 0.75,
+    source: 'ai_inferred',
+    createdAt: new Date(),
+    tags: ['café', 'manhã', 'rotina'],
+    isActive: true,
+    status: 'pending',
+  },
+  {
+    id: 'mem-pending-2',
+    category: 'preference',
+    title: 'Tema escuro',
+    content: 'Você sempre usa aplicativos no tema escuro',
+    confidence: 0.95,
+    source: 'behavior',
+    createdAt: new Date(),
+    tags: ['design', 'preferência'],
+    isActive: true,
+    status: 'pending',
+  },
+  {
+    id: 'mem-pending-3',
+    category: 'person',
+    title: 'Masya Studio',
+    content: 'Este é seu projeto principal — um estúdio criativo',
+    confidence: 0.88,
+    source: 'user_explicit',
+    createdAt: new Date(),
+    tags: ['trabalho', 'projeto'],
+    isActive: true,
+    status: 'pending',
   },
 ];
 
@@ -49,9 +91,10 @@ export const useMemoryStore = create<MemoryStore>()(
       memories: defaultMemories,
       insights: [
         {
-          id: 'insight-1',
+          id: 'insight-welcome',
           message: 'Bem-vindo ao Argos! Converse comigo e vou aprender sobre você.',
-          suggestion: 'Me conta sobre sua rotina',
+          suggestion: 'Ver automações e rotinas',
+          navigateTo: '/(tabs)/automations',
           type: 'suggestion',
           confidence: 1,
           isDismissed: false,
@@ -132,6 +175,23 @@ export const useMemoryStore = create<MemoryStore>()(
         }
       },
 
+      confirmMemory: (id) =>
+        set((state) => ({
+          memories: state.memories.map((m) =>
+            m.id === id ? { ...m, status: 'confirmed' as const, lastConfirmed: new Date() } : m
+          ),
+        })),
+
+      rejectMemory: (id) =>
+        set((state) => ({
+          memories: state.memories.map((m) =>
+            m.id === id ? { ...m, status: 'rejected' as const, isActive: false } : m
+          ),
+        })),
+
+      getPendingMemories: () =>
+        get().memories.filter((m) => m.status === 'pending' && m.isActive),
+
       addInsight: (insight) => set((state) => ({ insights: [...state.insights, insight] })),
       dismissInsight: (id) =>
         set((state) => ({
@@ -139,7 +199,10 @@ export const useMemoryStore = create<MemoryStore>()(
         })),
       clearDismissedInsights: () =>
         set((state) => ({ insights: state.insights.filter((i) => !i.isDismissed) })),
-      getActiveInsights: () => get().insights.filter((i) => !i.isDismissed),
+      getActiveInsights: () =>
+        get()
+          .insights.filter((i) => !i.isDismissed)
+          .map(normalizeInsight),
       getMemoriesByCategory: (category) =>
         get().memories.filter((m) => m.category === category && m.isActive),
     }),
@@ -148,6 +211,10 @@ export const useMemoryStore = create<MemoryStore>()(
       storage: createJSONStorage(() => AsyncStorage),
       // Não persiste memórias localmente quando autenticado (usa Supabase)
       partialize: (state) => ({ insights: state.insights }),
+      onRehydrateStorage: () => (state) => {
+        if (!state?.insights) return;
+        state.insights = state.insights.map((i) => normalizeInsight(i));
+      },
     }
   )
 );

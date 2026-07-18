@@ -23,17 +23,21 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
-  useSupabaseSync(); // sincroniza memórias do Supabase ao entrar nos tabs
-  const { syncEwelinkDevices } = useDeviceStore();
+  useSupabaseSync();
+  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
 
   useEffect(() => {
     syncEwelinkDevices();
-    // Mantém o estado dos dispositivos eWeLink atualizado com a nuvem (alguém
-    // pode ligar/desligar pelo app oficial, fisicamente, etc.) — sem isso o
-    // card podia ficar "congelado" no estado de quando o app abriu.
+    syncAlexaDevices();
+    syncWizDevices();
+    syncTuyaDevices();
+    syncHueLights();
+    syncTapoDevices();
+    syncXiaomiDevices();
+    syncWizLocalDevices();
     const interval = setInterval(syncEwelinkDevices, 5000);
     return () => clearInterval(interval);
-  }, [syncEwelinkDevices]);
+  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
 
   return (
     <Tabs
@@ -53,26 +57,37 @@ export default function TabsLayout() {
         },
       }}
     >
+      {/* === NOVAS 6 ABAS === */}
       <Tabs.Screen
         name="index"
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="chat"
+        name="conversar"
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="💬" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="automations"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚡" focused={focused} /> }}
+        name="inteligencia"
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🧠" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="devices"
+        name="casa"
         options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🏡" focused={focused} /> }}
       />
       <Tabs.Screen
-        name="settings"
-        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} /> }}
+        name="agenda"
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="📅" focused={focused} /> }}
       />
+      <Tabs.Screen
+        name="perfil"
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} /> }}
+      />
+
+      {/* === ANTIGAS (ocultas da tab bar) === */}
+      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="automations" options={{ href: null }} />
+      <Tabs.Screen name="devices" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
