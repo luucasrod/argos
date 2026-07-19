@@ -234,7 +234,9 @@ export default function CasaScreen() {
             {devices.length === 0 ? (
               <EmptyState emoji="💡" title="Nenhum dispositivo" text="Configure suas integrações em Perfil → Integrações" />
             ) : (
-              devices.map((d) => <DeviceCard key={d.id} device={d} />)
+              [...devices]
+                .sort((a, b) => (b.status === 'online' ? 1 : 0) - (a.status === 'online' ? 1 : 0))
+                .map((d) => <DeviceCard key={d.id} device={d} />)
             )}
           </ScrollView>
         );
