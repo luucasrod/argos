@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -27,14 +27,12 @@ export default function ConversarScreen() {
   const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice();
   const { light, medium } = useHaptic();
   const listRef = useRef<FlatList>(null);
-  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
 
   const handleSend = useCallback(() => {
     if (!currentInput.trim() || status === 'thinking') return;
     medium();
     unlockSpeech();
     setLastInputMode('text');
-    setInputMode('text');
     sendMessage(currentInput);
     setCurrentInput('');
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
@@ -47,7 +45,6 @@ export default function ConversarScreen() {
       stopListening();
       if (transcript) {
         setLastInputMode('voice');
-        setInputMode('voice');
         sendMessage(transcript);
         setTranscript('');
       }
@@ -117,11 +114,6 @@ export default function ConversarScreen() {
           />
 
           <GlassCard style={styles.inputCard} borderColor={Colors.glass.border}>
-            <View style={styles.modeIndicator}>
-              <Text style={[styles.modeText, inputMode === 'text' && styles.modeActive]}>⌨ Texto</Text>
-              <Text style={styles.modeSep}>·</Text>
-              <Text style={[styles.modeText, inputMode === 'voice' && styles.modeActive]}>🎙 Voz</Text>
-            </View>
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.input}
@@ -132,7 +124,6 @@ export default function ConversarScreen() {
                 onSubmitEditing={handleSend}
                 returnKeyType="send"
                 multiline={false}
-                onFocus={() => setInputMode('text')}
               />
               <Pressable
                 style={[styles.micBtn, isListening && styles.micBtnActive]}

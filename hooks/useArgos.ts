@@ -11,8 +11,9 @@ import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
+import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
 import { textToSpeech } from '@/services/voice/textToSpeech';
-import { pauseVoiceInput } from '@/services/voice/voiceSession';
+import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 import { resolveIntentSpeech } from '@/services/voice/speechText';
 import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
@@ -104,13 +105,19 @@ export function useArgos() {
   const { settings } = useSettingsStore();
   const { memories, addMemory } = useMemoryStore();
   const { automations, addAutomation } = useAutomationStore();
-  const { devices, toggleDevice, updateDeviceState, syncEwelinkDevices, ewelinkConnected } = useDeviceStore();
+  const { devices, toggleDevice, updateDeviceState, syncEwelinkDevices, ewelinkConnected, hueConnected, syncHueLights, tuyaConnected, syncTuyaDevices } = useDeviceStore();
   const { heavy, success } = useHaptic();
   const processingRef = useRef(false);
 
   const speak = useCallback(
     async (text: string, personality: AIPersonality = settings.personality) => {
       if (!text.trim()) return;
+      // Silencia TTS quando a última entrada foi por texto (não por voz)
+      if (useAIStore.getState().lastInputMode === 'text') return;
+      // Solta o microfone (incl. a escuta da wake word) antes de falar — evita
+      // disputa entre captura e síntese de voz, que trava ou atrasa o áudio.
+      pauseVoiceInput();
+      await waitForMicRelease();
       const { unlockSpeech } = await import('@/services/voice/speechUnlock');
       unlockSpeech();
       setStatus('speaking');
@@ -140,7 +147,7 @@ export function useArgos() {
           const action = intent.actions[i];
           updateExecutionStep(i, 'running');
 
-          await new Promise((r) => setTimeout(r, 600));
+          await new Promise((r) => setTimeout(r, 150));
 
           if (action.action === 'toggle') {
             toggleDevice(action.deviceId);
@@ -177,7 +184,7 @@ export function useArgos() {
           setShowExecutionOverlay(false);
           clearExecutionSteps();
           setStatus('idle');
-        }, 2000);
+        }, 900);
 
       } else if (intent.type === 'automation' && intent.automation) {
         setStatus('executing');
@@ -457,6 +464,40 @@ export function useArgos() {
       };
 
       addMessage(userMessage);
+
+      // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
+      // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
+      const fastIntent = matchFastDeviceCommand(trimmed, useDeviceStore.getState().devices);
+      if (fastIntent) {
+        heavy();
+        try {
+          if (settings.autonomyLevel === 'assisted' && needsConfirmation(fastIntent)) {
+            const confirmInfo = buildConfirmationInfo(fastIntent);
+            const spoken = resolveIntentSpeech(fastIntent);
+            if (spoken) await speak(spoken);
+            setStatus('idle');
+            addMessage({
+              id: `msg-${Date.now()}-confirm`,
+              role: 'assistant',
+              content: fastIntent.text || fastIntent.speech || spoken,
+              timestamp: new Date(),
+              type: 'text',
+            });
+            setConfirmationRequest({
+              intent: fastIntent,
+              description: confirmInfo.description,
+              actionLabel: confirmInfo.actionLabel,
+              icon: confirmInfo.icon,
+            });
+          } else {
+            await processIntent(fastIntent);
+          }
+        } finally {
+          processingRef.current = false;
+        }
+        return;
+      }
+
       setStatus('thinking');
       heavy();
 
@@ -485,6 +526,12 @@ export function useArgos() {
         // antigo guardado localmente (ex.: dizer "já está desligada" estando ligada).
         if (ewelinkConnected) {
           await syncEwelinkDevices();
+        }
+        if (hueConnected) {
+          await syncHueLights();
+        }
+        if (tuyaConnected) {
+          await syncTuyaDevices();
         }
 
         const model = resolveAnthropicModel(settings.model);

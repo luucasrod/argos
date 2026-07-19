@@ -92,7 +92,19 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function useMicWarmUp() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const warmUp = () => {
+      import('@/services/voice/micPermission').then((m) => m.warmUpMic());
+    };
+    document.addEventListener('pointerdown', warmUp, { once: true });
+    return () => document.removeEventListener('pointerdown', warmUp);
+  }, []);
+}
+
 export default function RootLayout() {
+  useMicWarmUp();
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

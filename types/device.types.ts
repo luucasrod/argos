@@ -2,6 +2,7 @@ export type DeviceCategory =
   | 'lights'
   | 'tv'
   | 'ac'
+  | 'fans'
   | 'outlets'
   | 'cameras'
   | 'sensors'
@@ -32,6 +33,23 @@ export interface Device {
   room: string;
   brand: string;
   lastSeen?: Date;
-  source?: 'mock' | 'ewelink';
+  source?: 'mock' | 'ewelink' | 'hue' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi';
   ewelinkDeviceId?: string;
+  hueDeviceId?: string;
+  tuyaDeviceId?: string;
+  alexaEntityId?: string;
+  alexaEntityType?: string;
+  wizMac?: string;
+  wizLocalIp?: string;
+  wizBridgeUrl?: string;
+  tapoDeviceId?: string;
+  tapoAppServerUrl?: string;
+  xiaomiDid?: string;
+  xiaomiControl?: {
+    power?: { siid: number; piid: number };
+    speed?: { siid: number; piid: number; min: number; max: number };
+    swing?: { siid: number; piid: number };
+    angle?: { siid: number; piid: number; options: number[] };
+    mode?: { siid: number; piid: number; options: Array<{ value: number; label: string }> };
+  };
 }

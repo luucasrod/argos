@@ -75,5 +75,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg.primary,
     width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
 });

@@ -1,24 +1,87 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Device } from '@/types/device.types';
 import { MOCK_DEVICES } from '@/constants/devices';
 import { controlEwelinkDevice, fetchEwelinkDevices } from '@/services/devices/ewelinkService';
+import { controlHueLight, fetchHueLights } from '@/services/devices/hueService';
+import { controlTuyaDevice, fetchTuyaDevices } from '@/services/devices/tuyaService';
+import { controlAlexaDevice, fetchAlexaDevices } from '@/services/devices/amazonService';
+import { controlWizDevice, fetchWizDevices } from '@/services/devices/wizService';
+import { controlWizLocal, scanWizLocal } from '@/services/devices/wizLocalBridgeService';
+import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoService';
+import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
+
+export interface WizLocalSavedDevice {
+  ip: string;
+  mac: string;
+  name: string;
+}
 
 interface DeviceStore {
   devices: Device[];
   ewelinkConnected: boolean;
+  hueConnected: boolean;
+  tuyaConnected: boolean;
+  alexaConnected: boolean;
+  wizConnected: boolean;
+  tapoConnected: boolean;
+  xiaomiConnected: boolean;
+  wizLocalConnected: boolean;
+  wizLocalBridgeUrl: string;
+  wizLocalSavedDevices: WizLocalSavedDevice[];
+  customNames: Record<string, string>;
+  renameDevice: (id: string, name: string) => void;
   updateDevice: (id: string, partial: Partial<Device>) => void;
   toggleDevice: (id: string) => void;
   updateDeviceState: (id: string, stateKey: string, value: unknown) => void;
   syncEwelinkDevices: () => Promise<void>;
+  syncHueLights: () => Promise<void>;
+  syncTuyaDevices: () => Promise<{ count: number }>;
+  syncAlexaDevices: () => Promise<{ count: number }>;
+  syncWizDevices: () => Promise<{ count: number }>;
+  syncTapoDevices: () => Promise<{ count: number }>;
+  syncXiaomiDevices: () => Promise<{ count: number }>;
+  setWizLocalBridgeUrl: (url: string) => void;
+  syncWizLocalDevices: () => Promise<{ count: number }>;
+  clearWizLocalDevices: () => void;
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export const useDeviceStore = create<DeviceStore>()((set, get) => ({
+/** Remove mocks nas categorias que já têm dispositivos reais de qualquer fonte. */
+function rebuildDeviceList(
+  current: Device[],
+  newFromSource: Device[],
+  source: NonNullable<Device['source']>
+): Device[] {
+  const withoutSource = current.filter((d) => d.source !== source);
+  const merged = [...withoutSource, ...newFromSource];
+  const realCats = new Set(merged.filter((d) => d.source !== 'mock').map((d) => d.category));
+  return merged.filter((d) => d.source !== 'mock' || !realCats.has(d.category));
+}
+
+export const useDeviceStore = create<DeviceStore>()(
+  persist(
+    (set, get) => ({
   devices: MOCK_DEVICES,
+  customNames: {},
   ewelinkConnected: false,
+  hueConnected: false,
+  tuyaConnected: false,
+  alexaConnected: false,
+  wizConnected: false,
+  tapoConnected: false,
+  xiaomiConnected: false,
+  wizLocalConnected: false,
+  wizLocalBridgeUrl: '',
+  wizLocalSavedDevices: [],
+
+  renameDevice: (id, name) =>
+    set((state) => ({
+      customNames: { ...state.customNames, [id]: name.trim() },
+    })),
 
   updateDevice: (id, partial) =>
     set((state) => ({
@@ -35,9 +98,56 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
         .catch((err) => {
           if (__DEV__) console.error('[eWeLink] Falha ao controlar dispositivo:', err);
         })
-        // O estado otimista pode não bater com o real (comando falhou, ou o
-        // dispositivo demora a propagar na nuvem) — confirma com a eWeLink em seguida.
         .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
+    }
+    if (device?.source === 'hue' && device.hueDeviceId) {
+      controlHueLight(device.hueDeviceId, 'isOn', !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Hue] Falha ao controlar lâmpada:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncHueLights()));
+    }
+    if (device?.source === 'tuya' && device.tuyaDeviceId) {
+      controlTuyaDevice(device.tuyaDeviceId, 'isOn', !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Tuya] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncTuyaDevices()));
+    }
+    if (device?.source === 'alexa' && device.alexaEntityId && device.alexaEntityType) {
+      controlAlexaDevice(device.alexaEntityId, device.alexaEntityType, 'isOn', !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Alexa] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1500).then(() => get().syncAlexaDevices()));
+    }
+    if (device?.source === 'wiz' && device.wizMac) {
+      controlWizDevice(device.wizMac, 'isOn', !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[WiZ] Falha ao controlar lâmpada:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncWizDevices()));
+    }
+    if (device?.source === 'tapo' && device.tapoDeviceId && device.tapoAppServerUrl) {
+      controlTapoDevice(device.tapoDeviceId, device.tapoAppServerUrl, 'isOn', !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Tapo] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncTapoDevices()));
+    }
+    if (device?.source === 'wiz-local' && device.wizLocalIp && device.wizBridgeUrl) {
+      controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, { state: !device.isOn })
+        .catch((err) => {
+          if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
+        });
+    }
+    if (device?.source === 'xiaomi' && device.xiaomiDid && device.xiaomiControl?.power) {
+      const { siid, piid } = device.xiaomiControl.power;
+      controlXiaomiDevice(device.xiaomiDid, siid, piid, !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Xiaomi] Falha ao controlar ventilador:', err);
+        })
+        .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
     }
   },
 
@@ -57,39 +167,528 @@ export const useDeviceStore = create<DeviceStore>()((set, get) => ({
           .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
       }
     }
+    if (device?.source === 'hue' && device.hueDeviceId) {
+      controlHueLight(device.hueDeviceId, stateKey, value)
+        .catch((err) => {
+          if (__DEV__) console.error('[Hue] Falha ao controlar lâmpada:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncHueLights()));
+    }
+    if (device?.source === 'tuya' && device.tuyaDeviceId) {
+      const currentColor = stateKey === 'brightness' && typeof device.state.color === 'string'
+        ? device.state.color
+        : undefined;
+      controlTuyaDevice(device.tuyaDeviceId, stateKey, value, currentColor)
+        .catch((err) => {
+          if (__DEV__) console.error('[Tuya] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncTuyaDevices()));
+    }
+    if (device?.source === 'alexa' && device.alexaEntityId && device.alexaEntityType) {
+      controlAlexaDevice(device.alexaEntityId, device.alexaEntityType, stateKey, value)
+        .catch((err) => {
+          if (__DEV__) console.error('[Alexa] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1500).then(() => get().syncAlexaDevices()));
+    }
+    if (device?.source === 'wiz' && device.wizMac) {
+      controlWizDevice(device.wizMac, stateKey, value)
+        .catch((err) => {
+          if (__DEV__) console.error('[WiZ] Falha ao controlar lâmpada:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncWizDevices()));
+    }
+    if (device?.source === 'tapo' && device.tapoDeviceId && device.tapoAppServerUrl) {
+      controlTapoDevice(device.tapoDeviceId, device.tapoAppServerUrl, stateKey, value)
+        .catch((err) => {
+          if (__DEV__) console.error('[Tapo] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1200).then(() => get().syncTapoDevices()));
+    }
+    if (device?.source === 'wiz-local' && device.wizLocalIp && device.wizBridgeUrl) {
+      let params: Record<string, unknown> = {};
+      if (stateKey === 'isOn') {
+        params = { state: Boolean(value) };
+      } else if (stateKey === 'brightness' && typeof value === 'number') {
+        params = { dimming: Math.max(10, Math.min(100, value)) };
+      } else if (stateKey === 'colorTemperature' && typeof value === 'string') {
+        params = { temp: value === 'warm' ? 2700 : value === 'neutral' ? 4000 : 6500 };
+      } else if (stateKey === 'color' && typeof value === 'string') {
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(value);
+        if (m) params = { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16), dimming: 100 };
+      }
+      if (Object.keys(params).length > 0) {
+        controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, params)
+          .catch((err) => {
+            if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
+          });
+      }
+    }
+    if (device?.source === 'xiaomi' && device.xiaomiDid && device.xiaomiControl) {
+      const ctrl = device.xiaomiControl;
+      if (stateKey === 'isOn' && ctrl.power) {
+        controlXiaomiDevice(device.xiaomiDid, ctrl.power.siid, ctrl.power.piid, Boolean(value))
+          .catch((err) => {
+            if (__DEV__) console.error('[Xiaomi] Falha ao controlar ventilador:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+      } else if (stateKey === 'speed' && ctrl.speed && typeof value === 'number') {
+        const clamped = Math.max(ctrl.speed.min, Math.min(ctrl.speed.max, Math.round(value)));
+        controlXiaomiDevice(device.xiaomiDid, ctrl.speed.siid, ctrl.speed.piid, clamped)
+          .catch((err) => {
+            if (__DEV__) console.error('[Xiaomi] Falha ao ajustar velocidade:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+      } else if (stateKey === 'swing' && ctrl.swing) {
+        controlXiaomiDevice(device.xiaomiDid, ctrl.swing.siid, ctrl.swing.piid, Boolean(value))
+          .catch((err) => {
+            if (__DEV__) console.error('[Xiaomi] Falha ao ajustar oscilação:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+      } else if (stateKey === 'angle' && ctrl.angle) {
+        const deg = typeof value === 'number' ? value : parseInt(String(value), 10);
+        if (!Number.isNaN(deg)) {
+          controlXiaomiDevice(device.xiaomiDid, ctrl.angle.siid, ctrl.angle.piid, deg)
+            .catch((err) => {
+              if (__DEV__) console.error('[Xiaomi] Falha ao ajustar ângulo:', err);
+            })
+            .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+        }
+      } else if (stateKey === 'mode' && ctrl.mode) {
+        const opt = ctrl.mode.options.find((o) => o.label === value);
+        if (opt) {
+          controlXiaomiDevice(device.xiaomiDid, ctrl.mode.siid, ctrl.mode.piid, opt.value)
+            .catch((err) => {
+              if (__DEV__) console.error('[Xiaomi] Falha ao ajustar modo:', err);
+            })
+            .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+        }
+      }
+    }
   },
 
   syncEwelinkDevices: async () => {
     try {
       const { connected, devices } = await fetchEwelinkDevices();
-      set((state) => {
-        const mapped: Device[] = devices.map((ed) => ({
-          id: `ewelink:${ed.deviceid}`,
-          name: ed.name,
-          category: 'outlets',
-          icon: '🔌',
-          status: ed.online ? 'online' : 'offline',
-          isOn: ed.isOn,
-          capabilities: [{ type: 'toggle', property: 'isOn', label: 'Ligado' }],
-          state: { isOn: ed.isOn },
-          room: 'Casa',
-          brand: 'eWeLink',
-          source: 'ewelink',
-          ewelinkDeviceId: ed.deviceid,
-        }));
-
-        // Categorias com pelo menos um dispositivo real conectado: os mocks
-        // dessas categorias somem para não haver dois cards "iguais" na tela
-        // (ex.: tomada mock vs. tomada real) e o usuário nunca controlar o card errado.
-        const realCategories = new Set(mapped.map((d) => d.category));
-        const remainingMocks = state.devices.filter(
-          (d) => d.source !== 'ewelink' && !realCategories.has(d.category)
-        );
-
-        return { devices: [...remainingMocks, ...mapped], ewelinkConnected: connected };
-      });
+      const mapped: Device[] = devices.map((ed) => ({
+        id: `ewelink:${ed.deviceid}`,
+        name: ed.name,
+        category: 'outlets',
+        icon: '🔌',
+        status: ed.online ? 'online' : 'offline',
+        isOn: ed.isOn,
+        capabilities: [{ type: 'toggle', property: 'isOn', label: 'Ligado' }],
+        state: { isOn: ed.isOn },
+        room: 'Casa',
+        brand: 'eWeLink',
+        source: 'ewelink',
+        ewelinkDeviceId: ed.deviceid,
+      }));
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'ewelink'),
+        ewelinkConnected: connected,
+      }));
     } catch {
       // Falha silenciosa — mantém estado anterior
     }
   },
-}));
+
+  syncHueLights: async () => {
+    try {
+      const { connected, lights } = await fetchHueLights();
+      if (!connected) {
+        set({ hueConnected: false });
+        return;
+      }
+      const mapped: Device[] = lights.map((l) => ({
+        id: `hue:${l.id}`,
+        name: l.name,
+        category: 'lights',
+        icon: '💡',
+        status: 'online' as const,
+        isOn: l.isOn,
+        capabilities: [
+          { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+          { type: 'range' as const, property: 'brightness', label: 'Brilho', min: 1, max: 100, unit: '%' },
+          ...(l.supportsColor
+            ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
+            : []),
+          ...(l.supportsColorTemp
+            ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
+            : []),
+        ],
+        state: {
+          isOn: l.isOn,
+          brightness: l.brightness,
+          ...(l.color ? { color: l.color } : {}),
+          ...(l.colorTemp ? { colorTemperature: l.colorTemp } : {}),
+        },
+        room: 'Casa',
+        brand: 'Philips Hue',
+        source: 'hue' as const,
+        hueDeviceId: l.id,
+      }));
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'hue'),
+        hueConnected: true,
+      }));
+    } catch {
+      // Falha silenciosa — mantém estado anterior
+    }
+  },
+
+  syncTuyaDevices: async () => {
+    try {
+      const { connected, devices } = await fetchTuyaDevices();
+      if (!connected) {
+        set({ tuyaConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => ({
+        id: `tuya:${d.id}`,
+        name: d.name,
+        category: 'lights',
+        icon: '💡',
+        status: (d.online ? 'online' : 'offline') as 'online' | 'offline',
+        isOn: d.isOn,
+        capabilities: [
+          { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+          ...(d.supportsBrightness
+            ? [{ type: 'range' as const, property: 'brightness', label: 'Brilho', min: 1, max: 100, unit: '%' }]
+            : []),
+          ...(d.supportsColor
+            ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
+            : []),
+          ...(d.supportsColorTemp
+            ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
+            : []),
+        ],
+        state: {
+          isOn: d.isOn,
+          ...(d.brightness != null ? { brightness: d.brightness } : {}),
+          ...(d.color ? { color: d.color } : {}),
+          ...(d.colorTemp != null ? { colorTemperature: d.colorTemp } : {}),
+        },
+        room: 'Casa',
+        brand: 'Smart Life',
+        source: 'tuya' as const,
+        tuyaDeviceId: d.id,
+      }));
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'tuya'),
+        tuyaConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  syncWizDevices: async () => {
+    try {
+      const { connected, devices } = await fetchWizDevices();
+      if (!connected) {
+        set({ wizConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => {
+        const typeUp = d.type.toUpperCase();
+        const supportsColor = typeUp.includes('COLOR') || typeUp.includes('RGB');
+        const supportsBrightness = d.brightness != null || typeUp.includes('DIMMABLE') || supportsColor || typeUp.includes('TW');
+        const supportsColorTemp = d.colorTemp != null || typeUp.includes('TW') || typeUp.includes('WHITE');
+
+        return {
+          id: `wiz:${d.mac}`,
+          name: d.name,
+          category: 'lights' as const,
+          icon: '💡',
+          status: 'online' as const,
+          isOn: d.isOn,
+          capabilities: [
+            { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+            ...(supportsBrightness
+              ? [{ type: 'range' as const, property: 'brightness', label: 'Brilho', min: 10, max: 100, unit: '%' }]
+              : []),
+            ...(supportsColorTemp
+              ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
+              : []),
+            ...(supportsColor
+              ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
+              : []),
+          ],
+          state: {
+            isOn: d.isOn,
+            ...(d.brightness != null ? { brightness: d.brightness } : {}),
+            ...(d.colorTemp != null ? { colorTemperature: d.colorTemp > 5000 ? 'cool' : d.colorTemp > 3500 ? 'neutral' : 'warm' } : {}),
+            ...(d.color ? { color: d.color } : {}),
+          },
+          room: 'Casa',
+          brand: 'Philips WiZ',
+          source: 'wiz' as const,
+          wizMac: d.mac,
+        };
+      });
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'wiz'),
+        wizConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  syncTapoDevices: async () => {
+    try {
+      const { connected, devices } = await fetchTapoDevices();
+      if (!connected) {
+        set({ tapoConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => ({
+        id: `tapo:${d.deviceId}`,
+        name: d.alias,
+        category: 'lights' as const,
+        icon: '💡',
+        status: (d.status === 1 ? 'online' : 'offline') as 'online' | 'offline',
+        isOn: d.isOn,
+        capabilities: [
+          { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+          ...(d.supportsBrightness
+            ? [{ type: 'range' as const, property: 'brightness', label: 'Brilho', min: 1, max: 100, unit: '%' }]
+            : []),
+          ...(d.supportsColorTemp
+            ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
+            : []),
+          ...(d.supportsColor
+            ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
+            : []),
+        ],
+        state: {
+          isOn: d.isOn,
+          ...(d.brightness != null ? { brightness: d.brightness } : {}),
+          ...(d.colorTemp != null ? { colorTemperature: d.colorTemp > 5000 ? 'cool' : d.colorTemp > 3500 ? 'neutral' : 'warm' } : {}),
+          ...(d.color ? { color: d.color } : {}),
+        },
+        room: 'Casa',
+        brand: 'TP-Link Tapo',
+        source: 'tapo' as const,
+        tapoDeviceId: d.deviceId,
+        tapoAppServerUrl: d.appServerUrl,
+      }));
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'tapo'),
+        tapoConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  syncXiaomiDevices: async () => {
+    try {
+      const { connected, devices } = await fetchXiaomiDevices();
+      if (!connected) {
+        set({ xiaomiConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => ({
+        id: `xiaomi:${d.did}`,
+        name: d.name,
+        category: 'fans' as const,
+        icon: '🌀',
+        status: (d.isOnline ? 'online' : 'offline') as 'online' | 'offline',
+        isOn: d.isOn,
+        capabilities: [
+          ...(d.power ? [{ type: 'toggle' as const, property: 'isOn', label: 'Ligado' }] : []),
+          ...(d.speed
+            ? [{ type: 'range' as const, property: 'speed', label: 'Força', min: d.speed.min, max: d.speed.max, unit: '%' }]
+            : []),
+          ...(d.swing ? [{ type: 'toggle' as const, property: 'swing', label: 'Oscilar' }] : []),
+          ...(d.angle
+            ? [{ type: 'select' as const, property: 'angle', label: 'Ângulo', options: d.angle.options.map((o) => `${o}°`) }]
+            : []),
+          ...(d.mode
+            ? [{ type: 'select' as const, property: 'mode', label: 'Modo', options: d.mode.options.map((o) => o.label) }]
+            : []),
+        ],
+        state: {
+          isOn: d.isOn,
+          ...(d.speedValue != null ? { speed: d.speedValue } : {}),
+          ...(d.swingValue != null ? { swing: d.swingValue } : {}),
+          ...(d.angleValue != null ? { angle: d.angleValue } : {}),
+          ...(d.modeValue != null && d.mode
+            ? { mode: d.mode.options.find((o) => o.value === d.modeValue)?.label }
+            : {}),
+        },
+        room: 'Casa',
+        brand: 'Xiaomi',
+        source: 'xiaomi' as const,
+        xiaomiDid: d.did,
+        xiaomiControl: { power: d.power, speed: d.speed, swing: d.swing, angle: d.angle, mode: d.mode },
+      }));
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'xiaomi'),
+        xiaomiConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  syncAlexaDevices: async () => {
+    try {
+      const { connected, devices } = await fetchAlexaDevices();
+      if (!connected) {
+        set({ alexaConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices
+        .filter((d) => d.isEnabled)
+        .map((d) => {
+          const caps = d.capabilities.map((c) => c.toLowerCase());
+          const supportsBrightness = caps.some((c) => c.includes('brightness') || c.includes('percentage'));
+          const supportsColorTemp = caps.some((c) => c.includes('colortemperature'));
+          const supportsColor = caps.some((c) => c.includes('setcolor') || c.includes('color'));
+          const isLight =
+            supportsColor || supportsBrightness || supportsColorTemp ||
+            d.entityType.toLowerCase().includes('light');
+
+          return {
+            id: `alexa:${d.entityId}`,
+            name: d.friendlyName,
+            category: (isLight ? 'lights' : 'outlets') as 'lights' | 'outlets',
+            icon: isLight ? '💡' : '🔌',
+            status: 'online' as const,
+            isOn: false,
+            capabilities: [
+              { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+              ...(supportsBrightness
+                ? [{ type: 'range' as const, property: 'brightness', label: 'Brilho', min: 1, max: 100, unit: '%' }]
+                : []),
+              ...(supportsColorTemp
+                ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
+                : []),
+              ...(supportsColor
+                ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
+                : []),
+            ],
+            state: { isOn: false },
+            room: 'Casa',
+            brand: 'Amazon Alexa',
+            source: 'alexa' as const,
+            alexaEntityId: d.entityId,
+            alexaEntityType: d.entityType,
+          };
+        });
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'alexa'),
+        alexaConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  setWizLocalBridgeUrl: (url) => {
+    set({ wizLocalBridgeUrl: url });
+  },
+
+  syncWizLocalDevices: async () => {
+    const { wizLocalBridgeUrl, wizLocalSavedDevices } = get();
+
+    let deviceInfos: WizLocalSavedDevice[] = wizLocalSavedDevices;
+
+    if (wizLocalBridgeUrl) {
+      try {
+        const found = await scanWizLocal(wizLocalBridgeUrl);
+        if (found.length > 0) {
+          deviceInfos = found.map((f) => {
+            const existing = wizLocalSavedDevices.find(
+              (s) => s.mac === f.mac || s.ip === f.ip
+            );
+            return {
+              ip: f.ip,
+              mac: f.mac,
+              name: existing?.name ?? `WiZ ${f.ip.split('.').pop() ?? f.ip}`,
+            };
+          });
+          set({ wizLocalSavedDevices: deviceInfos });
+        }
+      } catch {
+        // bridge não disponível — usa dados guardados
+      }
+    }
+
+    if (deviceInfos.length === 0) {
+      set({ wizLocalConnected: false });
+      return { count: 0 };
+    }
+
+    const bridgeUrl = wizLocalBridgeUrl;
+    const mapped: Device[] = deviceInfos.map((d) => ({
+      id: `wiz-local:${d.mac || d.ip}`,
+      name: d.name,
+      category: 'lights' as const,
+      icon: '💡',
+      status: 'online' as const,
+      isOn: false,
+      capabilities: [
+        { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+        { type: 'range' as const, property: 'brightness', label: 'Brilho', min: 10, max: 100, unit: '%' },
+        { type: 'color' as const, property: 'color', label: 'Cor' },
+        {
+          type: 'select' as const,
+          property: 'colorTemperature',
+          label: 'Temperatura',
+          options: ['warm', 'neutral', 'cool'],
+        },
+      ],
+      state: { isOn: false, brightness: 100 },
+      room: 'Casa',
+      brand: 'WiZ Local',
+      source: 'wiz-local' as const,
+      wizLocalIp: d.ip,
+      wizBridgeUrl: bridgeUrl,
+    }));
+
+    set((state) => ({
+      devices: rebuildDeviceList(state.devices, mapped, 'wiz-local'),
+      wizLocalConnected: true,
+    }));
+
+    return { count: mapped.length };
+  },
+
+  clearWizLocalDevices: () => {
+    set((state) => ({
+      devices: state.devices.filter((d) => d.source !== 'wiz-local'),
+      wizLocalConnected: false,
+      wizLocalSavedDevices: [],
+    }));
+  },
+}),
+    {
+      name: 'argos-connections',
+      storage: createJSONStorage(() =>
+        typeof localStorage !== 'undefined' ? localStorage : ({} as Storage)
+      ),
+      partialize: (state) => ({
+        ewelinkConnected: state.ewelinkConnected,
+        hueConnected: state.hueConnected,
+        tuyaConnected: state.tuyaConnected,
+        alexaConnected: state.alexaConnected,
+        wizConnected: state.wizConnected,
+        tapoConnected: state.tapoConnected,
+        xiaomiConnected: state.xiaomiConnected,
+        wizLocalConnected: state.wizLocalConnected,
+        wizLocalBridgeUrl: state.wizLocalBridgeUrl,
+        wizLocalSavedDevices: state.wizLocalSavedDevices,
+        customNames: state.customNames,
+      }),
+    }
+  )
+);

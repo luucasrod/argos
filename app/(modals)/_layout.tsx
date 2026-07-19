@@ -16,6 +16,7 @@ export default function ModalsLayout() {
       <Stack.Screen name="create-automation" />
       <Stack.Screen name="execution" options={{ presentation: 'transparentModal', animation: 'fade' }} />
       <Stack.Screen name="routine-detail" />
+      <Stack.Screen name="integracoes" />
     </Stack>
   );
 }

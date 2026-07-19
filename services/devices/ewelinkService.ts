@@ -1,5 +1,5 @@
 /**
- * ewelinkService.ts — cliente para as rotas /api/ewelink/* (Vercel).
+ * ewelinkService.ts — cliente para a rota /api/ewelink (router unificado).
  * Mantém o App Secret eWeLink fora do bundle web.
  */
 import { getAccessToken } from '@/services/auth/session';
@@ -23,7 +23,7 @@ export interface EwelinkDevice {
 
 export async function getEwelinkAuthorizeUrl(): Promise<string> {
   const headers = await authHeader();
-  const res = await fetch('/api/ewelink/authorize', { headers });
+  const res = await fetch('/api/ewelink?action=authorize', { headers });
   if (!res.ok) throw new Error('Não foi possível iniciar a conexão com eWeLink.');
   const json = (await res.json()) as { url: string };
   return json.url;
@@ -31,7 +31,7 @@ export async function getEwelinkAuthorizeUrl(): Promise<string> {
 
 export async function exchangeEwelinkCode(code: string, region: string, state?: string): Promise<void> {
   const headers = await authHeader();
-  const res = await fetch('/api/ewelink/exchange', {
+  const res = await fetch('/api/ewelink?action=exchange', {
     method: 'POST',
     headers,
     body: JSON.stringify({ code, region, state }),
@@ -48,7 +48,7 @@ export async function loginEwelinkWithPassword(
   countryCode: string
 ): Promise<void> {
   const headers = await authHeader();
-  const res = await fetch('/api/ewelink/login', {
+  const res = await fetch('/api/ewelink?action=login', {
     method: 'POST',
     headers,
     body: JSON.stringify({ email, password, countryCode }),
@@ -61,14 +61,16 @@ export async function loginEwelinkWithPassword(
 
 export async function fetchEwelinkDevices(): Promise<{ connected: boolean; devices: EwelinkDevice[] }> {
   const headers = await authHeader();
-  const res = await fetch('/api/ewelink/devices', { headers });
-  if (!res.ok) return { connected: false, devices: [] };
+  const res = await fetch('/api/ewelink?action=devices', { headers });
+  // 401 = sessão Supabase ainda não renovada; não equivale a "eWeLink desconectado"
+  if (res.status === 401) throw new Error('auth_not_ready');
+  if (!res.ok) throw new Error('ewelink_api_error');
   return res.json();
 }
 
 export async function controlEwelinkDevice(deviceId: string, params: Record<string, unknown>): Promise<void> {
   const headers = await authHeader();
-  const res = await fetch('/api/ewelink/control', {
+  const res = await fetch('/api/ewelink?action=control', {
     method: 'POST',
     headers,
     body: JSON.stringify({ deviceId, params }),

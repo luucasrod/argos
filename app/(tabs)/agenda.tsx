@@ -6,6 +6,8 @@ import {
   Pressable,
   StyleSheet,
   Switch,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,44 +20,67 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
 
 const TABS: SubTab[] = [
-  { key: 'hoje', label: 'Hoje', emoji: '☀️' },
+  { key: 'hoje',       label: 'Hoje',       emoji: '☀️' },
   { key: 'calendario', label: 'Calendário', emoji: '📅' },
-  { key: 'lembretes', label: 'Lembretes', emoji: '🔔' },
-  { key: 'rotinas', label: 'Rotinas', emoji: '🔄' },
+  { key: 'lembretes',  label: 'Lembretes',  emoji: '🔔' },
+  { key: 'rotinas',    label: 'Rotinas',    emoji: '🔄' },
 ];
 
-const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const MONTHS_PT = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-];
+const DAYS_PT   = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+interface Reminder { id: string; text: string; time: string; }
 
 export default function AgendaScreen() {
   const [activeTab, setActiveTab] = useState('hoje');
   const { routines, toggleRoutine } = useAutomationStore();
   const { sendMessage } = useArgos();
-  const { light } = useHaptic();
+  const { light, medium } = useHaptic();
+
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [reminderText, setReminderText] = useState('');
+  const [reminderTime, setReminderTime] = useState('');
 
   const now = new Date();
-  const dayName = DAYS_PT[now.getDay()];
+  const dayName   = DAYS_PT[now.getDay()];
+  const dayNum    = now.getDate();
   const monthName = MONTHS_PT[now.getMonth()];
+  const year      = now.getFullYear();
+
+  const handleAddReminder = () => {
+    if (!reminderText.trim()) return;
+    medium();
+    const newReminder: Reminder = {
+      id: `rem-${Date.now()}`,
+      text: reminderText.trim(),
+      time: reminderTime.trim() || '',
+    };
+    setReminders((r) => [...r, newReminder]);
+    // Envia para o Argos criar notificação
+    sendMessage(`Crie um lembrete: ${reminderText.trim()}${reminderTime ? ` às ${reminderTime}` : ''}`);
+    setReminderText('');
+    setReminderTime('');
+    setShowAddReminder(false);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'hoje':
         return (
           <ScrollView contentContainerStyle={styles.scrollContent}>
+            {/* Data centralizada */}
             <GlassCard style={styles.dateCard}>
               <Text style={styles.dateDay}>{dayName}</Text>
-              <Text style={styles.dateNumber}>{now.getDate()}</Text>
-              <Text style={styles.dateMonth}>{monthName} {now.getFullYear()}</Text>
+              <Text style={styles.dateNum}>{dayNum}</Text>
+              <Text style={styles.dateMonth}>{monthName} {year}</Text>
             </GlassCard>
 
             <Text style={styles.sectionLabel}>Eventos de hoje</Text>
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>📭</Text>
               <Text style={styles.emptyText}>
-                Nenhum evento hoje. Conecte seu Google Calendar em Perfil.
+                Nenhum evento hoje. Conecte seu Google Calendar em Calendário.
               </Text>
             </View>
           </ScrollView>
@@ -63,36 +88,50 @@ export default function AgendaScreen() {
 
       case 'calendario':
         return (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>📅</Text>
-            <Text style={styles.emptyTitle}>Calendário</Text>
-            <Text style={styles.emptyText}>
-              Integração com Google Calendar em breve
-            </Text>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => sendMessage('Como posso integrar meu calendário com o Argos?')}
-            >
-              <Text style={styles.actionBtnText}>Saiba mais</Text>
-            </Pressable>
-          </View>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <GlassCard style={styles.calendarCard}>
+              <Text style={styles.calendarTitle}>📅 Google Calendar</Text>
+              <Text style={styles.calendarDesc}>
+                Conecte seu calendário para ver eventos diretamente no Argos
+              </Text>
+              <Pressable
+                style={styles.connectBtn}
+                onPress={() => sendMessage('Como conecto meu Google Calendar com o Argos?')}
+              >
+                <Text style={styles.connectBtnText}>Conectar com Google Calendar</Text>
+              </Pressable>
+            </GlassCard>
+          </ScrollView>
         );
 
       case 'lembretes':
         return (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🔔</Text>
-            <Text style={styles.emptyTitle}>Lembretes</Text>
-            <Text style={styles.emptyText}>
-              Peça ao Argos para criar lembretes para você
-            </Text>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => sendMessage('Crie um lembrete para mim')}
-            >
-              <Text style={styles.actionBtnText}>Criar lembrete</Text>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Pressable onPress={() => { light(); setShowAddReminder(true); }} style={styles.addBtn}>
+              <Text style={styles.addBtnText}>+ Criar lembrete</Text>
             </Pressable>
-          </View>
+
+            {reminders.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>🔔</Text>
+                <Text style={styles.emptyText}>
+                  Nenhum lembrete. Toque em "+ Criar lembrete" ou peça ao Argos.
+                </Text>
+              </View>
+            ) : (
+              reminders.map((rem) => (
+                <GlassCard key={rem.id} style={styles.reminderCard}>
+                  <View style={styles.reminderRow}>
+                    <Text style={styles.reminderText}>{rem.text}</Text>
+                    <Pressable onPress={() => { light(); setReminders((r) => r.filter((x) => x.id !== rem.id)); }}>
+                      <Text style={styles.reminderDelete}>✕</Text>
+                    </Pressable>
+                  </View>
+                  {rem.time ? <Text style={styles.reminderTime}>🕐 {rem.time}</Text> : null}
+                </GlassCard>
+              ))
+            )}
+          </ScrollView>
         );
 
       case 'rotinas':
@@ -107,9 +146,7 @@ export default function AgendaScreen() {
                   <Text style={styles.routineEmoji}>{routine.emoji}</Text>
                   <View style={styles.routineInfo}>
                     <Text style={styles.routineName}>{routine.name}</Text>
-                    <Text style={styles.routineDesc} numberOfLines={1}>
-                      {routine.description}
-                    </Text>
+                    <Text style={styles.routineDesc} numberOfLines={1}>{routine.description}</Text>
                   </View>
                   <Switch
                     value={routine.isActive}
@@ -147,20 +184,49 @@ export default function AgendaScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.bg.primary, Colors.bg.secondary]}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={[Colors.bg.primary, Colors.bg.secondary]} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
           <Text style={styles.title}>Agenda</Text>
-          <Text style={styles.subtitle}>{dayName}, {now.getDate()} de {monthName}</Text>
+          <Text style={styles.subtitle}>{dayName}, {dayNum} de {monthName}</Text>
         </View>
 
         <SubTabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
-
         <View style={styles.content}>{renderContent()}</View>
       </SafeAreaView>
+
+      {/* Modal criar lembrete */}
+      <Modal visible={showAddReminder} transparent animationType="fade" onRequestClose={() => setShowAddReminder(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Novo lembrete</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={reminderText}
+              onChangeText={setReminderText}
+              placeholder="O que você quer lembrar?"
+              placeholderTextColor={Colors.text.muted}
+              autoFocus
+              multiline
+            />
+            <TextInput
+              style={styles.modalInput}
+              value={reminderTime}
+              onChangeText={setReminderTime}
+              placeholder="Horário (opcional, ex: 14:30)"
+              placeholderTextColor={Colors.text.muted}
+            />
+            <View style={styles.modalBtns}>
+              <Pressable onPress={() => { setShowAddReminder(false); setReminderText(''); setReminderTime(''); }} style={styles.modalCancelBtn}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable onPress={handleAddReminder} style={styles.modalConfirmBtn} disabled={!reminderText.trim()}>
+                <Text style={styles.modalConfirmText}>Criar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -168,32 +234,67 @@ export default function AgendaScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg.primary },
   safe: { flex: 1 },
-
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   title: { color: Colors.text.primary, fontSize: 24, fontWeight: '800' },
   subtitle: { color: Colors.text.muted, fontSize: 13, marginTop: 3 },
-
   content: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100, gap: 12 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 100, gap: 12 },
   sectionLabel: {
-    color: Colors.text.muted,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: 4,
+    color: Colors.text.muted, fontSize: 11, fontWeight: '600',
+    letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4,
   },
 
+  // Data card — tudo centralizado
   dateCard: {
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
   },
-  dateDay: { color: Colors.text.muted, fontSize: 14, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 2 },
-  dateNumber: { color: Colors.text.primary, fontSize: 56, fontWeight: '800', lineHeight: 64 },
-  dateMonth: { color: Colors.text.secondary, fontSize: 16 },
+  dateDay: {
+    color: Colors.text.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  dateNum: {
+    color: Colors.text.primary,
+    fontSize: 64,
+    fontWeight: '800',
+    lineHeight: 72,
+    textAlign: 'center',
+  },
+  dateMonth: {
+    color: Colors.text.secondary,
+    fontSize: 16,
+    textAlign: 'center',
+  },
 
+  // Calendar
+  calendarCard: { padding: 24, alignItems: 'center', gap: 14 },
+  calendarTitle: { color: Colors.text.primary, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  calendarDesc: { color: Colors.text.muted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  connectBtn: {
+    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: Colors.accent.primary, alignItems: 'center', width: '100%',
+  },
+  connectBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  // Lembretes
+  addBtn: {
+    paddingVertical: 12, borderRadius: 12,
+    backgroundColor: Colors.accent.primary + '18', borderWidth: 1,
+    borderColor: Colors.accent.primary + '44', alignItems: 'center',
+  },
+  addBtnText: { color: Colors.accent.primary, fontWeight: '600', fontSize: 14 },
+  reminderCard: { padding: 14, gap: 6 },
+  reminderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  reminderText: { color: Colors.text.primary, fontSize: 14, flex: 1, lineHeight: 20 },
+  reminderDelete: { color: Colors.status.error, fontSize: 16, fontWeight: '600' },
+  reminderTime: { color: Colors.text.muted, fontSize: 12 },
+
+  // Rotinas
   routineCard: { padding: 16, gap: 12 },
   routineHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   routineEmoji: { fontSize: 26, width: 34, textAlign: 'center', lineHeight: 32, flexShrink: 0 },
@@ -206,35 +307,30 @@ const styles = StyleSheet.create({
   stepLabel: { color: Colors.text.secondary, fontSize: 13, flex: 1 },
   stepsMore: { color: Colors.text.muted, fontSize: 12, paddingLeft: 13 },
   runBtn: {
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.glass.medium,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    alignItems: 'center',
+    paddingVertical: 10, borderRadius: 10,
+    backgroundColor: Colors.glass.medium, borderWidth: 1,
+    borderColor: Colors.glass.border, alignItems: 'center',
   },
   runBtnText: { color: Colors.text.secondary, fontSize: 13, fontWeight: '600' },
 
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 40,
-    paddingTop: 60,
-    paddingBottom: 80,
-  },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { color: Colors.text.primary, fontSize: 18, fontWeight: '700' },
+  emptyState: { alignItems: 'center', paddingTop: 40, gap: 10, paddingHorizontal: 20 },
+  emptyEmoji: { fontSize: 40 },
   emptyText: { color: Colors.text.muted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  actionBtn: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.accent.primary + '22',
-    borderWidth: 1,
-    borderColor: Colors.accent.primary + '55',
+
+  // Modals
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalCard: {
+    backgroundColor: Colors.bg.elevated, borderRadius: 20, padding: 24,
+    width: '100%', maxWidth: 400, gap: 14, borderWidth: 1, borderColor: Colors.glass.border,
   },
-  actionBtnText: { color: Colors.accent.primary, fontWeight: '600', fontSize: 14 },
+  modalTitle: { color: Colors.text.primary, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  modalInput: {
+    color: Colors.text.primary, fontSize: 15, paddingVertical: 10, paddingHorizontal: 14,
+    backgroundColor: Colors.glass.light, borderRadius: 10, borderWidth: 1, borderColor: Colors.glass.border,
+  },
+  modalBtns: { flexDirection: 'row', gap: 10 },
+  modalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.glass.medium, alignItems: 'center' },
+  modalCancelText: { color: Colors.text.secondary, fontWeight: '600' },
+  modalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.accent.primary, alignItems: 'center' },
+  modalConfirmText: { color: '#fff', fontWeight: '700' },
 });

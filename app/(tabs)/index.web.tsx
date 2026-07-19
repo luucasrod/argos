@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   Modal,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,21 +18,62 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { useArgos } from '@/hooks/useArgos';
 import { useAIStore } from '@/stores/useAIStore';
 import { useMemoryStore } from '@/stores/useMemoryStore';
-import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useVoice } from '@/hooks/useVoice.web';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { Colors } from '@/constants/colors';
-import { HOME_SUGGESTIONS } from '@/constants/orb';
+import { HOME_SUGGESTIONS, ORB_RING_OUTER } from '@/constants/orb';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 import { OpenAppBanner } from '@/components/apps/OpenAppBanner';
+import { handleInsightPress } from '@/services/insights/handleInsightPress';
+
+const ORB_SIZE = 164;
+
+function StatusHint({
+  voiceSupported,
+  isListening,
+  status,
+  isWakeListening,
+  showMicPrompt,
+  onActivateVoice,
+}: {
+  voiceSupported: boolean;
+  isListening: boolean;
+  status: string;
+  isWakeListening: boolean;
+  showMicPrompt: boolean;
+  onActivateVoice: () => void;
+}) {
+  if (!voiceSupported && status === 'idle') return null;
+
+  if (isListening) {
+    return <Text style={styles.statusHintActive}>Ouvindo — pare de falar para enviar</Text>;
+  }
+  if (status === 'thinking') {
+    return <Text style={styles.statusHintActive}>Pensando...</Text>;
+  }
+  if (status === 'executing') {
+    return <Text style={styles.statusHintActive}>Executando...</Text>;
+  }
+  if (status === 'speaking') {
+    return <Text style={styles.statusHintActive}>Falando...</Text>;
+  }
+  if (isWakeListening) {
+    return <Text style={styles.statusHint}>Diga "Argos" ou toque no orb</Text>;
+  }
+  if (showMicPrompt) {
+    return (
+      <Pressable onPress={onActivateVoice} hitSlop={8}>
+        <Text style={styles.statusHintLink}>Ativar escuta contínua</Text>
+      </Pressable>
+    );
+  }
+  return <Text style={styles.statusHint}>Toque no orb para falar</Text>;
+}
 
 export default function HomeScreenWeb() {
-  const { width, height } = useWindowDimensions();
-  const compact = height < 740 || width < 390;
-
   const { sendMessage, status, confirmPendingAction, cancelPendingAction } = useArgos();
   const { showExecutionOverlay, executionSteps, confirmationRequest } = useAIStore();
-  const { getActiveInsights } = useMemoryStore();
-  const { automations } = useAutomationStore();
+  const { getActiveInsights, dismissInsight } = useMemoryStore();
   const [textInput, setTextInput] = useState('');
 
   const handleVoiceSend = useCallback(
@@ -46,16 +86,49 @@ export default function HomeScreenWeb() {
 
   const {
     isListening,
+    isWakeListening,
     transcript,
     error: voiceError,
     startListening,
     stopListening,
+    startWakeWordDetection,
     isSupported: voiceSupported,
   } = useVoice({ onAutoSend: handleVoiceSend });
 
+  const { settings } = useSettingsStore();
+  const [micPromptDismissed, setMicPromptDismissed] = useState(false);
+  const activatingRef = useRef(false);
+
+  useEffect(() => {
+    if (isWakeListening) setMicPromptDismissed(true);
+  }, [isWakeListening]);
+
+  const showMicPrompt =
+    voiceSupported &&
+    settings.autoListen &&
+    !isWakeListening &&
+    !isListening &&
+    status === 'idle' &&
+    !micPromptDismissed;
+
+  const handleActivateVoice = useCallback(async () => {
+    if (activatingRef.current) return;
+    activatingRef.current = true;
+    unlockSpeech();
+    try {
+      const { requestMicPermission } = await import('@/services/voice/micPermission');
+      const granted = await requestMicPermission();
+      if (granted) {
+        void startWakeWordDetection();
+      } else {
+        setMicPromptDismissed(true);
+      }
+    } finally {
+      activatingRef.current = false;
+    }
+  }, [startWakeWordDetection]);
+
   const activeInsights = getActiveInsights();
-  const recentAutomations = automations.filter((a) => a.runCount > 0).slice(0, 3);
-  const hasBottomPanel = activeInsights.length > 0 || recentAutomations.length > 0;
 
   const handleSend = useCallback(() => {
     if (!textInput.trim()) return;
@@ -74,7 +147,6 @@ export default function HomeScreenWeb() {
   }, [isListening, stopListening, startListening]);
 
   const currentStatus = isListening ? 'listening' : status;
-  const orbSize = compact ? 136 : 164;
 
   return (
     <View style={styles.container}>
@@ -82,130 +154,89 @@ export default function HomeScreenWeb() {
         colors={[Colors.bg.primary, Colors.bg.secondary, Colors.bg.primary]}
         style={StyleSheet.absoluteFill}
       />
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.main}>
-          <View style={styles.topSection}>
-            <View style={styles.header}>
-              <Text style={styles.greeting}>Argos</Text>
-              <Pressable onPress={() => router.push('/(modals)/memory')} style={styles.memoryBtn}>
-                <Text style={styles.memoryBtnText}>🧠</Text>
-              </Pressable>
-            </View>
 
-            {voiceSupported && !isListening && status === 'idle' && (
-              <Text style={styles.wakeHint}>🎙 Toque no orb para falar</Text>
-            )}
-            {isListening && (
-              <Text style={styles.wakeHintActive}>🔴 Ouvindo... Pare de falar para enviar</Text>
-            )}
-            {status === 'thinking' && !isListening && (
-              <Text style={styles.wakeHintActive}>🧠 Pensando...</Text>
-            )}
-            {status === 'executing' && (
-              <Text style={styles.wakeHintActive}>⚡ Executando...</Text>
-            )}
-            {status === 'speaking' && (
-              <Text style={styles.wakeHintActive}>🔊 Falando...</Text>
-            )}
+      <SafeAreaView style={styles.headerSafe} edges={['top', 'left', 'right']}>
+        <View style={styles.header}>
+          <Text style={styles.greeting}>Argos</Text>
+        </View>
+        <StatusHint
+          voiceSupported={voiceSupported}
+          isListening={isListening}
+          status={status}
+          isWakeListening={isWakeListening}
+          showMicPrompt={showMicPrompt}
+          onActivateVoice={handleActivateVoice}
+        />
+      </SafeAreaView>
+
+      <View style={styles.hero}>
+        {showExecutionOverlay && executionSteps.length > 0 && (
+          <View style={styles.execBox}>
+            <Text style={styles.execTitle}>Executando ações</Text>
+            {executionSteps.map((s, i) => (
+              <Text key={i} style={styles.execStep}>
+                {s.status === 'pending' ? '⏳' : s.status === 'running' ? '⚡' : s.status === 'success' ? '✅' : '❌'}{' '}
+                {s.label}
+              </Text>
+            ))}
           </View>
+        )}
 
-          <View style={[styles.orbArea, compact && styles.orbAreaCompact]}>
-            {showExecutionOverlay && executionSteps.length > 0 && (
-              <View style={styles.execBox}>
-                <Text style={styles.execTitle}>Executando ações</Text>
-                {executionSteps.map((s, i) => (
-                  <Text key={i} style={styles.execStep}>
-                    {s.status === 'pending' ? '⏳' : s.status === 'running' ? '⚡' : s.status === 'success' ? '✅' : '❌'}{' '}
-                    {s.label}
-                  </Text>
-                ))}
-              </View>
-            )}
+        <View style={styles.orbWrap}>
+          <OrbCore status={currentStatus} onPress={handleOrbPress} size={ORB_SIZE} />
+          <OrbStatus status={currentStatus} compact />
 
-            <View style={[styles.orbSection, compact && styles.orbSectionCompact]}>
-              <OrbCore status={currentStatus} onPress={handleOrbPress} size={orbSize} />
-              <OrbStatus status={currentStatus} />
+          {isListening && transcript ? (
+            <Text style={styles.transcriptText} numberOfLines={2}>
+              "{transcript}"
+            </Text>
+          ) : null}
 
-              {isListening && transcript ? (
-                <Text style={styles.transcriptText} numberOfLines={2}>
-                  "{transcript}"
-                </Text>
-              ) : null}
+          {voiceError ? <Text style={styles.errorText}>{voiceError}</Text> : null}
+        </View>
+      </View>
 
-              {voiceError ? (
-                <Text style={styles.errorText}>{voiceError}</Text>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.suggestionsSection}>
+      <View style={styles.footerDock}>
+        {activeInsights.length > 0 && (
+          <View style={styles.insightsSection}>
+            <Text style={styles.sectionTitle}>Insights</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {HOME_SUGGESTIONS.map((suggestion) => (
+              {activeInsights.map((insight) => (
                 <Pressable
-                  key={suggestion.label}
-                  style={styles.pill}
-                  onPress={() => {
-                    unlockSpeech();
-                    sendMessage(suggestion.message);
-                  }}
+                  key={insight.id}
+                  onPress={() => handleInsightPress(insight, sendMessage, dismissInsight)}
                 >
-                  <Text style={styles.pillText}>{suggestion.label}</Text>
+                  <GlassCard style={styles.insightCard}>
+                    <Text style={styles.insightText} numberOfLines={2}>
+                      {insight.message}
+                    </Text>
+                    {insight.suggestion ? (
+                      <Text style={styles.insightSuggestion} numberOfLines={1}>
+                        {insight.suggestion} →
+                      </Text>
+                    ) : null}
+                  </GlassCard>
                 </Pressable>
               ))}
             </ScrollView>
           </View>
+        )}
 
-          {hasBottomPanel ? (
-            <View style={styles.bottomPanel}>
-              {activeInsights.length > 0 && (
-                <View style={styles.insightsSection}>
-                  <Text style={styles.sectionTitle}>Insights</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {activeInsights.map((insight) => (
-                      <Pressable
-                        key={insight.id}
-                        onPress={() => insight.suggestion && sendMessage(insight.suggestion)}
-                      >
-                        <GlassCard style={styles.insightCard}>
-                          <Text style={styles.insightText} numberOfLines={3}>
-                            {insight.message}
-                          </Text>
-                          {insight.suggestion ? (
-                            <Text style={styles.insightSuggestion} numberOfLines={1}>
-                              {insight.suggestion} →
-                            </Text>
-                          ) : null}
-                        </GlassCard>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {recentAutomations.length > 0 && (
-                <View style={styles.quickActions}>
-                  <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-                  <View style={styles.quickGrid}>
-                    {recentAutomations.map((auto) => (
-                      <Pressable
-                        key={auto.id}
-                        style={styles.quickBtn}
-                        onPress={() => sendMessage(auto.name)}
-                      >
-                        <GlassCard style={styles.quickCard}>
-                          <Text style={styles.quickEmoji}>{auto.emoji}</Text>
-                          <Text style={styles.quickName} numberOfLines={2}>
-                            {auto.name}
-                          </Text>
-                          <Text style={styles.quickCount}>{auto.runCount}x</Text>
-                        </GlassCard>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : null}
+        <View style={styles.suggestionsSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {HOME_SUGGESTIONS.map((suggestion) => (
+              <Pressable
+                key={suggestion.label}
+                style={styles.pill}
+                onPress={() => {
+                  unlockSpeech();
+                  sendMessage(suggestion.message);
+                }}
+              >
+                <Text style={styles.pillText}>{suggestion.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
 
         <View style={styles.inputRow}>
@@ -227,7 +258,7 @@ export default function HomeScreenWeb() {
             <Text style={styles.sendText}>↑</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
 
       <OpenAppBanner />
 
@@ -262,107 +293,147 @@ export default function HomeScreenWeb() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.primary, overflow: 'hidden' },
-  safe: { flex: 1, backgroundColor: Colors.bg.primary },
-  main: { flex: 1, overflow: 'hidden', backgroundColor: Colors.bg.primary },
-
-  topSection: {
-    flexShrink: 0,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
     backgroundColor: Colors.bg.primary,
+    overflow: 'hidden',
+  },
+
+  headerSafe: {
+    flexShrink: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 2,
   },
-  greeting: { fontSize: 26, fontWeight: '700', color: '#C4B5FD', letterSpacing: 0.5 },
+  greeting: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#C4B5FD',
+    letterSpacing: 0.5,
+  },
   memoryBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(124, 58, 237, 0.2)',
     borderWidth: 1,
     borderColor: 'rgba(124, 58, 237, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  memoryBtnText: { fontSize: 20 },
+  memoryBtnText: { fontSize: 18 },
 
-  wakeHint: {
+  statusHint: {
     color: Colors.text.muted,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 6,
-    marginBottom: 4,
   },
-  wakeHintActive: {
+  statusHintActive: {
     color: Colors.status.listening,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 6,
-    marginBottom: 4,
+    fontWeight: '500',
+  },
+  statusHintLink: {
+    color: '#A78BFA',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 
-  orbArea: {
+  hero: {
     flex: 1,
+    minHeight: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    minHeight: 236,
     overflow: 'hidden',
-    backgroundColor: Colors.bg.primary,
+    paddingHorizontal: 16,
   },
-  orbAreaCompact: {
-    minHeight: 200,
-    paddingVertical: 4,
+  orbWrap: {
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: ORB_RING_OUTER + 40,
   },
-  orbSection: { alignItems: 'center', width: '100%' },
-  orbSectionCompact: { transform: [{ scale: 0.82 }] },
 
   transcriptText: {
     color: Colors.text.secondary,
     fontSize: 14,
     textAlign: 'center',
     fontStyle: 'italic',
-    paddingHorizontal: 32,
-    marginTop: 10,
+    paddingHorizontal: 16,
+    marginTop: 6,
   },
   errorText: {
     color: Colors.status.error,
     fontSize: 13,
     textAlign: 'center',
-    paddingHorizontal: 24,
-    marginTop: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
   },
 
   execBox: {
+    position: 'absolute',
+    top: 8,
+    left: 20,
+    right: 20,
     backgroundColor: 'rgba(124, 58, 237, 0.12)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: 'rgba(124, 58, 237, 0.3)',
-    width: '100%',
-    gap: 8,
+    gap: 4,
+    zIndex: 2,
   },
   execTitle: {
     color: Colors.accent.primary,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 11,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: 4,
   },
-  execStep: { color: Colors.text.primary, fontSize: 14 },
+  execStep: { color: Colors.text.primary, fontSize: 12 },
+
+  footerDock: {
+    flexShrink: 0,
+    backgroundColor: Colors.bg.elevated,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+    paddingTop: 10,
+    gap: 8,
+  },
+
+  insightsSection: {
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  insightCard: {
+    padding: 12,
+    marginRight: 10,
+    width: 220,
+    minHeight: 68,
+    gap: 4,
+  },
+  insightText: { color: Colors.text.primary, fontSize: 13, lineHeight: 18 },
+  insightSuggestion: { color: '#A78BFA', fontSize: 12, fontWeight: '500' },
 
   suggestionsSection: {
-    flexShrink: 0,
-    paddingLeft: 24,
-    paddingTop: 4,
-    paddingBottom: 10,
-    backgroundColor: Colors.bg.primary,
+    paddingHorizontal: 16,
   },
   pill: {
     backgroundColor: 'rgba(124, 58, 237, 0.12)',
@@ -370,66 +441,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(124, 58, 237, 0.3)',
     borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginRight: 10,
+    paddingVertical: 8,
+    marginRight: 8,
   },
   pillText: { color: '#C4B5FD', fontSize: 13, fontWeight: '500' },
 
-  bottomPanel: {
-    flexShrink: 0,
-    backgroundColor: Colors.bg.primary,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-    paddingTop: 10,
-  },
-  insightsSection: { paddingHorizontal: 24, paddingBottom: 10 },
-  sectionTitle: {
-    color: 'rgba(255, 255, 255, 0.35)',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  insightCard: { padding: 14, marginRight: 12, width: 220, minHeight: 88, gap: 6 },
-  insightText: { color: Colors.text.primary, fontSize: 14, lineHeight: 20 },
-  insightSuggestion: { color: '#A78BFA', fontSize: 13, fontWeight: '500' },
-
-  quickActions: { paddingHorizontal: 24, paddingBottom: 10 },
-  quickGrid: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
-  quickBtn: { flex: 1, minWidth: 0 },
-  quickCard: {
-    flex: 1,
-    height: 100,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  quickEmoji: { fontSize: 22, lineHeight: 28, height: 28 },
-  quickName: {
-    color: Colors.text.primary,
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 14,
-    width: '100%',
-  },
-  quickCount: { color: Colors.text.muted, fontSize: 10 },
-
   inputRow: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 6,
     gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.glass.border,
-    backgroundColor: Colors.bg.elevated,
   },
   input: {
     flex: 1,
     color: Colors.text.primary,
     fontSize: 16,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: Colors.glass.light,
     borderRadius: 12,
   },

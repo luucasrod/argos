@@ -17,15 +17,15 @@ const defaultPersonality: AIPersonality = {
 };
 
 const defaultSettings: Settings = {
-  model: ANTHROPIC_MODELS.sonnet,
+  model: ANTHROPIC_MODELS.haiku,
   autonomyLevel: 'autonomous',
   userProfile: {},
   memoryEnabled: true,
   contextLevel: 'normal',
-  wakeWord: 'Argos',
+  wakeWord: 'Ei Argos',
   voiceLanguage: 'pt-BR',
   voiceSensitivity: 0.7,
-  autoListen: false,
+  autoListen: true,
   processLocally: false,
   saveHistory: true,
   historyDays: 30,
@@ -69,7 +69,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'argos-settings',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const data = persisted as { settings?: Settings & { apiKey?: string } };
@@ -80,10 +80,14 @@ export const useSettingsStore = create<SettingsStore>()(
             ...rest.personality,
             voiceSpeed: snapVoiceSpeed(rest.personality?.voiceSpeed ?? 1.0),
           };
+          // v5: ativa a wake word e troca o modelo padrão pra Haiku (resposta mais
+          // rápida) — sobrescreve o valor antigo já que ninguém configurou isso à mão.
+          const upgradingPastV4 = version < 5;
           data.settings = {
             ...defaultSettings,
             ...rest,
-            model: resolveAnthropicModel(rest.model),
+            model: upgradingPastV4 ? ANTHROPIC_MODELS.haiku : resolveAnthropicModel(rest.model),
+            autoListen: upgradingPastV4 ? true : rest.autoListen ?? defaultSettings.autoListen,
             autonomyLevel: rest.autonomyLevel ?? 'autonomous',
             userProfile: rest.userProfile ?? {},
             personality,
