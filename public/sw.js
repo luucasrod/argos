@@ -4,7 +4,7 @@
  * Fallback offline quando sem conexão.
  */
 
-const CACHE_NAME = 'argos-cache-v3';
+const CACHE_NAME = 'argos-cache-v9';
 const OFFLINE_URL = '/offline.html';
 const SHELL_URL = '/';
 
@@ -44,6 +44,10 @@ self.addEventListener('fetch', (event) => {
 
   // Ignora extensões do browser
   if (request.url.startsWith('chrome-extension://')) return;
+
+  // Ignora rotas de API (sempre precisam de resposta fresca)
+  const url = new URL(request.url);
+  if (url.pathname.startsWith('/api/')) return;
 
   // ─── Requisições de navegação (HTML) ───
   if (request.mode === 'navigate') {
