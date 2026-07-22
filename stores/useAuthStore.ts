@@ -83,10 +83,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   signInWithGoogle: async () => {
     set({ loading: true, authError: null, authMessage: null });
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: getRedirectUrl(),
+        skipBrowserRedirect: Platform.OS !== 'web',
         queryParams: { access_type: 'offline', prompt: 'select_account' },
       },
     });
@@ -97,6 +98,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
           : error.message;
       set({ loading: false, authError: msg });
       return msg;
+    }
+    if (Platform.OS !== 'web' && data?.url) {
+      await Linking.openURL(data.url);
+      // Timeout de segurança caso o usuário cancele no browser
+      setTimeout(() => {
+        if (useAuthStore.getState().loading) set({ loading: false });
+      }, 120_000);
     }
     return null;
   },
@@ -255,11 +263,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const isRealUser = session?.user && !session.user.is_anonymous;
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      const isRealUser = !!(session?.user && !session.user.is_anonymous);
+
+      if (event === 'INITIAL_SESSION') {
         finishInit(isRealUser ? mapUser(session.user) : null);
         return;
       }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (isRealUser) {
+          // Sempre atualiza o usuário — necessário no fluxo PKCE onde
+          // INITIAL_SESSION dispara com null antes da troca do code completar,
+          // marcando settled=true e fazendo finishInit ignorar o SIGNED_IN.
+          settled = true;
+          set({ user: mapUser(session.user!), initialized: true, loading: false });
+        } else if (!settled) {
+          finishInit(null);
+        }
+        return;
+      }
+
       if (event === 'SIGNED_OUT') {
         set({ user: null, loading: false });
       }
