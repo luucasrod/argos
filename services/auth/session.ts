@@ -19,7 +19,7 @@ export async function getAccessToken(): Promise<string> {
 
 export async function clearAuthSession(): Promise<void> {
   try {
-    await supabase.auth.signOut({ scope: 'global' });
+    await supabase.auth.signOut({ scope: 'local' });
   } catch {
     // Ignora falha ao limpar no servidor
   }
