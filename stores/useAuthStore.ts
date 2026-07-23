@@ -101,11 +101,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
     if (Platform.OS !== 'web' && data?.url) {
       await Linking.openURL(data.url);
-      // Timeout de segurança caso o usuário cancele no browser
-      setTimeout(() => {
-        if (useAuthStore.getState().loading) set({ loading: false });
-      }, 120_000);
     }
+    // Timeout de segurança para todos os casos: no iOS PWA o OAuth abre no
+    // Safari do sistema e o PWA nunca recebe o redirect — sem isso o botão
+    // fica girando para sempre.
+    setTimeout(() => {
+      if (useAuthStore.getState().loading) set({ loading: false });
+    }, 30_000);
     return null;
   },
 
@@ -255,6 +257,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     let settled = false;
+    let subscription: { unsubscribe: () => void } | null = null;
 
     const finishInit = (user: SupabaseUser | null) => {
       if (settled) return;
@@ -262,35 +265,43 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ user, initialized: true, loading: false });
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const isRealUser = !!(session?.user && !session.user.is_anonymous);
+    try {
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        const isRealUser = !!(session?.user && !session.user.is_anonymous);
 
-      if (event === 'INITIAL_SESSION') {
-        finishInit(isRealUser ? mapUser(session.user) : null);
-        return;
-      }
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (isRealUser) {
-          // Sempre atualiza o usuário — necessário no fluxo PKCE onde
-          // INITIAL_SESSION dispara com null antes da troca do code completar,
-          // marcando settled=true e fazendo finishInit ignorar o SIGNED_IN.
-          settled = true;
-          set({ user: mapUser(session.user!), initialized: true, loading: false });
-        } else if (!settled) {
-          finishInit(null);
+        if (event === 'INITIAL_SESSION') {
+          finishInit(isRealUser ? mapUser(session.user) : null);
+          return;
         }
-        return;
-      }
 
-      if (event === 'SIGNED_OUT') {
-        set({ user: null, loading: false });
-      }
-    });
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (isRealUser) {
+            // Sempre atualiza o usuário — necessário no fluxo PKCE onde
+            // INITIAL_SESSION dispara com null antes da troca do code completar,
+            // marcando settled=true e fazendo finishInit ignorar o SIGNED_IN.
+            settled = true;
+            set({ user: mapUser(session.user!), initialized: true, loading: false });
+          } else {
+            // Sem usuário real: garante que loading seja limpo em qualquer cenário
+            if (!settled) finishInit(null);
+            else set({ loading: false });
+          }
+          return;
+        }
 
-    const user = await resolveUserFromSession({ allowAnonymous: false });
-    finishInit(user);
+        if (event === 'SIGNED_OUT') {
+          set({ user: null, loading: false });
+        }
+      });
+      subscription = data.subscription;
 
-    return () => subscription.unsubscribe();
+      const user = await resolveUserFromSession({ allowAnonymous: false });
+      finishInit(user);
+    } catch {
+      // Qualquer erro na inicialização do auth: desbloqueia o spinner
+      finishInit(null);
+    }
+
+    return () => subscription?.unsubscribe();
   },
 }));

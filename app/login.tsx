@@ -9,6 +9,7 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
+import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { Colors } from '@/constants/colors';
@@ -61,7 +62,7 @@ export default function LoginScreen() {
   const [magicEmail, setMagicEmail] = useState('');
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !window.location) return;
 
     const params = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -84,6 +85,13 @@ export default function LoginScreen() {
 
     if (hasAuthCallback) {
       useAuthStore.setState({ loading: true, authMessage: 'Entrando…' });
+      // Timeout de segurança: se o exchange falhar silenciosamente, o Supabase
+      // não dispara SIGNED_IN e o loading ficaria preso para sempre.
+      setTimeout(() => {
+        if (useAuthStore.getState().loading) {
+          useAuthStore.setState({ loading: false, authMessage: null });
+        }
+      }, 15_000);
     }
   }, []);
 
@@ -258,8 +266,21 @@ export default function LoginScreen() {
             onPress={() => void signInWithGoogle()}
             disabled={loading}
           >
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.googleText}>Entrar com Google</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <View style={styles.googleIconBox}>
+                  <Svg width={20} height={20} viewBox="0 0 48 48">
+                    <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </Svg>
+                </View>
+                <Text style={styles.googleText}>Entrar com Google</Text>
+              </>
+            )}
           </Pressable>
 
           <View style={styles.emailBox}>
@@ -307,13 +328,14 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0612' },
+  container: { flex: 1, backgroundColor: '#0A0612', overflow: 'hidden' },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: 40 },
   orbGlow: {
     position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
+    width: '80%',
+    maxWidth: 400,
+    aspectRatio: 1,
+    borderRadius: 9999,
     backgroundColor: 'rgba(124, 58, 237, 0.08)',
     top: '8%',
     alignSelf: 'center',
@@ -401,16 +423,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
     borderRadius: 16,
     paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
+    minHeight: 52,
+  },
+  googleIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   btnPressed: { opacity: 0.85 },
-  googleIcon: { fontSize: 18, fontWeight: '800', color: '#fff', fontFamily: 'serif' },
   googleText: { fontSize: 16, fontWeight: '600', color: '#fff' },
 
   helpBox: {
