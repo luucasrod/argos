@@ -65,7 +65,10 @@ async function resolveUserFromSession(opts?: { allowAnonymous?: boolean }): Prom
     return mapUser(refreshed.session.user);
   }
 
-  await clearAuthSession();
+  // Não chama clearAuthSession aqui: se houver um OAuth callback em andamento
+  // (ex: redirect do Google com ?code=xxx), o clearAuthSession apagaria a sessão
+  // nova sendo criada pelo PKCE exchange → loop infinito.
+  // A limpeza ocorre em handleSessionExpired quando o chat falha por auth error.
   return null;
 }
 
