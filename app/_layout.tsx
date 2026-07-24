@@ -6,10 +6,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import * as Linking from 'expo-linking';
 import React, { useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { isAuthRequired } from '@/services/auth/config';
+import { supabase, mapUser } from '@/services/auth/supabase';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -103,8 +105,45 @@ function useMicWarmUp() {
   }, []);
 }
 
+// No TWA, o Google OAuth redireciona de volta dentro de um Chrome Custom Tab overlay.
+// O Custom Tab completa a auth e salva a sessão no localStorage (compartilhado com o TWA).
+// Quando o Custom Tab fecha e o TWA volta ao foco, detectamos aqui e atualizamos o store.
+function useOAuthTabResume() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user && !session.user.is_anonymous) {
+        useAuthStore.setState({ user: mapUser(session.user), initialized: true, loading: false });
+      }
+    };
+
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, []);
+}
+
+function useOAuthDeepLink() {
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const handle = async ({ url }: { url: string }) => {
+      if (!url) return;
+      try {
+        await supabase.auth.exchangeCodeForSession(url);
+      } catch {}
+    };
+    const sub = Linking.addEventListener('url', handle);
+    Linking.getInitialURL().then((url) => { if (url) void handle({ url }); });
+    return () => sub.remove();
+  }, []);
+}
+
 export default function RootLayout() {
   useMicWarmUp();
+  useOAuthDeepLink();
+  useOAuthTabResume();
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
