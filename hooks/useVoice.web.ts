@@ -1,5 +1,10 @@
 /**
- * useVoice.web.ts — Web Speech API
+ * useVoice.web.ts — captura própria (getUserMedia + MediaRecorder) + Whisper,
+ * tanto pra escuta ativa quanto pra wake word. Não usa mais o
+ * SpeechRecognition nativo do Safari: além do alcance curto, ele tem um bug
+ * documentado do WebKit em que o reconhecimento degrada depois do primeiro
+ * uso (https://github.com/WebAudio/web-speech-api/issues/96) — não dava pra
+ * corrigir só ajustando timing no nosso código.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAIStore } from '@/stores/useAIStore';
@@ -11,98 +16,63 @@ import {
   waitForMicRelease,
 } from '@/services/voice/voiceSession';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
+import { isMicGranted, requestMicPermission } from '@/services/voice/micPermission';
+import { startCustomCapture, type CaptureHandle } from '@/services/voice/customCapture.web';
+import { startWakeWordDetector, type WakeDetectorHandle } from '@/services/voice/wakeWordDetector.web';
+import { playListenChime } from '@/services/voice/listenChime';
 
 export type { UseVoiceOptions };
 
-interface SRInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: SRResultEvent) => void) | null;
-  onerror: ((e: SRErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-}
-interface SRResultEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-interface SRErrorEvent extends Event {
-  error: string;
-}
-
-function getSpeechRecognitionCtor(): (new () => SRInstance) | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as typeof window & {
-    SpeechRecognition?: new () => SRInstance;
-    webkitSpeechRecognition?: new () => SRInstance;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-async function requestMicPermission(): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-    return true;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((t) => t.stop());
-    return true;
-  } catch {
-    return false;
-  }
+function isCaptureSupported(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
 }
 
 export function useVoice(options?: UseVoiceOptions) {
   const [isListening, setIsListening] = useState(false);
+  const [isWakeListening, setIsWakeListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [wakeWordDetected, setWakeWordDetectedState] = useState(false);
 
   const { setStatus } = useAIStore();
   const { settings } = useSettingsStore();
 
-  const srRef = useRef<SRInstance | null>(null);
-  const modeRef = useRef<'idle' | 'active'>('idle');
+  const captureHandleRef = useRef<CaptureHandle | null>(null);
+  const wakeDetectorRef = useRef<WakeDetectorHandle | null>(null);
+  const modeRef = useRef<'idle' | 'wake' | 'active'>('idle');
   const transcriptRef = useRef('');
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onAutoSendRef = useRef(options?.onAutoSend);
   const startingRef = useRef(false);
   const submittedRef = useRef(false);
+  const autoListenRef = useRef(settings.autoListen);
+  const wakeWordRef = useRef(settings.wakeWord || 'Argos');
   const silenceMs = options?.silenceMs ?? VOICE_SILENCE_MS;
 
   onAutoSendRef.current = options?.onAutoSend;
+  autoListenRef.current = settings.autoListen;
+  wakeWordRef.current = settings.wakeWord || 'Argos';
 
-  const SRCtor = getSpeechRecognitionCtor();
-  const isSupported = SRCtor !== null;
-  const lang = settings.personality.language ?? 'pt-BR';
+  const isSupported = isCaptureSupported();
 
-  const clearSilenceTimer = useCallback(() => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-  }, []);
-
-  const killSR = useCallback(() => {
-    if (srRef.current) {
-      try {
-        srRef.current.abort();
-      } catch {}
-      srRef.current = null;
+  const stopWakeDetector = useCallback(() => {
+    if (wakeDetectorRef.current) {
+      wakeDetectorRef.current.stop();
+      wakeDetectorRef.current = null;
     }
   }, []);
 
   const releaseMic = useCallback(() => {
-    clearSilenceTimer();
-    killSR();
+    if (captureHandleRef.current) {
+      captureHandleRef.current.cancel();
+      captureHandleRef.current = null;
+    }
+    stopWakeDetector();
     modeRef.current = 'idle';
     startingRef.current = false;
     setIsListening(false);
-  }, [clearSilenceTimer, killSR]);
+    setIsWakeListening(false);
+  }, [stopWakeDetector]);
 
   const submitTranscript = useCallback(
     (text: string) => {
@@ -116,118 +86,15 @@ export function useVoice(options?: UseVoiceOptions) {
     []
   );
 
-  const finalizeActiveListening = useCallback(
-    (submit: boolean) => {
-      const text = transcriptRef.current.trim();
-      releaseMic();
-      transcriptRef.current = '';
-      setTranscript('');
-
-      if (submit && text) {
-        submitTranscript(text);
-      } else if (!submit) {
-        setStatus('idle');
-      }
-    },
-    [releaseMic, setStatus, submitTranscript]
-  );
-
-  const scheduleAutoSend = useCallback(() => {
-    if (!onAutoSendRef.current) return;
-    clearSilenceTimer();
-    silenceTimerRef.current = setTimeout(() => {
-      if (modeRef.current !== 'active') return;
-      const text = transcriptRef.current.trim();
-      if (!text) return;
-      finalizeActiveListening(true);
-    }, silenceMs);
-  }, [clearSilenceTimer, finalizeActiveListening, silenceMs]);
-
-  const buildSR = useCallback((): SRInstance | null => {
-    if (!SRCtor) return null;
-    const r = new SRCtor();
-    r.continuous = true;
-    r.interimResults = true;
-    r.lang = lang;
-    r.maxAlternatives = 1;
-    return r;
-  }, [SRCtor, lang]);
-
-  const attachHandlersRef = useRef<(rec: SRInstance) => void>(() => {});
-
-  const restartActiveSession = useCallback(() => {
-    if (modeRef.current !== 'active') return;
-    const rec = buildSR();
-    if (!rec) return;
-    attachHandlersRef.current(rec);
-    srRef.current = rec;
-    try {
-      rec.start();
-    } catch {
-      releaseMic();
-      setStatus('idle');
-    }
-  }, [buildSR, releaseMic, setStatus]);
-
-  const attachHandlers = useCallback(
-    (rec: SRInstance) => {
-      rec.onstart = () => {
-        startingRef.current = false;
-        setIsListening(true);
-        setStatus('listening');
-        setError(null);
-      };
-
-      rec.onresult = (e: SRResultEvent) => {
-        let text = '';
-        for (let i = 0; i < e.results.length; i++) {
-          text += e.results[i][0].transcript;
-        }
-        if (!text.trim()) return;
-        transcriptRef.current = text.trim();
-        setTranscript(text.trim());
-        scheduleAutoSend();
-      };
-
-      rec.onerror = (e: SRErrorEvent) => {
-        if (e.error === 'aborted' || e.error === 'no-speech') return;
-
-        if (e.error === 'audio-capture') {
-          setError('Microfone indisponível. Verifique permissões e tente de novo.');
-        } else if (e.error === 'not-allowed') {
-          setError('Permissão do microfone negada. Libere nas configurações do navegador.');
-        } else {
-          setError('Erro no microfone: ' + e.error);
-        }
-
-        releaseMic();
-        setStatus('idle');
-      };
-
-      rec.onend = () => {
-        if (modeRef.current !== 'active') return;
-
-        const text = transcriptRef.current.trim();
-        if (text) {
-          finalizeActiveListening(true);
-          return;
-        }
-
-        /* Chrome encerra sessões longas — reinicia enquanto o usuário ainda escuta */
-        srRef.current = null;
-        setTimeout(() => restartActiveSession(), 250);
-      };
-    },
-    [finalizeActiveListening, releaseMic, restartActiveSession, scheduleAutoSend, setStatus]
-  );
-
-  attachHandlersRef.current = attachHandlers;
-
+  /*
+   * Escuta ATIVA (depois de tocar no orb ou a wake word disparar): usa
+   * captura própria (getUserMedia + MediaRecorder) transcrita via Whisper —
+   * ver customCapture.web.ts. O SpeechRecognition nativo do Safari tem
+   * alcance de captação muito curto (sem o acesso privilegiado que a Siri
+   * tem ao hardware); aqui dá pra controlar os parâmetros de captura
+   * diretamente, principalmente autoGainControl.
+   */
   const startListening = useCallback(async () => {
-    if (!isSupported) {
-      setError('Reconhecimento de voz não suportado. Use Chrome ou Edge.');
-      return;
-    }
     if (modeRef.current === 'active' || startingRef.current) return;
 
     const aiStatus = useAIStore.getState().status;
@@ -240,51 +107,222 @@ export function useVoice(options?: UseVoiceOptions) {
     releaseMic();
     await waitForMicRelease();
 
-    const micOk = await requestMicPermission();
-    if (!micOk) {
-      startingRef.current = false;
-      setError('Permissão do microfone negada. Libere nas configurações do navegador.');
-      return;
-    }
-
     unlockSpeech();
-
-    modeRef.current = 'active';
     transcriptRef.current = '';
     setTranscript('');
     setError(null);
 
-    const rec = buildSR();
-    if (!rec) {
+    const micGranted = await requestMicPermission();
+    if (!micGranted) {
+      startingRef.current = false;
+      modeRef.current = 'idle';
+      setError('Permissão do microfone negada. Vá em Configurações do navegador para permitir.');
+      setStatus('idle');
+      return;
+    }
+
+    const handle = await startCustomCapture({
+      silenceMs,
+      onTranscript: (text) => {
+        captureHandleRef.current = null;
+        modeRef.current = 'idle';
+        startingRef.current = false;
+        setIsListening(false);
+        const trimmed = text.trim();
+        transcriptRef.current = trimmed;
+        setTranscript(trimmed);
+        if (trimmed) {
+          submitTranscript(trimmed);
+        } else {
+          setStatus('idle');
+        }
+      },
+      onError: (message) => {
+        captureHandleRef.current = null;
+        modeRef.current = 'idle';
+        startingRef.current = false;
+        setIsListening(false);
+        setError(message);
+        setStatus('idle');
+      },
+    });
+
+    if (!handle) {
+      // erro já reportado via onError
       startingRef.current = false;
       modeRef.current = 'idle';
       return;
     }
 
-    attachHandlers(rec);
-    srRef.current = rec;
-
-    try {
-      rec.start();
-    } catch (err) {
-      console.warn('[Argos Voice] falha ao iniciar:', err);
-      startingRef.current = false;
-      modeRef.current = 'idle';
-      setError('Não foi possível acessar o microfone. Tente de novo.');
-    }
-  }, [isSupported, attachHandlers, buildSR, releaseMic]);
+    captureHandleRef.current = handle;
+    modeRef.current = 'active';
+    startingRef.current = false;
+    setIsListening(true);
+    setStatus('listening');
+    playListenChime();
+  }, [releaseMic, silenceMs, setStatus, submitTranscript]);
 
   const stopListening = useCallback(
     (submit = false) => {
-      if (modeRef.current === 'active') {
-        finalizeActiveListening(submit);
+      if (modeRef.current === 'active' && captureHandleRef.current) {
+        if (submit) {
+          // dispara a transcrição — onTranscript acima cuida do resto do estado
+          captureHandleRef.current.stop();
+        } else {
+          captureHandleRef.current.cancel();
+          captureHandleRef.current = null;
+          modeRef.current = 'idle';
+          startingRef.current = false;
+          transcriptRef.current = '';
+          setTranscript('');
+          setIsListening(false);
+          setStatus('idle');
+        }
         return;
       }
       releaseMic();
       setStatus('idle');
     },
-    [finalizeActiveListening, releaseMic, setStatus]
+    [releaseMic, setStatus]
   );
+
+  /*
+   * Wake word: um monitor de volume local (grátis, roda no aparelho) fica de
+   * guarda em segundo plano; só quando detecta volume de fala de verdade é
+   * que grava um pedacinho curto e manda transcrever via Whisper — ver
+   * wakeWordDetector.web.ts. Assim a maior parte do tempo (silêncio
+   * ambiente) não gera nenhuma chamada paga.
+   */
+  const startWakeWordDetection = useCallback(async () => {
+    if (!isSupported || !autoListenRef.current) return;
+    if (modeRef.current !== 'idle' || startingRef.current) return;
+    if (useAIStore.getState().status !== 'idle') return;
+    // Só inicia se permissão já foi concedida — isMicGranted usa o cache
+    // atualizado por requestMicPermission() no primeiro startListening()
+    const granted = await isMicGranted();
+    if (!granted) return;
+
+    modeRef.current = 'wake';
+
+    const handle = await startWakeWordDetector({
+      wakeWord: wakeWordRef.current,
+      onWakeWordDetected: () => {
+        wakeDetectorRef.current = null;
+        modeRef.current = 'idle';
+        setIsWakeListening(false);
+        setWakeWordDetectedState(true);
+        setTimeout(() => setWakeWordDetectedState(false), 1500);
+        void startListening();
+      },
+      onError: () => {
+        wakeDetectorRef.current = null;
+        modeRef.current = 'idle';
+        setIsWakeListening(false);
+      },
+    });
+
+    if (!handle) {
+      modeRef.current = 'idle';
+      return;
+    }
+
+    wakeDetectorRef.current = handle;
+    setIsWakeListening(true);
+  }, [isSupported, startListening]);
+
+  const stopWakeWordDetection = useCallback(() => {
+    if (modeRef.current === 'wake') {
+      releaseMic();
+    }
+  }, [releaseMic]);
+
+  /* Liga/desliga a wake word conforme a config e religa sozinha quando o Argos volta a ficar ocioso. */
+  useEffect(() => {
+    if (!isSupported) return;
+
+    if (!settings.autoListen) {
+      if (modeRef.current === 'wake') releaseMic();
+      return;
+    }
+
+    if (useAIStore.getState().status === 'idle' && modeRef.current === 'idle') {
+      startWakeWordDetection();
+    }
+
+    const unsubscribe = useAIStore.subscribe((state) => {
+      if (!autoListenRef.current) return;
+      if (state.status === 'idle' && modeRef.current === 'idle') {
+        setTimeout(() => {
+          if (
+            modeRef.current === 'idle' &&
+            autoListenRef.current &&
+            useAIStore.getState().status === 'idle'
+          ) {
+            startWakeWordDetection();
+          }
+        }, 400);
+      } else if (state.status !== 'idle' && modeRef.current === 'wake') {
+        releaseMic();
+      }
+    });
+
+    return unsubscribe;
+  }, [isSupported, settings.autoListen, startWakeWordDetection, releaseMic]);
+
+  /* Retoma detecção quando o usuário volta ao app após sair (visibilitychange). */
+  useEffect(() => {
+    if (!isSupported || !settings.autoListen) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        // Página saiu de foco — para o detector para liberar o mic adequadamente
+        if (modeRef.current === 'wake') releaseMic();
+      } else {
+        // Voltou — reinicia após breve delay para o AudioContext se recuperar
+        setTimeout(() => {
+          if (
+            autoListenRef.current &&
+            modeRef.current === 'idle' &&
+            useAIStore.getState().status === 'idle'
+          ) {
+            startWakeWordDetection();
+          }
+        }, 600);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [isSupported, settings.autoListen, startWakeWordDetection, releaseMic]);
+
+  /* Screen Wake Lock — mantém tela ligada enquanto escuta, para o AudioContext não ser suspenso. */
+  useEffect(() => {
+    if (!isSupported || !settings.autoListen) return;
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+
+    let lock: WakeLockSentinel | null = null;
+
+    const acquire = async () => {
+      try {
+        lock = await (navigator as Navigator & { wakeLock: { request: (type: string) => Promise<WakeLockSentinel> } }).wakeLock.request('screen');
+      } catch {
+        // Silently fail — não crítico
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && !lock) void acquire();
+    };
+
+    void acquire();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      lock?.release().catch(() => {});
+      lock = null;
+    };
+  }, [isSupported, settings.autoListen]);
 
   useEffect(() => {
     registerVoicePause(() => {
@@ -304,15 +342,16 @@ export function useVoice(options?: UseVoiceOptions) {
 
   return {
     isListening,
+    isWakeListening,
     transcript,
     error,
     startListening,
     stopListening,
     setTranscript,
     isSupported,
-    startWakeWordDetection: () => {},
-    stopWakeWordDetection: () => releaseMic(),
-    wakeWordDetected: false,
-    setWakeWordDetected: () => {},
+    startWakeWordDetection,
+    stopWakeWordDetection,
+    wakeWordDetected,
+    setWakeWordDetected: setWakeWordDetectedState,
   };
 }

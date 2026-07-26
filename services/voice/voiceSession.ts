@@ -15,6 +15,6 @@ export function pauseVoiceInput() {
   pauseFn?.();
 }
 
-export function waitForMicRelease(ms = 350): Promise<void> {
+export function waitForMicRelease(ms = 120): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

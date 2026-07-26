@@ -24,7 +24,9 @@ import { unlockSpeech } from '@/services/voice/speechUnlock';
 export default function ConversarScreen() {
   const { messages, clearMessages, currentInput, setCurrentInput, setLastInputMode } = useAIStore();
   const { sendMessage, status } = useArgos();
-  const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice();
+  const { isListening, transcript, error: voiceError, startListening, stopListening } = useVoice({
+    onAutoSend: (text) => { setLastInputMode('voice'); sendMessage(text); },
+  });
   const { light, medium } = useHaptic();
   const listRef = useRef<FlatList>(null);
 
@@ -42,16 +44,11 @@ export default function ConversarScreen() {
     light();
     unlockSpeech();
     if (isListening) {
-      stopListening();
-      if (transcript) {
-        setLastInputMode('voice');
-        sendMessage(transcript);
-        setTranscript('');
-      }
+      stopListening(true);
     } else {
       startListening();
     }
-  }, [isListening, transcript, light, stopListening, sendMessage, setTranscript, startListening, setLastInputMode]);
+  }, [isListening, light, stopListening, startListening]);
 
   const statusLabel =
     status === 'idle'
@@ -93,10 +90,16 @@ export default function ConversarScreen() {
             <View style={styles.listeningBanner}>
               <Text style={styles.listeningDot}>●</Text>
               <Text style={styles.listeningText}>
-                {transcript ? `"${transcript}"` : 'Ouvindo...'}
+                {transcript ? `"${transcript}"` : 'Ouvindo... (toque ⏹ para enviar)'}
               </Text>
             </View>
           )}
+
+          {voiceError ? (
+            <View style={styles.voiceErrorBanner}>
+              <Text style={styles.voiceErrorText}>🎙 {voiceError}</Text>
+            </View>
+          ) : null}
 
           <FlatList
             ref={listRef}
@@ -182,6 +185,17 @@ const styles = StyleSheet.create({
   },
   listeningDot: { color: Colors.status.listening, fontSize: 10 },
   listeningText: { color: Colors.status.listening, fontSize: 13, fontStyle: 'italic', flex: 1 },
+  voiceErrorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 4,
+    backgroundColor: 'rgba(220,38,38,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,38,38,0.4)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  voiceErrorText: { color: '#fca5a5', fontSize: 13 },
 
   list: { paddingHorizontal: 16, paddingVertical: 12, flexGrow: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10 },
@@ -190,10 +204,13 @@ const styles = StyleSheet.create({
 
   inputCard: {
     marginHorizontal: 12,
-    marginVertical: 8,
+    marginTop: 8,
+    // A tab bar tem 80px e é absoluta: sem essa margem o campo de mensagem ficava
+    // embaixo dela, impossível de tocar para escrever.
+    marginBottom: Platform.OS === 'web' ? 8 : 88,
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'web' ? 8 : 20,
+    paddingBottom: Platform.OS === 'web' ? 8 : 12,
     gap: 6,
   },
   modeIndicator: {

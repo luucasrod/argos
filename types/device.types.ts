@@ -33,9 +33,8 @@ export interface Device {
   room: string;
   brand: string;
   lastSeen?: Date;
-  source?: 'mock' | 'ewelink' | 'hue' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi';
+  source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi';
   ewelinkDeviceId?: string;
-  hueDeviceId?: string;
   tuyaDeviceId?: string;
   alexaEntityId?: string;
   alexaEntityType?: string;

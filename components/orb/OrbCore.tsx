@@ -130,7 +130,9 @@ function OrbAssembly({
             <View style={styles.orbContent}>
               <Text style={styles.orbTitle}>ARGOS</Text>
               {showHint && status === 'idle' && (
-                <Text style={styles.orbHint}>Toque para falar</Text>
+                <Text style={[styles.orbHint, styles.orbHintIdle]} numberOfLines={2}>
+                  Toque para falar ou chame por Argos
+                </Text>
               )}
               {status === 'listening' && <Text style={styles.orbHint}>Ouvindo...</Text>}
               {status === 'thinking' && <Text style={styles.orbHint}>Pensando...</Text>}
@@ -296,5 +298,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '400',
     letterSpacing: 0.3,
+  },
+  // A dica em repouso é mais longa e precisa caber dentro do círculo do orb.
+  orbHintIdle: {
+    fontSize: 11,
+    textAlign: 'center',
+    maxWidth: ORB_SIZE * 0.78,
+    lineHeight: 14,
   },
 });

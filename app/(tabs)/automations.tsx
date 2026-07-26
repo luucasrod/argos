@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   },
   createInput: {
     color: Colors.text.primary,
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 20,
     minHeight: 88,
     backgroundColor: Colors.glass.light,

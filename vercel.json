@@ -1,4 +1,5 @@
 {
+  "alias": ["argos-blue.vercel.app"],
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "installCommand": "npm install",

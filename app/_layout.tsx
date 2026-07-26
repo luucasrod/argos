@@ -5,9 +5,10 @@ import { Stack, router, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Platform, View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Platform, View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import * as Linking from 'expo-linking';
-import React, { useEffect } from 'react';
+import * as Updates from 'expo-updates';
+import React, { useCallback, useEffect } from 'react';
 import { Colors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { isAuthRequired } from '@/services/auth/config';
@@ -29,10 +30,31 @@ class ErrorBoundary extends React.Component<
 
   render() {
     if (this.state.error) {
+      // Antes esta tela era um beco sem saída: fundo quase preto, texto pequeno e
+      // nenhuma forma de sair — o usuário só podia matar o app. Agora dá pra
+      // tentar de novo ou recarregar o bundle.
       return (
         <View style={errorStyles.container}>
-          <Text style={errorStyles.title}>Argos — erro ao carregar</Text>
+          <Text style={errorStyles.title}>Argos travou</Text>
           <Text style={errorStyles.message}>{this.state.error.message}</Text>
+          <View style={errorStyles.actions}>
+            <TouchableOpacity
+              style={errorStyles.btn}
+              onPress={() => this.setState({ error: null })}
+              activeOpacity={0.8}
+            >
+              <Text style={errorStyles.btnText}>Tentar de novo</Text>
+            </TouchableOpacity>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity
+                style={[errorStyles.btn, errorStyles.btnGhost]}
+                onPress={() => { Updates.reloadAsync().catch(() => {}); }}
+                activeOpacity={0.8}
+              >
+                <Text style={errorStyles.btnText}>Reiniciar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       );
     }
@@ -50,6 +72,19 @@ const errorStyles = StyleSheet.create({
   },
   title: { color: Colors.text.primary, fontSize: 18, fontWeight: '700', marginBottom: 12 },
   message: { color: Colors.status.error, fontSize: 14 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  btn: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  btnGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#7C3AED',
+  },
+  btnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
 
 const rootStyle = Platform.select({
@@ -105,6 +140,21 @@ function useMicWarmUp() {
   }, []);
 }
 
+// Quando o service worker atualiza (nova versão deployada), recarrega a página
+// automaticamente para que o usuário veja a versão nova sem precisar fechar/abrir o app.
+function useSwUpdateReload() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'SW_UPDATED') {
+        window.location.reload();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
+}
+
 // No TWA, o Google OAuth redireciona de volta dentro de um Chrome Custom Tab overlay.
 // O Custom Tab completa a auth e salva a sessão no localStorage (compartilhado com o TWA).
 // Quando o Custom Tab fecha e o TWA volta ao foco, detectamos aqui e atualizamos o store.
@@ -140,8 +190,81 @@ function useOAuthDeepLink() {
   }, []);
 }
 
+function UpdateBanner() {
+  const { isUpdateAvailable, isUpdatePending, isDownloading } = Updates.useUpdates();
+  const appliedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (isUpdateAvailable && !isDownloading) {
+      Updates.fetchUpdateAsync().catch(() => {});
+    }
+  }, [isUpdateAvailable, isDownloading]);
+
+  /*
+   * Aplica a atualização sozinho assim que ela termina de baixar.
+   *
+   * Sem isto o update ficava baixado mas nunca entrava: no Android, reabrir o app
+   * pela lista de recentes NÃO reinicia o bundle JS — o processo continua vivo e
+   * o expo-updates só troca de bundle num cold start de verdade. Dava a impressão
+   * de que a atualização nunca chegava, mesmo já estando no aparelho.
+   */
+  useEffect(() => {
+    if (!isUpdatePending || appliedRef.current) return;
+    appliedRef.current = true;
+    const t = setTimeout(() => {
+      Updates.reloadAsync().catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [isUpdatePending]);
+
+  const restart = useCallback(() => {
+    Updates.reloadAsync().catch(() => {});
+  }, []);
+
+  if (!isDownloading && !isUpdatePending) return null;
+
+  return (
+    <View style={updateStyles.bar}>
+      {isDownloading ? (
+        <View style={updateStyles.row}>
+          <ActivityIndicator size="small" color="#a78bfa" style={{ marginRight: 8 }} />
+          <Text style={updateStyles.text}>Baixando atualização...</Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={updateStyles.row} onPress={restart} activeOpacity={0.8}>
+          <Text style={updateStyles.text}>✓ Atualização pronta — reiniciando...</Text>
+          <View style={updateStyles.btn}>
+            <Text style={updateStyles.btnText}>Reiniciar</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const updateStyles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    bottom: 80,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1e1040',
+    borderWidth: 1,
+    borderColor: '#7C3AED',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    zIndex: 9999,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  text: { color: '#c4b5fd', fontSize: 13, flex: 1 },
+  btn: { backgroundColor: '#7C3AED', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 12, marginLeft: 12 },
+  btnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+});
+
 export default function RootLayout() {
   useMicWarmUp();
+  useSwUpdateReload();
   useOAuthDeepLink();
   useOAuthTabResume();
   return (
@@ -167,6 +290,7 @@ export default function RootLayout() {
               />
             </Stack>
           </AuthGuard>
+          {Platform.OS !== 'web' && <UpdateBanner />}
         </GestureHandlerRootView>
       </SafeAreaProvider>
     </ErrorBoundary>

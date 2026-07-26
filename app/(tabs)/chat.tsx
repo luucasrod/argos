@@ -27,7 +27,9 @@ export default function ChatScreen() {
   const { messages, clearMessages, currentInput, setCurrentInput } = useAIStore();
   const { settings } = useSettingsStore();
   const { sendMessage, status } = useArgos();
-  const { isListening, transcript, startListening, stopListening, setTranscript } = useVoice();
+  const { isListening, transcript, error: voiceError, startListening, stopListening } = useVoice({
+    onAutoSend: (text) => { sendMessage(text); },
+  });
   const { light, medium } = useHaptic();
   const listRef = useRef<FlatList>(null);
 
@@ -44,15 +46,11 @@ export default function ChatScreen() {
     light();
     unlockSpeech();
     if (isListening) {
-      stopListening();
-      if (transcript) {
-        sendMessage(transcript);
-        setTranscript('');
-      }
+      stopListening(true);
     } else {
       startListening();
     }
-  }, [isListening, transcript, light, stopListening, sendMessage, setTranscript, startListening]);
+  }, [isListening, light, stopListening, startListening]);
 
   const statusLabel =
     status === 'idle'
@@ -113,6 +111,12 @@ export default function ChatScreen() {
             <Animated.View entering={FadeInDown} style={styles.liveTranscript}>
               <Text style={styles.liveTranscriptText}>🎙 "{transcript}"</Text>
             </Animated.View>
+          ) : null}
+
+          {voiceError ? (
+            <View style={styles.voiceErrorBanner}>
+              <Text style={styles.voiceErrorText}>🎙 {voiceError}</Text>
+            </View>
           ) : null}
 
           <GlassCard style={styles.inputContainer}>
@@ -177,6 +181,16 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   liveTranscriptText: { color: Colors.text.secondary, fontSize: 14, fontStyle: 'italic' },
+  voiceErrorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: 'rgba(220,38,38,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,38,38,0.5)',
+    borderRadius: 12,
+    padding: 10,
+  },
+  voiceErrorText: { color: '#fca5a5', fontSize: 13 },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -213,7 +227,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: Colors.text.primary,
-    fontSize: 15,
+    fontSize: 16,
     paddingVertical: 8,
     maxHeight: 120,
   },

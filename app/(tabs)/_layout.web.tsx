@@ -17,23 +17,25 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabsLayout() {
   useSupabaseSync();
-  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
+  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
   const insets = useSafeAreaInsets();
   const tabBarBottom = Math.max(insets.bottom, 4);
   const tabContentHeight = 52;
 
   useEffect(() => {
-    syncEwelinkDevices();
-    syncAlexaDevices();
-    syncWizDevices();
-    syncTuyaDevices();
-    syncHueLights();
-    syncTapoDevices();
-    syncXiaomiDevices();
-    syncWizLocalDevices();
-    const interval = setInterval(syncEwelinkDevices, 5000);
+    const syncAll = () => {
+      syncEwelinkDevices();
+      syncAlexaDevices();
+      syncWizDevices();
+      syncTuyaDevices();
+      syncTapoDevices();
+      syncXiaomiDevices();
+      syncWizLocalDevices();
+    };
+    syncAll();
+    const interval = setInterval(syncAll, 10_000);
     return () => clearInterval(interval);
-  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
+  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
 
   return (
     <Tabs

@@ -9,7 +9,7 @@ const RAW_MOCK_DEVICES: Device[] = [
     status: 'offline',
     isOn: false,
     room: 'Sala',
-    brand: 'Philips Hue',
+    brand: 'Philips WiZ',
     lastSeen: new Date(),
     capabilities: [
       { type: 'toggle', property: 'isOn', label: 'Ligar/Desligar' },
@@ -26,7 +26,7 @@ const RAW_MOCK_DEVICES: Device[] = [
     status: 'offline',
     isOn: false,
     room: 'Quarto',
-    brand: 'Philips Hue',
+    brand: 'Philips WiZ',
     lastSeen: new Date(),
     capabilities: [
       { type: 'toggle', property: 'isOn', label: 'Ligar/Desligar' },

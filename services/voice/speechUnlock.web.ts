@@ -40,8 +40,11 @@ export function startSpeechKeepAlive(): () => void {
   return () => clearInterval(id);
 }
 
-/** Uma tentativa de obter vozes (voiceschanged + timeout). */
+/** Uma tentativa de obter vozes (voiceschanged + timeout). Resolve na hora se já tiver vozes. */
 function collectVoicesOnce(synth: SpeechSynthesis, timeoutMs: number): Promise<SpeechSynthesisVoice[]> {
+  const existing = synth.getVoices();
+  if (existing.length > 0) return Promise.resolve(existing);
+
   return new Promise((resolve) => {
     let settled = false;
     const finish = () => {
@@ -56,13 +59,18 @@ function collectVoicesOnce(synth: SpeechSynthesis, timeoutMs: number): Promise<S
       finish();
     };
 
-    synth.getVoices();
     setTimeout(finish, timeoutMs);
   });
 }
 
+/**
+ * Busca rápida de vozes pro caminho comum (toda fala) — resolve na hora se o
+ * sistema já carregou as vozes (caso normal). Sem o loop pesado de `reloadVoices`,
+ * que é só pra um botão explícito nas configurações.
+ */
 export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
-  return reloadVoices();
+  if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve([]);
+  return collectVoicesOnce(window.speechSynthesis, 600);
 }
 
 /**

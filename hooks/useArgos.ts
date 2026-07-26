@@ -105,7 +105,7 @@ export function useArgos() {
   const { settings } = useSettingsStore();
   const { memories, addMemory } = useMemoryStore();
   const { automations, addAutomation } = useAutomationStore();
-  const { devices, toggleDevice, updateDeviceState, syncEwelinkDevices, ewelinkConnected, hueConnected, syncHueLights, tuyaConnected, syncTuyaDevices } = useDeviceStore();
+  const { devices, toggleDevice, updateDeviceState, syncEwelinkDevices, ewelinkConnected, tuyaConnected, syncTuyaDevices } = useDeviceStore();
   const { heavy, success } = useHaptic();
   const processingRef = useRef(false);
 
@@ -143,48 +143,65 @@ export function useArgos() {
         setExecutionSteps(steps);
         setShowExecutionOverlay(true);
 
-        for (let i = 0; i < intent.actions.length; i++) {
-          const action = intent.actions[i];
-          updateExecutionStep(i, 'running');
+        // Cada ação é isolada: se uma falhar, as outras ainda rodam e o passo é
+        // marcado como erro em vez de abortar o laço inteiro (era o que deixava
+        // o overlay preso e o status congelado em 'executing').
+        const stepResults: Array<'success' | 'error'> = [];
 
-          await new Promise((r) => setTimeout(r, 150));
+        try {
+          for (let i = 0; i < intent.actions.length; i++) {
+            const action = intent.actions[i];
+            updateExecutionStep(i, 'running');
 
-          if (action.action === 'toggle') {
-            toggleDevice(action.deviceId);
-          } else if (action.action === 'setOn') {
-            updateDeviceState(action.deviceId, 'isOn', true);
-          } else if (action.action === 'setOff') {
-            updateDeviceState(action.deviceId, 'isOn', false);
-          } else if (action.action === 'setValue') {
-            updateDeviceState(action.deviceId, action.property, action.value);
+            await new Promise((r) => setTimeout(r, 150));
+
+            try {
+              if (action.action === 'toggle') {
+                toggleDevice(action.deviceId);
+              } else if (action.action === 'setOn') {
+                updateDeviceState(action.deviceId, 'isOn', true);
+              } else if (action.action === 'setOff') {
+                updateDeviceState(action.deviceId, 'isOn', false);
+              } else if (action.action === 'setValue') {
+                updateDeviceState(action.deviceId, action.property, action.value);
+              }
+              updateExecutionStep(i, 'success');
+              stepResults.push('success');
+            } catch (err) {
+              if (__DEV__) console.error('[Argos] Falha ao executar ação:', action, err);
+              updateExecutionStep(i, 'error');
+              stepResults.push('error');
+            }
           }
 
-          updateExecutionStep(i, 'success');
+          const anyOk = stepResults.some((s) => s === 'success');
+          if (anyOk) success();
+
+          addMessage({
+            id: assistantMessageId,
+            role: 'assistant',
+            content: anyOk
+              ? intent.text || intent.speech || spoken
+              : 'Não consegui falar com o dispositivo agora. Confira a conexão da integração.',
+            timestamp: new Date(),
+            type: anyOk ? 'action' : 'error',
+            metadata: {
+              executedActions: intent.actions.map((a, idx) => ({
+                id: `exec-${idx}`,
+                label: a.label,
+                status: stepResults[idx] ?? 'error',
+                deviceId: a.deviceId,
+              })),
+            },
+          });
+        } finally {
+          // Sempre libera a UI, mesmo se algo inesperado estourar acima.
+          setTimeout(() => {
+            setShowExecutionOverlay(false);
+            clearExecutionSteps();
+            setStatus('idle');
+          }, 900);
         }
-
-        success();
-
-        addMessage({
-          id: assistantMessageId,
-          role: 'assistant',
-          content: intent.text || intent.speech || spoken,
-          timestamp: new Date(),
-          type: 'action',
-          metadata: {
-            executedActions: intent.actions.map((a, idx) => ({
-              id: `exec-${idx}`,
-              label: a.label,
-              status: 'success',
-              deviceId: a.deviceId,
-            })),
-          },
-        });
-
-        setTimeout(() => {
-          setShowExecutionOverlay(false);
-          clearExecutionSteps();
-          setStatus('idle');
-        }, 900);
 
       } else if (intent.type === 'automation' && intent.automation) {
         setStatus('executing');
@@ -492,6 +509,22 @@ export function useArgos() {
           } else {
             await processIntent(fastIntent);
           }
+        } catch (err) {
+          // Sem este catch, uma exceção aqui escapava de sendMessage e deixava o
+          // status preso em 'executing' — e como sendMessage retorna cedo quando
+          // status === 'executing', o app parava de responder a qualquer comando.
+          if (__DEV__) console.error('[Argos] Falha no comando direto:', err);
+          setShowExecutionOverlay(false);
+          clearExecutionSteps();
+          setStatus('error');
+          addMessage({
+            id: `msg-${Date.now()}-error`,
+            role: 'assistant',
+            content: 'Não consegui executar esse comando agora. Tente de novo.',
+            timestamp: new Date(),
+            type: 'error',
+          });
+          setTimeout(() => setStatus('idle'), 2000);
         } finally {
           processingRef.current = false;
         }
@@ -526,9 +559,6 @@ export function useArgos() {
         // antigo guardado localmente (ex.: dizer "já está desligada" estando ligada).
         if (ewelinkConnected) {
           await syncEwelinkDevices();
-        }
-        if (hueConnected) {
-          await syncHueLights();
         }
         if (tuyaConnected) {
           await syncTuyaDevices();
@@ -600,6 +630,9 @@ export function useArgos() {
         if (__DEV__) {
           console.error('[Argos] Falha ao falar com a IA:', err);
         }
+        // O overlay de execução não era limpo aqui — ficava preso na tela pra sempre.
+        setShowExecutionOverlay(false);
+        clearExecutionSteps();
         const content = getApiErrorMessage(err);
         const speech = getSpeechErrorMessage(err, content);
         try {
@@ -643,6 +676,8 @@ export function useArgos() {
       heavy,
       processIntent,
       setConfirmationRequest,
+      setShowExecutionOverlay,
+      clearExecutionSteps,
       speak,
     ]
   );

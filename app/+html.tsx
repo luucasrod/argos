@@ -9,8 +9,9 @@ export default function Root({ children }: PropsWithChildren) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
         />
+        <meta name="format-detection" content="telephone=no" />
 
         {/* ─── PWA ─── */}
         <link rel="manifest" href="/manifest.json" />
@@ -41,10 +42,14 @@ export default function Root({ children }: PropsWithChildren) {
               html, body {
                 height: 100%;
                 width: 100%;
+                max-width: 100%;
                 margin: 0;
                 padding: 0;
                 background-color: #050810 !important;
                 overscroll-behavior: none;
+                overflow-x: hidden;
+                -webkit-text-size-adjust: 100%;
+                touch-action: manipulation;
               }
               body { overflow: hidden; }
               #root {
@@ -52,7 +57,12 @@ export default function Root({ children }: PropsWithChildren) {
                 flex: 1;
                 min-height: 100%;
                 width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
                 background-color: #050810 !important;
+              }
+              input, textarea, select {
+                font-size: 16px !important;
               }
             `,
           }}

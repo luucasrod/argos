@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,17 +28,17 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { useArgos } from '@/hooks/useArgos';
 import { useAIStore } from '@/stores/useAIStore';
 import { useMemoryStore } from '@/stores/useMemoryStore';
-import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useVoice } from '@/hooks/useVoice';
 import { useHaptic } from '@/hooks/useHaptic';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
+import { handleInsightPress } from '@/services/insights/handleInsightPress';
 
 export default function HomeScreen() {
   const { sendMessage, status } = useArgos();
   const { showExecutionOverlay, executionSteps } = useAIStore();
-  const { getActiveInsights } = useMemoryStore();
-  const { automations } = useAutomationStore();
+  const { getActiveInsights, dismissInsight } = useMemoryStore();
   const handleVoiceSend = useCallback(
     (text: string) => {
       sendMessage(text);
@@ -46,17 +46,65 @@ export default function HomeScreen() {
     [sendMessage]
   );
 
-  const { isListening, transcript, startListening, stopListening } = useVoice({
+  const { isListening, transcript, error: voiceError, startListening, stopListening, isWakeListening, startWakeWordDetection, stopWakeWordDetection, isSupported } = useVoice({
     onAutoSend: handleVoiceSend,
   });
   const { light, medium } = useHaptic();
+  const { settings, updateSettings } = useSettingsStore();
 
   const [textInput, setTextInput] = useState('');
   const [isInputFocused, setInputFocused] = useState(false);
+  const [micPromptDismissed, setMicPromptDismissed] = useState(false);
+  const activatingRef = useRef(false);
+
+  // Mostra o prompt de ativar escuta apenas na web, quando autoListen está on mas wake word não iniciou
+  const showMicPrompt =
+    Platform.OS === 'web' &&
+    isSupported &&
+    settings.autoListen &&
+    !isWakeListening &&
+    !isListening &&
+    status === 'idle' &&
+    !micPromptDismissed;
+
+  // Esconde o prompt assim que o wake word ativar
+  useEffect(() => {
+    if (isWakeListening) setMicPromptDismissed(true);
+  }, [isWakeListening]);
+
+  /*
+   * No nativo, sobe a escuta contínua já na abertura do app: pede a permissão de
+   * microfone uma única vez e a partir daí o Argos fica ouvindo a wake word pelo
+   * foreground service, sem precisar tocar no orb. Antes isso só acontecia depois
+   * do primeiro toque, o que derrotava o propósito da escuta contínua.
+   */
+  const bootstrappedRef = useRef(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (bootstrappedRef.current) return;
+    if (!settings.autoListen) return;
+    bootstrappedRef.current = true;
+    void startWakeWordDetection();
+  }, [settings.autoListen, startWakeWordDetection]);
+
+  const handleActivateVoice = useCallback(async () => {
+    if (activatingRef.current) return;
+    activatingRef.current = true;
+    light();
+    try {
+      const { requestMicPermission } = await import('@/services/voice/micPermission');
+      const granted = await requestMicPermission();
+      if (granted) {
+        void startWakeWordDetection();
+      } else {
+        setMicPromptDismissed(true); // permissão negada, esconde o prompt
+      }
+    } finally {
+      activatingRef.current = false;
+    }
+  }, [light, startWakeWordDetection]);
 
   const activeInsights = getActiveInsights();
-  const recentAutomations = automations.filter((a) => a.runCount > 0).slice(0, 3);
-  const hasBottomPanel = activeInsights.length > 0 || recentAutomations.length > 0;
 
   const handleOrbPress = useCallback(() => {
     light();
@@ -113,7 +161,7 @@ export default function HomeScreen() {
               </Animated.View>
             </View>
 
-            <View style={styles.orbArea}>
+            <View style={styles.bottomStack}>
               {showExecutionOverlay && executionSteps.length > 0 && (
                 <Animated.View entering={enter.slide} style={styles.executionContainer}>
                   <GlassCard style={styles.executionCard} borderColor={Colors.glass.borderAccent}>
@@ -160,79 +208,97 @@ export default function HomeScreen() {
                   }}
                 />
                 <OrbStatus status={isListening ? 'listening' : status} />
+                {showMicPrompt && (
+                  <Pressable onPress={handleActivateVoice} style={styles.micPrompt}>
+                    <Text style={styles.micPromptText}>🎤 Toque para ativar escuta contínua</Text>
+                  </Pressable>
+                )}
                 {isListening && transcript ? (
                   <Animated.Text entering={enter.downPlain} style={styles.transcriptText}>
                     "{transcript}"
                   </Animated.Text>
                 ) : null}
+                {isListening ? (
+                  <View style={styles.listenActions}>
+                    <Pressable
+                      onPress={() => { light(); stopListening(true); }}
+                      style={[styles.listenBtn, styles.listenBtnSend]}
+                    >
+                      <Text style={styles.listenBtnText}>✓ Enviar agora</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { light(); stopListening(false); }}
+                      style={styles.listenBtn}
+                    >
+                      <Text style={styles.listenBtnText}>✕ Cancelar</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {Platform.OS !== 'web' && !isListening && status === 'idle' ? (
+                  <Pressable
+                    onPress={() => {
+                      light();
+                      if (isWakeListening) {
+                        updateSettings({ autoListen: false });
+                        void stopWakeWordDetection();
+                      } else {
+                        updateSettings({ autoListen: true });
+                        void startWakeWordDetection();
+                      }
+                    }}
+                    style={[styles.wakeToggle, isWakeListening && styles.wakeToggleOn]}
+                  >
+                    <Text style={[styles.wakeHint, isWakeListening && styles.wakeHintOn]}>
+                      {isWakeListening
+                        ? `🎧 Ouvindo — diga “${settings.wakeWord || 'Argos'}” (toque para parar)`
+                        : '🎧 Ativar escuta contínua'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {voiceError ? (
+                  <Text style={styles.voiceError}>🎙 {voiceError}</Text>
+                ) : null}
+              </Animated.View>
+
+              {activeInsights.length > 0 && (
+                <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
+                  <Text style={styles.sectionTitle}>Insights</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {activeInsights.map((insight) => (
+                      <Pressable
+                        key={insight.id}
+                        onPress={() => handleInsightPress(insight, handleSuggestion, dismissInsight)}
+                      >
+                        <GlassCard style={styles.insightCard}>
+                          <Text style={styles.insightText} numberOfLines={2}>
+                            {insight.message}
+                          </Text>
+                          {insight.suggestion ? (
+                            <Text style={styles.insightSuggestion} numberOfLines={1}>
+                              {insight.suggestion} →
+                            </Text>
+                          ) : null}
+                        </GlassCard>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </Animated.View>
+              )}
+
+              <Animated.View entering={enter.down(150)} style={styles.suggestionsSection}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {HOME_SUGGESTIONS.map((suggestion) => (
+                    <Pressable
+                      key={suggestion.label}
+                      onPress={() => handleSuggestion(suggestion.message)}
+                      style={styles.suggestionPill}
+                    >
+                      <Text style={styles.suggestionText}>{suggestion.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </Animated.View>
             </View>
-
-            <Animated.View entering={enter.down(150)} style={styles.suggestionsSection}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {HOME_SUGGESTIONS.map((suggestion) => (
-                  <Pressable
-                    key={suggestion.label}
-                    onPress={() => handleSuggestion(suggestion.message)}
-                    style={styles.suggestionPill}
-                  >
-                    <Text style={styles.suggestionText}>{suggestion.label}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </Animated.View>
-
-            {hasBottomPanel ? (
-              <View style={styles.bottomPanel}>
-                {activeInsights.length > 0 && (
-                  <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
-                    <Text style={styles.sectionTitle}>Insights</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {activeInsights.map((insight) => (
-                        <Pressable
-                          key={insight.id}
-                          onPress={() => insight.suggestion && handleSuggestion(insight.suggestion)}
-                        >
-                          <GlassCard style={styles.insightCard}>
-                            <Text style={styles.insightText} numberOfLines={3}>
-                              {insight.message}
-                            </Text>
-                            {insight.suggestion ? (
-                              <Text style={styles.insightSuggestion} numberOfLines={1}>
-                                {insight.suggestion} →
-                              </Text>
-                            ) : null}
-                          </GlassCard>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </Animated.View>
-                )}
-
-                {recentAutomations.length > 0 && (
-                  <Animated.View entering={enter.down(400)} style={styles.quickActions}>
-                    <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-                    <View style={styles.quickActionsGrid}>
-                      {recentAutomations.map((auto) => (
-                        <Pressable
-                          key={auto.id}
-                          style={styles.quickActionButton}
-                          onPress={() => handleSuggestion(auto.name)}
-                        >
-                          <GlassCard style={styles.quickActionCard}>
-                            <Text style={styles.quickActionEmoji}>{auto.emoji}</Text>
-                            <Text style={styles.quickActionName} numberOfLines={2}>
-                              {auto.name}
-                            </Text>
-                            <Text style={styles.quickActionCount}>{auto.runCount}x</Text>
-                          </GlassCard>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </Animated.View>
-                )}
-              </View>
-            ) : null}
           </View>
 
           <Animated.View entering={enter.up(300)} style={styles.inputContainer}>
@@ -290,11 +356,7 @@ const styles = StyleSheet.create({
   },
   memoryButtonText: { fontSize: 20 },
   suggestionsSection: {
-    flexShrink: 0,
-    paddingLeft: 24,
-    paddingTop: 4,
-    paddingBottom: 10,
-    backgroundColor: Colors.bg.primary,
+    width: '100%',
   },
   suggestionPill: {
     backgroundColor: 'rgba(124, 58, 237, 0.12)',
@@ -305,20 +367,33 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginRight: 10,
   },
-  suggestionText: { color: '#C4B5FD', fontSize: 14, fontWeight: '500' },
-  orbArea: {
+  suggestionText: { color: '#C4B5FD', fontSize: 13, fontWeight: '500' },
+  bottomStack: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingHorizontal: 24,
-    minHeight: 200,
-    overflow: 'hidden',
-    backgroundColor: Colors.bg.primary,
+    paddingBottom: 4,
+    gap: 10,
   },
   orbContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+  },
+  micPrompt: {
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.4)',
+  },
+  micPromptText: {
+    color: '#C4B5FD',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   transcriptText: {
     marginTop: 12,
@@ -327,6 +402,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 32,
     fontStyle: 'italic',
+  },
+  listenActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  listenBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.45)',
+    backgroundColor: 'rgba(124, 58, 237, 0.12)',
+  },
+  listenBtnSend: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  listenBtnText: { color: '#EDE9FE', fontSize: 13, fontWeight: '600' },
+  wakeToggle: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  wakeToggleOn: {
+    borderColor: 'rgba(134, 239, 172, 0.45)',
+    backgroundColor: 'rgba(134, 239, 172, 0.10)',
+  },
+  wakeHint: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    textAlign: 'center',
+    letterSpacing: 0.2,
+  },
+  wakeHintOn: { color: '#86efac', fontSize: 12 },
+  voiceError: {
+    marginTop: 10,
+    color: '#fca5a5',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
   executionContainer: { width: '100%', marginBottom: 12 },
   executionCard: { padding: 16, gap: 10 },
@@ -341,16 +460,7 @@ const styles = StyleSheet.create({
   executionStep: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   executionStepIcon: { fontSize: 16 },
   executionStepLabel: { fontSize: 14, flex: 1 },
-  bottomPanel: {
-    flexShrink: 0,
-    backgroundColor: Colors.bg.primary,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.06)',
-    paddingTop: 12,
-    zIndex: 10,
-    elevation: 10,
-  },
-  insightsSection: { paddingLeft: 24, paddingBottom: 12 },
+  insightsSection: { width: '100%' },
   sectionTitle: {
     color: 'rgba(255, 255, 255, 0.35)',
     fontSize: 11,
@@ -360,36 +470,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingRight: 24,
   },
-  insightCard: { padding: 14, marginRight: 12, width: 220, minHeight: 88, gap: 6 },
-  insightText: { color: Colors.text.primary, fontSize: 14, lineHeight: 20 },
-  insightSuggestion: { color: '#A78BFA', fontSize: 13, fontWeight: '500' },
-  quickActions: { paddingHorizontal: 24, paddingBottom: 12 },
-  quickActionsGrid: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
-  quickActionButton: { flex: 1, minWidth: 0 },
-  quickActionCard: {
-    flex: 1,
-    height: 100,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  quickActionEmoji: { fontSize: 22, lineHeight: 28, height: 28 },
-  quickActionName: {
-    color: Colors.text.primary,
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 14,
-    width: '100%',
-  },
-  quickActionCount: { color: Colors.text.muted, fontSize: 10 },
+  insightCard: { padding: 12, marginRight: 10, width: 200, minHeight: 72, gap: 4 },
+  insightText: { color: Colors.text.primary, fontSize: 13, lineHeight: 18 },
+  insightSuggestion: { color: '#A78BFA', fontSize: 12, fontWeight: '500' },
   inputContainer: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'web' ? 32 : 96,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'web' ? 4 : 88,
     backgroundColor: Colors.bg.primary,
-    zIndex: 11,
-    elevation: 11,
+    flexShrink: 0,
   },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },

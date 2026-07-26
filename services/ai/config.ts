@@ -29,5 +29,5 @@ export function resolveAnthropicModel(model: string | undefined): AnthropicModel
   if (model && MODEL_IDS.has(model)) {
     return model as AnthropicModelId;
   }
-  return ANTHROPIC_MODELS.sonnet;
+  return ANTHROPIC_MODELS.haiku;
 }

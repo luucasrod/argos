@@ -24,20 +24,22 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabsLayout() {
   useSupabaseSync();
-  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
+  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
 
   useEffect(() => {
-    syncEwelinkDevices();
-    syncAlexaDevices();
-    syncWizDevices();
-    syncTuyaDevices();
-    syncHueLights();
-    syncTapoDevices();
-    syncXiaomiDevices();
-    syncWizLocalDevices();
-    const interval = setInterval(syncEwelinkDevices, 5000);
+    const syncAll = () => {
+      syncEwelinkDevices();
+      syncAlexaDevices();
+      syncWizDevices();
+      syncTuyaDevices();
+      syncTapoDevices();
+      syncXiaomiDevices();
+      syncWizLocalDevices();
+    };
+    syncAll();
+    const interval = setInterval(syncAll, 10_000);
     return () => clearInterval(interval);
-  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncHueLights, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
+  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
 
   return (
     <Tabs
@@ -97,9 +99,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderTopWidth: 1,
     borderTopColor: Colors.glass.border,
-    backgroundColor: Platform.OS === 'web' ? Colors.bg.elevated : 'transparent',
+    // Era 'transparent' no nativo e o tabBarBackground só era fornecido no iOS —
+    // no Android a barra ficava sem fundo algum e o conteúdo das telas passava
+    // atrás dos ícones (inclusive o campo de mensagem, que ficava inalcançável).
+    backgroundColor: '#000000',
     height: 80,
     paddingBottom: 20,
+    // Garante que a barra é a última camada, acima de qualquer conteúdo.
+    zIndex: 100,
+    elevation: 24,
   },
   tabIcon: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 24 },
   tabIconFocused: { backgroundColor: Colors.glass.medium },

@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   title: { color: Colors.text.primary, fontSize: 22, fontWeight: '700' },
   close: { color: Colors.text.secondary, fontSize: 20 },
   card: { padding: 16, gap: 16 },
-  input: { color: Colors.text.primary, minHeight: 100, fontSize: 15 },
+  input: { color: Colors.text.primary, minHeight: 100, fontSize: 16 },
   button: { backgroundColor: Colors.accent.primary, borderRadius: 12, padding: 14, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
 });

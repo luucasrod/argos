@@ -1,6 +1,7 @@
 import { getAccessToken } from '@/services/auth/session';
+import { API_BASE } from '@/constants/api';
 
-const BASE = '/api/wiz';
+const BASE = `${API_BASE}/api/wiz`;
 
 async function authHeaders(): Promise<HeadersInit> {
   const token = await getAccessToken();

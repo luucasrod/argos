@@ -9,6 +9,8 @@ import { useMemoryStore } from '@/stores/useMemoryStore';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
 import { Memory, MemoryCategory } from '@/types/memory.types';
+import { handleInsightPress } from '@/services/insights/handleInsightPress';
+import { useArgos } from '@/hooks/useArgos';
 
 const CATEGORY_CONFIG: Record<
   MemoryCategory,
@@ -24,6 +26,7 @@ const CATEGORY_CONFIG: Record<
 
 export default function MemoryScreen() {
   const { memories, deleteMemory, dismissInsight, getActiveInsights } = useMemoryStore();
+  const { sendMessage } = useArgos();
   const activeInsights = getActiveInsights();
 
   const groupedMemories = memories.reduce(
@@ -63,7 +66,11 @@ export default function MemoryScreen() {
                     </Pressable>
                   </View>
                   {insight.suggestion ? (
-                    <Text style={styles.insightSuggestion}>{insight.suggestion}</Text>
+                    <Pressable
+                      onPress={() => handleInsightPress(insight, sendMessage, dismissInsight)}
+                    >
+                      <Text style={styles.insightSuggestion}>{insight.suggestion} →</Text>
+                    </Pressable>
                   ) : null}
                   <View style={styles.confidenceBar}>
                     <View

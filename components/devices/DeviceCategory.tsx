@@ -8,6 +8,7 @@ const LABELS: Record<DeviceCategoryType | 'all', string> = {
   lights: '💡 Luzes',
   tv: '📺 TV',
   ac: '❄️ Ar-condicionado',
+  fans: '🌀 Ventiladores',
   outlets: '🔌 Tomadas',
   cameras: '📷 Câmeras',
   sensors: '📡 Sensores',

@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 const APP_ID = process.env.EWELINK_APP_ID ?? '';
 const APP_SECRET = process.env.EWELINK_APP_SECRET ?? '';
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://qzoknfwfvdqcnbsirwlf.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6b2tuZndmdmRxY25ic2lyd2xmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NTYwOTUsImV4cCI6MjA5NjQzMjA5NX0.hanMyLtz-1kBLUoaqz9v9bzQ6Tr0PkXU6FYqQrsyXEY';
 
 export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

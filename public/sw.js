@@ -4,7 +4,7 @@
  * Fallback offline quando sem conexão.
  */
 
-const CACHE_NAME = 'argos-cache-v13';
+const CACHE_NAME = 'argos-cache-v15';
 const OFFLINE_URL = '/offline.html';
 const SHELL_URL = '/';
 
@@ -22,14 +22,13 @@ self.addEventListener('install', (event) => {
 
 /* ─── ACTIVATE ─── */
 self.addEventListener('activate', (event) => {
-  // Remove caches antigos
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((clients) => clients.forEach((c) => c.postMessage({ type: 'SW_UPDATED' })))
   );
-  // Assume controle imediato de todos os clientes
-  self.clients.claim();
 });
 
 /* ─── FETCH ─── */

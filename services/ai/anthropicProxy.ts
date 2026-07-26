@@ -27,7 +27,8 @@ async function callChatApi(params: MessageParams, token?: string): Promise<Messa
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch('/api/chat', {
+  const { API_BASE } = await import('@/constants/api');
+  const response = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
     headers,
     body: JSON.stringify(params),

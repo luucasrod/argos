@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { Settings, UserProfile } from '@/types/settings.types';
 import { AIPersonality } from '@/types/ai.types';
 import { ANTHROPIC_MODELS, resolveAnthropicModel } from '@/services/ai/config';
@@ -25,7 +26,10 @@ const defaultSettings: Settings = {
   wakeWord: 'Ei Argos',
   voiceLanguage: 'pt-BR',
   voiceSensitivity: 0.7,
-  autoListen: true,
+  // Escuta contínua ligada por padrão nas duas plataformas — é a função
+  // principal do Argos. No nativo o padrão era false, então instalação nova
+  // nunca subia o serviço de background (ver migração v6).
+  autoListen: Platform.OS === 'web',
   processLocally: false,
   saveHistory: true,
   historyDays: 30,
@@ -69,7 +73,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'argos-settings',
-      version: 5,
+      version: 7,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const data = persisted as { settings?: Settings & { apiKey?: string } };
@@ -83,11 +87,24 @@ export const useSettingsStore = create<SettingsStore>()(
           // v5: ativa a wake word e troca o modelo padrão pra Haiku (resposta mais
           // rápida) — sobrescreve o valor antigo já que ninguém configurou isso à mão.
           const upgradingPastV4 = version < 5;
+          // v6: no nativo o padrão de autoListen era false, então quem instalou o
+          // APK ficou sem escuta contínua sem nunca ter escolhido isso. Força true
+          // uma vez para o serviço de background subir na abertura.
+          const upgradingPastV5 = version < 6;
+          // v7: desliga a escuta contínua no nativo. A implementação em JS
+          // (Whisper na nuvem a cada checagem) tem latência de segundos e dispara
+          // falso positivo, então o app abrindo já ouvindo só incomodava. Volta a
+          // ligar quando o detector nativo de wake word estiver no lugar.
+          const upgradingPastV6 = version < 7;
           data.settings = {
             ...defaultSettings,
             ...rest,
             model: upgradingPastV4 ? ANTHROPIC_MODELS.haiku : resolveAnthropicModel(rest.model),
-            autoListen: upgradingPastV4 ? true : rest.autoListen ?? defaultSettings.autoListen,
+            autoListen: upgradingPastV6
+              ? Platform.OS === 'web'
+              : upgradingPastV5
+                ? true
+                : rest.autoListen ?? defaultSettings.autoListen,
             autonomyLevel: rest.autonomyLevel ?? 'autonomous',
             userProfile: rest.userProfile ?? {},
             personality,

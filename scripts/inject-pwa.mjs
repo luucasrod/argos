@@ -29,19 +29,44 @@ const headTags = `
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/icon.png" />
 `;
 
-/* ─── Script de registro do Service Worker ─── */
+/* ─── Script de registro do Service Worker ───
+ * No iOS, "fechar" o PWA pela tela de início normalmente só suspende o
+ * processo — reabrir não garante um recarregamento de verdade, então o app
+ * pode continuar rodando o JS antigo por dias mesmo com deploys novos no ar.
+ * Pra compensar: sempre que o app volta ao primeiro plano, força uma checagem
+ * de atualização do Service Worker, e recarrega sozinho assim que uma versão
+ * nova assume o controle da página.
+ */
 const swScript = `
 <script>
   if ('serviceWorker' in navigator) {
+    var swReg = null;
+    var reloadedForUpdate = false;
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloadedForUpdate) return;
+      reloadedForUpdate = true;
+      window.location.reload();
+    });
+
     window.addEventListener('load', function () {
       navigator.serviceWorker
         .register('/sw.js', { scope: '/' })
         .then(function (reg) {
           console.log('[Argos SW] Registrado:', reg.scope);
+          swReg = reg;
         })
         .catch(function (err) {
           console.warn('[Argos SW] Falha ao registrar:', err);
         });
+    });
+
+    // iOS suspende o PWA em vez de fechar de verdade — checa por update toda
+    // vez que a aba/app volta a ficar visível (reabrir do ícone dispara isso).
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && swReg) {
+        swReg.update().catch(function () {});
+      }
     });
   }
 </script>
@@ -54,6 +79,12 @@ html = html.replace(/(<html\s[^>]*lang=")[^"]*(")/i, '$1pt-BR$2');
 html = html.replace(
   /<meta\s+name="theme-color"\s+content="[^"]*"\s*\/?>/i,
   '<meta name="theme-color" content="#7C3AED" />'
+);
+
+// 2b. Viewport fixo — evita zoom e barras laterais no mobile/PWA
+html = html.replace(
+  /<meta\s+name="viewport"\s+content="[^"]*"\s*\/?>/i,
+  '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />'
 );
 
 // 3. Injeta tags PWA antes de </head>

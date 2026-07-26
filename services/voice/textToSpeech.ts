@@ -1,17 +1,30 @@
 import * as Speech from 'expo-speech';
 import { AIPersonality } from '@/types/ai.types';
 import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
+import { stripEmojis } from '@/services/voice/speechText';
 
-async function getVoices() {
-  try {
-    return await Speech.getAvailableVoicesAsync();
-  } catch {
-    return [];
+// getAvailableVoicesAsync() no Android leva segundos e a lista não muda durante a
+// sessão. Sem este cache, cada fala pagava esse custo antes de começar a falar.
+type VoiceList = Awaited<ReturnType<typeof Speech.getAvailableVoicesAsync>>;
+
+let voicesCache: VoiceList | null = null;
+let voicesPromise: Promise<VoiceList> | null = null;
+
+async function getVoices(): Promise<VoiceList> {
+  if (voicesCache) return voicesCache;
+  if (!voicesPromise) {
+    voicesPromise = Speech.getAvailableVoicesAsync()
+      .then((v) => {
+        voicesCache = v;
+        return v;
+      })
+      .catch((): VoiceList => []);
   }
+  return voicesPromise;
 }
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
-  const spoken = text?.trim();
+  const spoken = stripEmojis(text?.trim() ?? '');
   if (!spoken) return;
 
   Speech.stop();
@@ -22,19 +35,60 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
   const pitch = pitchForUtterance(selected ?? null, personality.voiceGender);
 
   return new Promise((resolve) => {
+    // O expo-speech no Android não garante onDone/onError: se o motor de TTS não
+    // estiver instalado, ou a voz/idioma pedido não existir, ele pode não chamar
+    // callback nenhum. Sem este teto, a promise nunca resolvia e travava todo o
+    // fluxo do Argos (o speak() é aguardado antes de executar ações).
+    let settled = false;
+    let guard: ReturnType<typeof setTimeout>;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      resolve();
+    };
+
+    /*
+     * O guard existe só para o caso de onDone/onError nunca chegarem. Antes ele
+     * chamava Speech.stop(), o que TRUNCAVA a frase no meio quando a estimativa
+     * de duração era curta. Agora ele consulta se ainda está falando e reagenda —
+     * nunca interrompe. Sem teto fixo: quem manda é o próprio motor de TTS.
+     */
+    const armGuard = (ms: number) => {
+      guard = setTimeout(() => {
+        if (settled) return;
+        Speech.isSpeakingAsync()
+          .then((speaking) => {
+            if (speaking) armGuard(2000);
+            else finish();
+          })
+          .catch(() => finish());
+      }, ms);
+    };
+
+    // ~10 caracteres por segundo em pt-BR, com folga generosa.
+    const estimatedMs = (spoken.length / 10) * 1000 * (1 / Math.max(0.5, rate));
+    armGuard(Math.max(5000, estimatedMs + 4000));
+
     const options: Speech.SpeechOptions = {
       language: personality.language,
       pitch,
       rate,
-      onDone: resolve,
-      onError: () => resolve(),
+      onDone: finish,
+      onError: finish,
+      onStopped: finish,
     };
 
     if (selected?.identifier) {
       options.voice = selected.identifier;
     }
 
-    Speech.speak(spoken, options);
+    try {
+      Speech.speak(spoken, options);
+    } catch {
+      finish();
+    }
   });
 }
 

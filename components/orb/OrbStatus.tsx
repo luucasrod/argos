@@ -5,6 +5,7 @@ import { AIStatus } from '@/types/ai.types';
 
 interface OrbStatusProps {
   status: AIStatus;
+  compact?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -55,7 +56,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export function OrbStatus({ status }: OrbStatusProps) {
+export function OrbStatus({ status, compact }: OrbStatusProps) {
   const config = STATUS_CONFIG[status];
 
   const Wrapper = Platform.OS === 'web' ? View : Animated.View;
@@ -70,7 +71,7 @@ export function OrbStatus({ status }: OrbStatusProps) {
       : {};
 
   return (
-    <Wrapper {...animProps} style={styles.container}>
+    <Wrapper {...animProps} style={[styles.container, compact && styles.containerCompact]}>
       <View
         style={[
           styles.dot,
@@ -92,6 +93,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginTop: 20,
+  },
+  containerCompact: {
+    marginTop: 10,
   },
   dot: {
     width: 8,

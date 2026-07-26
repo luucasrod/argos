@@ -27,6 +27,7 @@ import { VOICE_SPEED_OPTIONS } from '@/constants/voice';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 import { VoiceInstallHelp } from '@/components/settings/VoiceInstallHelp';
+import Constants from 'expo-constants';
 
 function SectionLabel({ title }: { title: string }) {
   return <Text style={styles.sectionLabel}>{title}</Text>;
@@ -392,6 +393,10 @@ export default function PerfilScreen() {
             </Pressable>
           </GlassCard>
 
+          <Text style={styles.buildLabel}>
+            Argos · atualizado {Constants.expoConfig?.extra?.buildTime ?? '—'}
+          </Text>
+
           <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
@@ -405,7 +410,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingVertical: 14 },
   title: { color: Colors.text.primary, fontSize: 24, fontWeight: '800' },
   subtitle: { color: Colors.text.muted, fontSize: 13, marginTop: 3 },
-  scroll: { paddingHorizontal: 16, paddingBottom: 60, gap: 4 },
+  scroll: { paddingHorizontal: 16, paddingBottom: 110, gap: 4 },
 
   sectionLabel: {
     color: Colors.text.muted,
@@ -486,4 +491,11 @@ const styles = StyleSheet.create({
   statLabel: { color: Colors.text.muted, fontSize: 12, marginTop: 4 },
   dangerBtn: { paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center' },
   dangerText: { color: Colors.status.error, fontSize: 14, fontWeight: '500' },
+  buildLabel: {
+    color: Colors.text.muted,
+    fontSize: 11,
+    textAlign: 'center',
+    opacity: 0.5,
+    marginTop: 24,
+  },
 });

@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Device } from '@/types/device.types';
 import { MOCK_DEVICES } from '@/constants/devices';
 import { controlEwelinkDevice, fetchEwelinkDevices } from '@/services/devices/ewelinkService';
-import { controlHueLight, fetchHueLights } from '@/services/devices/hueService';
 import { controlTuyaDevice, fetchTuyaDevices } from '@/services/devices/tuyaService';
 import { controlAlexaDevice, fetchAlexaDevices } from '@/services/devices/amazonService';
 import { controlWizDevice, fetchWizDevices } from '@/services/devices/wizService';
@@ -20,7 +20,6 @@ export interface WizLocalSavedDevice {
 interface DeviceStore {
   devices: Device[];
   ewelinkConnected: boolean;
-  hueConnected: boolean;
   tuyaConnected: boolean;
   alexaConnected: boolean;
   wizConnected: boolean;
@@ -30,12 +29,13 @@ interface DeviceStore {
   wizLocalBridgeUrl: string;
   wizLocalSavedDevices: WizLocalSavedDevice[];
   customNames: Record<string, string>;
+  customOrder: Record<string, number>;
+  setDeviceOrder: (orderedIds: string[]) => void;
   renameDevice: (id: string, name: string) => void;
   updateDevice: (id: string, partial: Partial<Device>) => void;
   toggleDevice: (id: string) => void;
   updateDeviceState: (id: string, stateKey: string, value: unknown) => void;
   syncEwelinkDevices: () => Promise<void>;
-  syncHueLights: () => Promise<void>;
   syncTuyaDevices: () => Promise<{ count: number }>;
   syncAlexaDevices: () => Promise<{ count: number }>;
   syncWizDevices: () => Promise<{ count: number }>;
@@ -50,14 +50,21 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Remove mocks nas categorias que já têm dispositivos reais de qualquer fonte. */
+/** Remove mocks nas categorias que já têm dispositivos reais de qualquer fonte. Preserva cômodos definidos pelo usuário. */
 function rebuildDeviceList(
   current: Device[],
   newFromSource: Device[],
   source: NonNullable<Device['source']>
 ): Device[] {
+  const existingRooms = new Map(current.map((d) => [d.id, d.room]));
   const withoutSource = current.filter((d) => d.source !== source);
-  const merged = [...withoutSource, ...newFromSource];
+  const merged = [
+    ...withoutSource,
+    ...newFromSource.map((d) => ({
+      ...d,
+      room: existingRooms.get(d.id) ?? d.room,
+    })),
+  ];
   const realCats = new Set(merged.filter((d) => d.source !== 'mock').map((d) => d.category));
   return merged.filter((d) => d.source !== 'mock' || !realCats.has(d.category));
 }
@@ -67,8 +74,8 @@ export const useDeviceStore = create<DeviceStore>()(
     (set, get) => ({
   devices: MOCK_DEVICES,
   customNames: {},
+  customOrder: {},
   ewelinkConnected: false,
-  hueConnected: false,
   tuyaConnected: false,
   alexaConnected: false,
   wizConnected: false,
@@ -82,6 +89,17 @@ export const useDeviceStore = create<DeviceStore>()(
     set((state) => ({
       customNames: { ...state.customNames, [id]: name.trim() },
     })),
+
+  // Recebe a ordem final (arrastar-soltar) de UM grupo (online ou offline) e
+  // grava só os índices desses ids — não mexe na ordem do outro grupo.
+  setDeviceOrder: (orderedIds) =>
+    set((state) => {
+      const nextOrder = { ...state.customOrder };
+      orderedIds.forEach((id, index) => {
+        nextOrder[id] = index;
+      });
+      return { customOrder: nextOrder };
+    }),
 
   updateDevice: (id, partial) =>
     set((state) => ({
@@ -99,13 +117,6 @@ export const useDeviceStore = create<DeviceStore>()(
           if (__DEV__) console.error('[eWeLink] Falha ao controlar dispositivo:', err);
         })
         .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
-    }
-    if (device?.source === 'hue' && device.hueDeviceId) {
-      controlHueLight(device.hueDeviceId, 'isOn', !device.isOn)
-        .catch((err) => {
-          if (__DEV__) console.error('[Hue] Falha ao controlar lâmpada:', err);
-        })
-        .finally(() => delay(1200).then(() => get().syncHueLights()));
     }
     if (device?.source === 'tuya' && device.tuyaDeviceId) {
       controlTuyaDevice(device.tuyaDeviceId, 'isOn', !device.isOn)
@@ -167,15 +178,8 @@ export const useDeviceStore = create<DeviceStore>()(
           .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
       }
     }
-    if (device?.source === 'hue' && device.hueDeviceId) {
-      controlHueLight(device.hueDeviceId, stateKey, value)
-        .catch((err) => {
-          if (__DEV__) console.error('[Hue] Falha ao controlar lâmpada:', err);
-        })
-        .finally(() => delay(1200).then(() => get().syncHueLights()));
-    }
     if (device?.source === 'tuya' && device.tuyaDeviceId) {
-      const currentColor = stateKey === 'brightness' && typeof device.state.color === 'string'
+      const currentColor = stateKey === 'brightness' && typeof device.state?.color === 'string'
         ? device.state.color
         : undefined;
       controlTuyaDevice(device.tuyaDeviceId, stateKey, value, currentColor)
@@ -270,6 +274,12 @@ export const useDeviceStore = create<DeviceStore>()(
   syncEwelinkDevices: async () => {
     try {
       const { connected, devices } = await fetchEwelinkDevices();
+      if (!connected) {
+        // Falha/timeout transitório — não mexe na lista (evita ela "piscar"
+        // a cada ciclo de 5s só porque essa chamada específica falhou).
+        set({ ewelinkConnected: false });
+        return;
+      }
       const mapped: Device[] = devices.map((ed) => ({
         id: `ewelink:${ed.deviceid}`,
         name: ed.name,
@@ -287,50 +297,6 @@ export const useDeviceStore = create<DeviceStore>()(
       set((state) => ({
         devices: rebuildDeviceList(state.devices, mapped, 'ewelink'),
         ewelinkConnected: connected,
-      }));
-    } catch {
-      // Falha silenciosa — mantém estado anterior
-    }
-  },
-
-  syncHueLights: async () => {
-    try {
-      const { connected, lights } = await fetchHueLights();
-      if (!connected) {
-        set({ hueConnected: false });
-        return;
-      }
-      const mapped: Device[] = lights.map((l) => ({
-        id: `hue:${l.id}`,
-        name: l.name,
-        category: 'lights',
-        icon: '💡',
-        status: 'online' as const,
-        isOn: l.isOn,
-        capabilities: [
-          { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
-          { type: 'range' as const, property: 'brightness', label: 'Brilho', min: 1, max: 100, unit: '%' },
-          ...(l.supportsColor
-            ? [{ type: 'color' as const, property: 'color', label: 'Cor' }]
-            : []),
-          ...(l.supportsColorTemp
-            ? [{ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] }]
-            : []),
-        ],
-        state: {
-          isOn: l.isOn,
-          brightness: l.brightness,
-          ...(l.color ? { color: l.color } : {}),
-          ...(l.colorTemp ? { colorTemperature: l.colorTemp } : {}),
-        },
-        room: 'Casa',
-        brand: 'Philips Hue',
-        source: 'hue' as const,
-        hueDeviceId: l.id,
-      }));
-      set((state) => ({
-        devices: rebuildDeviceList(state.devices, mapped, 'hue'),
-        hueConnected: true,
       }));
     } catch {
       // Falha silenciosa — mantém estado anterior
@@ -673,12 +639,18 @@ export const useDeviceStore = create<DeviceStore>()(
 }),
     {
       name: 'argos-connections',
-      storage: createJSONStorage(() =>
-        typeof localStorage !== 'undefined' ? localStorage : ({} as Storage)
-      ),
+      // No React Native não existe `localStorage`: o fallback antigo era um `{}`
+      // sem setItem/getItem, então o persist do zustand lançava TypeError DEPOIS
+      // de aplicar o estado — abortando toggleDevice/updateDeviceState antes de
+      // chegar na chamada de controle do dispositivo, congelando o status em
+      // 'executing' e derrubando o app com exceção fatal. AsyncStorage já é
+      // dependência linkada e é o que as outras stores usam.
+      // No web o AsyncStorage é implementado sobre window.localStorage com a
+      // mesma chave, então um caminho único serve para as duas plataformas.
+      storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
+        devices: state.devices,
         ewelinkConnected: state.ewelinkConnected,
-        hueConnected: state.hueConnected,
         tuyaConnected: state.tuyaConnected,
         alexaConnected: state.alexaConnected,
         wizConnected: state.wizConnected,
@@ -688,6 +660,7 @@ export const useDeviceStore = create<DeviceStore>()(
         wizLocalBridgeUrl: state.wizLocalBridgeUrl,
         wizLocalSavedDevices: state.wizLocalSavedDevices,
         customNames: state.customNames,
+        customOrder: state.customOrder,
       }),
     }
   )

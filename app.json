@@ -15,7 +15,24 @@
     },
     "plugins": [
       "expo-router",
-      "@react-native-voice/voice"
+      "@react-native-voice/voice",
+      "./plugins/withForegroundService",
+      [
+        "react-native-vosk",
+        {
+          "models": ["./assets/model-pt"],
+          "iOSMicrophonePermission": "Argos precisa do microfone para reconhecer seus comandos de voz."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableJetifier": true,
+            "enableProguardInReleaseBuilds": false
+          }
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": false,
@@ -29,7 +46,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050810"
       },
-      "permissions": ["RECORD_AUDIO", "INTERNET"]
+      "package": "com.masya.argos",
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "POST_NOTIFICATIONS",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -38,8 +63,21 @@
       "backgroundColor": "#050810",
       "themeColor": "#050810"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b55e65c0-b79c-4867-a812-6c7cc7c8c349"
+    },
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "skipAuth": false,
+      "router": {},
+      "eas": {
+        "projectId": "b55e65c0-b79c-4867-a812-6c7cc7c8c349"
+      }
     }
   }
 }

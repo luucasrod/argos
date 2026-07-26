@@ -5,6 +5,7 @@ import { AIPersonality } from '@/types/ai.types';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 import { loadVoices, startSpeechKeepAlive, unlockSpeech } from '@/services/voice/speechUnlock';
 import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
+import { stripEmojis } from '@/services/voice/speechText';
 
 function estimateDurationMs(text: string, rate: number): number {
   const words = text.split(/\s+/).length;
@@ -13,12 +14,12 @@ function estimateDurationMs(text: string, rate: number): number {
 }
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
-  const spoken = text?.trim();
+  const spoken = stripEmojis(text?.trim() ?? '');
   if (!spoken || typeof window === 'undefined' || !window.speechSynthesis) return;
 
   unlockSpeech();
   pauseVoiceInput();
-  await waitForMicRelease(150);
+  await waitForMicRelease(250);
 
   const synth = window.speechSynthesis;
   const voices = await loadVoices();
