@@ -14,6 +14,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAIStore } from '@/stores/useAIStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useDeviceStore } from '@/stores/useDeviceStore';
 import { type UseVoiceOptions } from '@/constants/voice';
 import {
   openMicWindow,
@@ -29,6 +30,9 @@ import {
   isBackgroundWakeWordRunning,
   suspendBackgroundWakeWord,
   resumeBackgroundWakeWord,
+  cancelVoskUtterance,
+  isVoskArmed,
+  armVoskUtterance,
 } from '@/services/voice/backgroundWakeWord.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
@@ -70,12 +74,37 @@ export function useVoice(options?: UseVoiceOptions) {
       return;
     }
 
+    // Nomes reais dos dispositivos e cômodos entram na gramática, senão o
+    // reconhecedor não tem como devolver "escritorio" ou "lampada da sala".
+    const devices = useDeviceStore.getState().devices;
+    const extraPhrases = [
+      ...devices.map((d) => d.name),
+      ...devices.map((d) => d.room).filter(Boolean),
+    ] as string[];
+
     const ok = await startBackgroundWakeWord({
       wakeWord: wakeWordRef.current,
+      extraPhrases,
       onWakeWordDetected: () => {
+        // Só retorno visual. O comando vem na mesma fala, pelo onCommand abaixo —
+        // não há mais um segundo passo de "começar a escutar".
         setWakeWordDetected(true);
         setTimeout(() => setWakeWordDetected(false), 1500);
-        void startListeningRef.current?.({ skipChime: true });
+        setTranscript('');
+        setIsListening(true);
+        setStatus('listening');
+      },
+      onPartial: (t) => setTranscript(t),
+      onCommand: (text) => {
+        setIsListening(false);
+        const clean = text.trim();
+        if (!clean) {
+          setStatus('idle');
+          return;
+        }
+        setTranscript(clean);
+        setStatus('thinking');
+        onAutoSendRef.current?.(clean);
       },
     });
 
@@ -104,14 +133,27 @@ export function useVoice(options?: UseVoiceOptions) {
         return;
       }
 
-      // A wake word e a escuta ativa disputam o mesmo microfone: suspende o laço
-      // e libera o mic antes de abrir a janela de escuta.
+      /*
+       * Escuta contínua de pé: o microfone JÁ está aberto pelo Vosk. Tocar no orb
+       * só arma a captura — o comando chega pelo onCommand configurado em
+       * startWakeWordDetection, igual a quando a wake word dispara. Nada de
+       * fechar e reabrir áudio, que é justamente o que não sobrevive em background.
+       */
+      if (isBackgroundWakeWordRunning()) {
+        if (!opts?.skipChime) playListenChime();
+        if (armVoskUtterance()) {
+          setTranscript('');
+          setIsListening(true);
+          setStatus('listening');
+        } else {
+          setError('A escuta contínua não está ativa.');
+        }
+        return;
+      }
+
+      // Sem escuta contínua: grava com o expo-av e transcreve via Whisper.
       suspendBackgroundWakeWord();
       await releaseMic();
-
-      // Bipe + vibração ANTES de abrir o microfone: com a gravação já aberta, o
-      // próprio VAD escutaria o bipe e contaria como fala. Quando o disparo vem da
-      // wake word, o serviço já tocou o bipe — não repetir.
       if (!opts?.skipChime) {
         playListenChime();
         await new Promise((r) => setTimeout(r, CHIME_MS));
@@ -136,7 +178,20 @@ export function useVoice(options?: UseVoiceOptions) {
       setIsListening(true);
       setStatus('listening');
 
+      /*
+       * Cão de guarda: sob NENHUMA circunstância a escuta pode ficar presa. Se a
+       * janela não fechar sozinha (VAD sem callback, mic roubado por outro
+       * componente, etc.), aborta e devolve a UI. Já ficamos travados em
+       * "Ouvindo..." sem botão de sair mais de uma vez por causa disso.
+       */
+      const watchdog = setTimeout(() => {
+        if (activeWindow === window) {
+          window.cancel();
+        }
+      }, 25000);
+
       const result = await window.done;
+      clearTimeout(watchdog);
       activeWindow = null;
       setIsListening(false);
 
@@ -182,6 +237,13 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const stopListening = useCallback(
     (submit = false) => {
+      // Fala em curso no Vosk: cancelar volta a vigiar a wake word sem soltar o mic.
+      if (isVoskArmed()) {
+        cancelVoskUtterance();
+        setIsListening(false);
+        setStatus('idle');
+        return;
+      }
       const window = activeWindow;
       if (!window) {
         setIsListening(false);
@@ -214,10 +276,20 @@ export function useVoice(options?: UseVoiceOptions) {
   useEffect(() => {
     const unsubscribe = useAIStore.subscribe((state) => {
       if (!isBackgroundWakeWordRunning()) return;
-      if (state.status === 'idle') {
-        if (!activeWindow) resumeBackgroundWakeWord();
-      } else {
+      /*
+       * Suspende SÓ enquanto o Argos fala (TTS), para ele não se ouvir.
+       *
+       * Antes isto suspendia a qualquer status diferente de 'idle' — e como a
+       * detecção da wake word muda o status para 'listening', a própria detecção
+       * derrubava o reconhecedor: o log mostrava "wake=true" seguido na hora de
+       * "start OK", e o estado "armado" se perdia. O comando nunca era enviado.
+       * Regra escrita para a arquitetura antiga, em que a escuta ativa usava um
+       * microfone separado e o Vosk tinha de soltar o dele. Hoje o Vosk É a escuta.
+       */
+      if (state.status === 'speaking') {
         suspendBackgroundWakeWord();
+      } else if (state.status === 'idle') {
+        if (!activeWindow) resumeBackgroundWakeWord();
       }
     });
     return unsubscribe;

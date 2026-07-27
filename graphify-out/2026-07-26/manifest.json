@@ -85,9 +85,9 @@
     "semantic_hash": "a48a2d5084958951c82d8382d9bb8aee"
   },
   "app.json": {
-    "mtime": 1785073041.3091233,
-    "ast_hash": "d7c4caf78368e239e9ad8cda91f284eb",
-    "semantic_hash": ""
+    "mtime": 1785063584.2269487,
+    "ast_hash": "29b35c06dfe4168fa5274b9a11e25fdc",
+    "semantic_hash": "29b35c06dfe4168fa5274b9a11e25fdc"
   },
   "app/(modals)/_layout.tsx": {
     "mtime": 1784468912.3989196,
@@ -165,9 +165,9 @@
     "semantic_hash": "bea182c6b59c5dfaf9ecbd53cd5c6367"
   },
   "app/(tabs)/index.tsx": {
-    "mtime": 1785072907.806673,
-    "ast_hash": "eb02d374f885a8293739c15c2df361ee",
-    "semantic_hash": ""
+    "mtime": 1785066719.8900945,
+    "ast_hash": "78f8d0b72f1fb82e87c7a8382ca6f927",
+    "semantic_hash": "78f8d0b72f1fb82e87c7a8382ca6f927"
   },
   "app/(tabs)/index.web.tsx": {
     "mtime": 1784468384.6128387,
@@ -440,9 +440,9 @@
     "semantic_hash": "913c1cbc2d500f5a3d40a476db61c10a"
   },
   "hooks/useVoice.ts": {
-    "mtime": 1785071545.9976914,
-    "ast_hash": "54f3ebcdc88fca7eba9e37f3b65b84f9",
-    "semantic_hash": ""
+    "mtime": 1785063466.9570658,
+    "ast_hash": "df5284f75d86744415c44a917f79bb26",
+    "semantic_hash": "df5284f75d86744415c44a917f79bb26"
   },
   "hooks/useVoice.web.ts": {
     "mtime": 1785016496.1962526,
@@ -460,9 +460,9 @@
     "semantic_hash": "b02bcf4fde15f746f6e5248537d0b156"
   },
   "package.json": {
-    "mtime": 1785073276.186974,
-    "ast_hash": "5981bb15d70a7e9a36410a5a522cabed",
-    "semantic_hash": ""
+    "mtime": 1785063993.3930564,
+    "ast_hash": "b95dd3cb2821284fb9a42081642406a3",
+    "semantic_hash": "b95dd3cb2821284fb9a42081642406a3"
   },
   "plugins/withForegroundService.js": {
     "mtime": 1785063578.923671,
@@ -630,9 +630,9 @@
     "semantic_hash": "df7ce9795149f5f3a94a19115c2e79f3"
   },
   "services/voice/backgroundWakeWord.native.ts": {
-    "mtime": 1785073087.7890105,
-    "ast_hash": "1514a3625cb46d0487de34ca2cc472c0",
-    "semantic_hash": ""
+    "mtime": 1785063043.8889802,
+    "ast_hash": "558aaff64c0bf220c56b0c86c581d140",
+    "semantic_hash": "558aaff64c0bf220c56b0c86c581d140"
   },
   "services/voice/customCapture.web.ts": {
     "mtime": 1784060823.1373177,
@@ -640,9 +640,9 @@
     "semantic_hash": "3b9652560d340ded177e5b29d9270d30"
   },
   "services/voice/listenChime.ts": {
-    "mtime": 1785071484.1154106,
-    "ast_hash": "b6078391119e22777f0f657000eff701",
-    "semantic_hash": ""
+    "mtime": 1784062427.275704,
+    "ast_hash": "f19fb74815053557a289ce0805083cf0",
+    "semantic_hash": "f19fb74815053557a289ce0805083cf0"
   },
   "services/voice/listenChime.web.ts": {
     "mtime": 1784062417.1354816,
@@ -680,9 +680,9 @@
     "semantic_hash": "62fcff98b3ebcd253ce9c2999ea782f4"
   },
   "services/voice/textToSpeech.ts": {
-    "mtime": 1785071470.9383242,
-    "ast_hash": "2c868a613eefb637dba5588befdb86d7",
-    "semantic_hash": ""
+    "mtime": 1785063408.75873,
+    "ast_hash": "5ae5f1de0a516f0d8d50f434caf98fdc",
+    "semantic_hash": "5ae5f1de0a516f0d8d50f434caf98fdc"
   },
   "services/voice/textToSpeech.web.ts": {
     "mtime": 1784031543.557722,
@@ -730,9 +730,9 @@
     "semantic_hash": "30814e85fa8dbe7e8c05b05f328f35c3"
   },
   "stores/useSettingsStore.ts": {
-    "mtime": 1785072271.3224738,
-    "ast_hash": "b231bc09dab2027f045ed8a50e7a6fa8",
-    "semantic_hash": ""
+    "mtime": 1785066697.8790994,
+    "ast_hash": "1a24822cf3b0699c66bdf40b2308e234",
+    "semantic_hash": "1a24822cf3b0699c66bdf40b2308e234"
   },
   "stores/useVoiceStore.ts": {
     "mtime": 1778952431.3872457,
@@ -858,25 +858,5 @@
     "mtime": 1785062941.634564,
     "ast_hash": "5e1c20db76dd3feee7b5d70a16d598bf",
     "semantic_hash": "5e1c20db76dd3feee7b5d70a16d598bf"
-  },
-  "services/voice/voskWakeWord.native.ts": {
-    "mtime": 1785073034.627128,
-    "ast_hash": "2cb518262a637a04ce640470f2c83c74",
-    "semantic_hash": ""
-  },
-  "assets/model-pt/phones.txt": {
-    "mtime": 1580138076.0,
-    "ast_hash": "f2a62d7e5a468962bd3acdc62fdea40e",
-    "semantic_hash": ""
-  },
-  "docs/auditoria-nativa-2026-07.md": {
-    "mtime": 1785065407.487151,
-    "ast_hash": "b16be109a0bd84595d65f404c78ef481",
-    "semantic_hash": ""
-  },
-  "assets/chime.wav": {
-    "mtime": 1785070679.7456398,
-    "ast_hash": "5a630a96e857d6450e1b96610be1a046",
-    "semantic_hash": ""
   }
 }

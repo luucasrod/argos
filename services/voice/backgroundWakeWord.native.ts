@@ -20,7 +20,7 @@
  */
 import BackgroundService from 'react-native-background-actions';
 import { configureAudioMode, ensureMicPermission, releaseMic } from './nativeMic';
-import { playListenChimeAndWait, preloadListenChime } from './listenChime';
+import { playListenChime, preloadListenChime } from './listenChime';
 import {
   startVoskWakeWord,
   stopVoskWakeWord,
@@ -28,7 +28,12 @@ import {
   resumeVoskWakeWord,
   isVoskWakeWordRunning,
   isVoskWakeWordSuspended,
+  cancelVoskUtterance,
+  isVoskArmed,
+  armVoskUtterance,
 } from './voskWakeWord.native';
+
+export { cancelVoskUtterance, isVoskArmed, armVoskUtterance };
 
 let running = false;
 let onDetected: (() => void) | null = null;
@@ -59,7 +64,14 @@ const keepAliveTask = async () => {
 
 export async function startBackgroundWakeWord(opts: {
   wakeWord: string;
+  /** Wake word ouvida — hora de dar retorno (bipe/UI). */
   onWakeWordDetected: () => void;
+  /** Comando completo, já sem a wake word, pronto para a IA. */
+  onCommand: (text: string) => void;
+  /** Transcrição parcial, para mostrar na tela. */
+  onPartial?: (text: string) => void;
+  /** Nomes de dispositivos e cômodos, para entrarem na gramática. */
+  extraPhrases?: string[];
 }): Promise<boolean> {
   if (running) return true;
 
@@ -97,17 +109,20 @@ export async function startBackgroundWakeWord(opts: {
   const ok = await startVoskWakeWord({
     wakeWord: opts.wakeWord,
     onWakeWordDetected: () => {
-      void (async () => {
-        // Libera o microfone ANTES do bipe e da escuta ativa: o Vosk segura o
-        // AudioRecord, e a gravação do comando precisa dele.
-        suspendVoskWakeWord();
-        // O bipe sai daqui, do serviço, e não do hook React: com a tela bloqueada
-        // é a única confirmação de que o Argos ouviu. Aguardar evita que o VAD da
-        // escuta ativa escute o próprio bipe como fala.
-        await playListenChimeAndWait();
-        onDetected?.();
-      })();
+      /*
+       * Bipe SEM aguardar e SEM tocar no microfone. O reconhecimento continua
+       * correndo durante o bipe, que é o ponto: a pessoa fala "Ei Argos, desliga
+       * a luz" de enfiada e nada do começo se perde.
+       *
+       * O bipe sai daqui, do serviço, e não do hook React — com a tela bloqueada
+       * é a única confirmação de que o Argos ouviu.
+       */
+      playListenChime();
+      onDetected?.();
     },
+    onCommand: opts.onCommand,
+    onPartial: opts.onPartial,
+    extraPhrases: opts.extraPhrases,
   });
 
   if (!ok) {

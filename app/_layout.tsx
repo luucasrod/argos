@@ -8,9 +8,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as Updates from 'expo-updates';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Colors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { isAuthRequired } from '@/services/auth/config';
 import { supabase, mapUser } from '@/services/auth/supabase';
 
@@ -190,6 +191,88 @@ function useOAuthDeepLink() {
   }, []);
 }
 
+/**
+ * Aplica a atualização no BOOT, antes de qualquer coisa subir.
+ *
+ * Por que aqui e não em background: aplicar depois exige reiniciar o bundle, e o
+ * reload derruba o foreground service da escuta — pior, se o serviço voltar a
+ * subir com o app já em background, o Android nega o microfone. No boot o app
+ * está em primeiro plano e o serviço ainda não existe, então é a única janela em
+ * que reiniciar é inofensivo.
+ *
+ * Também resolve o problema de entrega: um cold start comum só BAIXA o update e
+ * o aplica no início seguinte — ou seja, era preciso abrir o app duas vezes.
+ * Aqui a busca, o download e o reload acontecem na mesma abertura.
+ */
+function UpdateGate({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(Platform.OS === 'web' || __DEV__);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || __DEV__) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        // Se a rede estiver ruim, não travar a abertura do app.
+        const check = await Promise.race([
+          Updates.checkForUpdateAsync(),
+          new Promise<null>((r) => setTimeout(() => r(null), 6000)),
+        ]);
+        if (cancelled) return;
+
+        if (check && check.isAvailable) {
+          setUpdating(true);
+          const fetched = await Promise.race([
+            Updates.fetchUpdateAsync(),
+            new Promise<null>((r) => setTimeout(() => r(null), 25000)),
+          ]);
+          if (cancelled) return;
+          if (fetched && fetched.isNew) {
+            await Updates.reloadAsync();
+            return; // o processo reinicia aqui
+          }
+        }
+      } catch {
+        // Offline ou updates desabilitado — segue com o bundle atual.
+      }
+      if (!cancelled) {
+        setUpdating(false);
+        setReady(true);
+      }
+    };
+
+    void run();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!ready) {
+    return (
+      <View style={gateStyles.container}>
+        <View style={gateStyles.dot} />
+        <ActivityIndicator color="#7C3AED" size="large" />
+        <Text style={gateStyles.text}>
+          {updating ? 'Atualizando o Argos...' : 'Verificando atualizações...'}
+        </Text>
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+const gateStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.bg.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 18,
+  },
+  dot: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#7C3AED' },
+  text: { color: '#C4B5FD', fontSize: 14, fontWeight: '500' },
+});
+
 function UpdateBanner() {
   const { isUpdateAvailable, isUpdatePending, isDownloading } = Updates.useUpdates();
   const appliedRef = React.useRef(false);
@@ -201,21 +284,29 @@ function UpdateBanner() {
   }, [isUpdateAvailable, isDownloading]);
 
   /*
-   * Aplica a atualização sozinho assim que ela termina de baixar.
+   * Aplica a atualização sozinho — MAS NUNCA com a escuta contínua ligada.
    *
-   * Sem isto o update ficava baixado mas nunca entrava: no Android, reabrir o app
-   * pela lista de recentes NÃO reinicia o bundle JS — o processo continua vivo e
-   * o expo-updates só troca de bundle num cold start de verdade. Dava a impressão
-   * de que a atualização nunca chegava, mesmo já estando no aparelho.
+   * Duas lições aprendidas na prática, as duas visíveis no logcat:
+   *   1. O reload recriava este componente, `isUpdatePending` continuava true e
+   *      ele recarregava de novo — um laço de reinícios ("Running main" repetido).
+   *   2. Cada reload derruba o foreground service e o reconhecedor de wake word.
+   *      Pior: se o serviço voltar a subir com o app em background, o Android
+   *      NEGA acesso ao microfone ("Foreground service started from background
+   *      can not have microphone access"). Ou seja, o auto-reload quebrava
+   *      exatamente a função principal do app.
+   * Com a escuta ligada, só mostramos o banner e quem decide reiniciar é o usuário.
    */
+  const autoListen = useSettingsStore((s) => s.settings.autoListen);
+
   useEffect(() => {
     if (!isUpdatePending || appliedRef.current) return;
+    if (Platform.OS !== 'web' && autoListen) return;
     appliedRef.current = true;
     const t = setTimeout(() => {
       Updates.reloadAsync().catch(() => {});
     }, 1200);
     return () => clearTimeout(t);
-  }, [isUpdatePending]);
+  }, [isUpdatePending, autoListen]);
 
   const restart = useCallback(() => {
     Updates.reloadAsync().catch(() => {});
@@ -272,6 +363,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <GestureHandlerRootView style={rootStyle}>
           <StatusBar style="light" />
+          <UpdateGate>
           <AuthGuard>
             <Stack
               screenOptions={{
@@ -290,6 +382,7 @@ export default function RootLayout() {
               />
             </Stack>
           </AuthGuard>
+          </UpdateGate>
           {Platform.OS !== 'web' && <UpdateBanner />}
         </GestureHandlerRootView>
       </SafeAreaProvider>

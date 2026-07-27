@@ -18,6 +18,8 @@ export interface Settings {
   voiceLanguage: string;
   voiceSensitivity: number;
   autoListen: boolean;
+  /** Já mostramos as liberações de bateria/autostart necessárias no Android. */
+  backgroundSetupSeen?: boolean;
   processLocally: boolean;
   saveHistory: boolean;
   historyDays: number;

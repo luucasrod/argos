@@ -23,6 +23,7 @@ import { pingBridge } from '@/services/devices/wizLocalBridgeService';
 import { supabase } from '@/services/auth/supabase';
 import { loginTapo, disconnectTapo } from '@/services/devices/tapoService';
 import { loginXiaomi, disconnectXiaomi, XiaomiVerificationRequiredError } from '@/services/devices/xiaomiService';
+import { loginChrome, disconnectChrome } from '@/services/devices/chromeService';
 import { VOICE_SPEED_OPTIONS, VOICE_PREVIEW_PHRASE } from '@/constants/voice';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
@@ -132,6 +133,7 @@ export default function SettingsScreen() {
     wizConnected,
     tapoConnected,
     xiaomiConnected,
+    chromeConnected,
     wizLocalConnected,
     wizLocalBridgeUrl: storedBridgeUrl,
     syncEwelinkDevices,
@@ -140,6 +142,7 @@ export default function SettingsScreen() {
     syncWizDevices,
     syncTapoDevices,
     syncXiaomiDevices,
+    syncChromeDevices,
     setWizLocalBridgeUrl,
     syncWizLocalDevices,
     clearWizLocalDevices,
@@ -170,6 +173,9 @@ export default function SettingsScreen() {
   const [xiaomiPassword, setXiaomiPassword] = React.useState('');
   const [xiaomiError, setXiaomiError] = React.useState<string | null>(null);
   const [xiaomiVerificationUrl, setXiaomiVerificationUrl] = React.useState<string | null>(null);
+
+  const [connectingChrome, setConnectingChrome] = React.useState(false);
+  const [chromeError, setChromeError] = React.useState<string | null>(null);
 
   const [connectingAlexa, setConnectingAlexa] = React.useState(false);
   const [alexaError, setAlexaError] = React.useState<string | null>(null);
@@ -249,6 +255,7 @@ export default function SettingsScreen() {
   const wizDeviceCount = devices.filter((d) => d.source === 'wiz').length;
   const tapoDeviceCount = devices.filter((d) => d.source === 'tapo').length;
   const xiaomiDeviceCount = devices.filter((d) => d.source === 'xiaomi').length;
+  const chromeDeviceCount = devices.filter((d) => d.source === 'chrome').length;
   const wizLocalDeviceCount = devices.filter((d) => d.source === 'wiz-local').length;
 
   const handleLoginEwelink = async () => {
@@ -421,6 +428,37 @@ export default function SettingsScreen() {
     medium();
     try { await disconnectXiaomi(); } catch { /* silencioso */ }
     await syncXiaomiDevices();
+  };
+
+  const handleLoginChrome = async () => {
+    medium();
+    setChromeError(null);
+    setConnectingChrome(true);
+    try {
+      await loginChrome();
+      // O backend retorna um AUTH_URL: na mensagem de erro
+      // Este é um padrão especial para indicar que precisa de redirecionamento OAuth
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Falha ao conectar Google Home.';
+      if (msg.startsWith('AUTH_URL:')) {
+        const authUrl = msg.replace('AUTH_URL:', '');
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.location.assign(authUrl);
+        } else {
+          await Linking.openURL(authUrl);
+        }
+      } else {
+        setChromeError(msg);
+      }
+    } finally {
+      setConnectingChrome(false);
+    }
+  };
+
+  const handleDisconnectChrome = async () => {
+    medium();
+    try { await disconnectChrome(); } catch { /* silencioso */ }
+    await syncChromeDevices();
   };
 
   const handleConnectAlexa = async () => {
@@ -807,6 +845,39 @@ export default function SettingsScreen() {
               ) : (
                 <Pressable style={styles.dangerRow} onPress={handleDisconnectXiaomi}>
                   <Text style={styles.dangerRowText}>Desconectar Xiaomi</Text>
+                </Pressable>
+              )}
+            </IntegrationCard>
+          </Animated.View>
+
+          {/* ── Google Home / Smart Home API ── */}
+          <Animated.View entering={FadeInDown.delay(138)}>
+            <IntegrationCard
+              title="Google Home"
+              description={
+                chromeConnected
+                  ? `✓ ${chromeDeviceCount} dispositivo${chromeDeviceCount !== 1 ? 's' : ''} conectado${chromeDeviceCount !== 1 ? 's' : ''}`
+                  : 'Controla todos os dispositivos conectados ao Google Home/Nest'
+              }
+              connected={chromeConnected}
+              expanded={!!expandedIntegrations.chrome}
+              onToggle={() => toggleIntegration('chrome')}
+              onRefresh={() => { void syncChromeDevices(); }}
+              refreshing={connectingChrome}
+            >
+              {!chromeConnected ? (
+                <View style={styles.formArea}>
+                  {chromeError ? <Text style={styles.errorText}>{chromeError}</Text> : null}
+                  <Text style={styles.settingDesc}>
+                    Redireciona para o Google para autorizar o acesso aos teus dispositivos inteligentes.
+                  </Text>
+                  <Pressable style={styles.primaryBtn} onPress={handleLoginChrome} disabled={connectingChrome}>
+                    <Text style={styles.primaryBtnText}>{connectingChrome ? 'A redirecionar...' : 'Entrar com Google'}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={styles.dangerRow} onPress={handleDisconnectChrome}>
+                  <Text style={styles.dangerRowText}>Desconectar Google Home</Text>
                 </Pressable>
               )}
             </IntegrationCard>

@@ -7,6 +7,7 @@ export type DeviceCategory =
   | 'cameras'
   | 'sensors'
   | 'speakers'
+  | 'thermostat'
   | 'other';
 
 export type DeviceStatus = 'online' | 'offline' | 'error';
@@ -33,7 +34,7 @@ export interface Device {
   room: string;
   brand: string;
   lastSeen?: Date;
-  source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi';
+  source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi' | 'chrome';
   ewelinkDeviceId?: string;
   tuyaDeviceId?: string;
   alexaEntityId?: string;
@@ -51,4 +52,7 @@ export interface Device {
     angle?: { siid: number; piid: number; options: number[] };
     mode?: { siid: number; piid: number; options: Array<{ value: number; label: string }> };
   };
+  chromeDeviceId?: string;
+  chromeDeviceType?: string;
+  chromeTraits?: string[];
 }

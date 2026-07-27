@@ -34,6 +34,7 @@ import { useSettingsStore } from '@/stores/useSettingsStore';
 import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 import { handleInsightPress } from '@/services/insights/handleInsightPress';
+import { BackgroundSetupModal } from '@/components/voice/BackgroundSetupModal';
 
 export default function HomeScreen() {
   const { sendMessage, status } = useArgos();
@@ -55,6 +56,7 @@ export default function HomeScreen() {
   const [textInput, setTextInput] = useState('');
   const [isInputFocused, setInputFocused] = useState(false);
   const [micPromptDismissed, setMicPromptDismissed] = useState(false);
+  const [showBgSetup, setShowBgSetup] = useState(false);
   const activatingRef = useRef(false);
 
   // Mostra o prompt de ativar escuta apenas na web, quando autoListen está on mas wake word não iniciou
@@ -218,7 +220,7 @@ export default function HomeScreen() {
                     "{transcript}"
                   </Animated.Text>
                 ) : null}
-                {isListening ? (
+                {isListening || status === 'listening' ? (
                   <View style={styles.listenActions}>
                     <Pressable
                       onPress={() => { light(); stopListening(true); }}
@@ -244,6 +246,9 @@ export default function HomeScreen() {
                       } else {
                         updateSettings({ autoListen: true });
                         void startWakeWordDetection();
+                        // Na primeira vez, mostra as liberações de bateria/autostart —
+                        // sem elas o Android derruba a escuta ao sair do app.
+                        if (!settings.backgroundSetupSeen) setShowBgSetup(true);
                       }
                     }}
                     style={[styles.wakeToggle, isWakeListening && styles.wakeToggleOn]}
@@ -252,6 +257,13 @@ export default function HomeScreen() {
                       {isWakeListening
                         ? `🎧 Ouvindo — diga “${settings.wakeWord || 'Argos'}” (toque para parar)`
                         : '🎧 Ativar escuta contínua'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {Platform.OS !== 'web' && isWakeListening && !isListening ? (
+                  <Pressable onPress={() => { light(); setShowBgSetup(true); }}>
+                    <Text style={styles.bgSetupLink}>
+                      Parou de ouvir ao sair do app? Toque aqui
                     </Text>
                   </Pressable>
                 ) : null}
@@ -328,6 +340,15 @@ export default function HomeScreen() {
           </Animated.View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <BackgroundSetupModal
+        visible={showBgSetup}
+        onClose={() => setShowBgSetup(false)}
+        onDone={() => {
+          updateSettings({ backgroundSetupSeen: true });
+          setShowBgSetup(false);
+        }}
+      />
     </View>
   );
 }
@@ -440,6 +461,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   wakeHintOn: { color: '#86efac', fontSize: 12 },
+  bgSetupLink: {
+    marginTop: 8,
+    color: '#A78BFA',
+    fontSize: 11,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
   voiceError: {
     marginTop: 10,
     color: '#fca5a5',

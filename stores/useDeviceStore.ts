@@ -10,6 +10,7 @@ import { controlWizDevice, fetchWizDevices } from '@/services/devices/wizService
 import { controlWizLocal, scanWizLocal } from '@/services/devices/wizLocalBridgeService';
 import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoService';
 import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
+import { controlChromeDevice, fetchChromeDevices } from '@/services/devices/chromeService';
 
 export interface WizLocalSavedDevice {
   ip: string;
@@ -28,6 +29,7 @@ interface DeviceStore {
   wizLocalConnected: boolean;
   wizLocalBridgeUrl: string;
   wizLocalSavedDevices: WizLocalSavedDevice[];
+  chromeConnected: boolean;
   customNames: Record<string, string>;
   customOrder: Record<string, number>;
   setDeviceOrder: (orderedIds: string[]) => void;
@@ -41,6 +43,7 @@ interface DeviceStore {
   syncWizDevices: () => Promise<{ count: number }>;
   syncTapoDevices: () => Promise<{ count: number }>;
   syncXiaomiDevices: () => Promise<{ count: number }>;
+  syncChromeDevices: () => Promise<{ count: number }>;
   setWizLocalBridgeUrl: (url: string) => void;
   syncWizLocalDevices: () => Promise<{ count: number }>;
   clearWizLocalDevices: () => void;
@@ -81,6 +84,7 @@ export const useDeviceStore = create<DeviceStore>()(
   wizConnected: false,
   tapoConnected: false,
   xiaomiConnected: false,
+  chromeConnected: false,
   wizLocalConnected: false,
   wizLocalBridgeUrl: '',
   wizLocalSavedDevices: [],
@@ -159,6 +163,13 @@ export const useDeviceStore = create<DeviceStore>()(
           if (__DEV__) console.error('[Xiaomi] Falha ao controlar ventilador:', err);
         })
         .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
+    }
+    if (device?.source === 'chrome' && device.chromeDeviceId) {
+      controlChromeDevice(device.chromeDeviceId, 'OnOff', { on: !device.isOn })
+        .catch((err) => {
+          if (__DEV__) console.error('[Chrome] Falha ao controlar dispositivo:', err);
+        })
+        .finally(() => delay(1500).then(() => get().syncChromeDevices()));
     }
   },
 
@@ -267,6 +278,40 @@ export const useDeviceStore = create<DeviceStore>()(
             })
             .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
         }
+      }
+    }
+    if (device?.source === 'chrome' && device.chromeDeviceId) {
+      if (stateKey === 'isOn') {
+        controlChromeDevice(device.chromeDeviceId, 'OnOff', { on: Boolean(value) })
+          .catch((err) => {
+            if (__DEV__) console.error('[Chrome] Falha ao controlar dispositivo:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncChromeDevices()));
+      } else if (stateKey === 'brightness' && typeof value === 'number') {
+        controlChromeDevice(device.chromeDeviceId, 'BrightnessAbsolute', { brightness: Math.max(0, Math.min(100, value)) })
+          .catch((err) => {
+            if (__DEV__) console.error('[Chrome] Falha ao ajustar brilho:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncChromeDevices()));
+      } else if (stateKey === 'colorTemperature' && typeof value === 'string') {
+        const tempK = value === 'warm' ? 2700 : value === 'neutral' ? 4000 : 6500;
+        controlChromeDevice(device.chromeDeviceId, 'ColorAbsolute', { temperatureK: tempK })
+          .catch((err) => {
+            if (__DEV__) console.error('[Chrome] Falha ao ajustar temperatura:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncChromeDevices()));
+      } else if (stateKey === 'temperature' && typeof value === 'number') {
+        controlChromeDevice(device.chromeDeviceId, 'ThermostatTemperatureSetpoint', { temperature: Math.max(15, Math.min(30, value)) })
+          .catch((err) => {
+            if (__DEV__) console.error('[Chrome] Falha ao ajustar temperatura do termostato:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncChromeDevices()));
+      } else if (stateKey === 'thermostatMode' && typeof value === 'string') {
+        controlChromeDevice(device.chromeDeviceId, 'ThermostatSetMode', { mode: value })
+          .catch((err) => {
+            if (__DEV__) console.error('[Chrome] Falha ao ajustar modo do termostato:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncChromeDevices()));
       }
     }
   },
@@ -559,6 +604,83 @@ export const useDeviceStore = create<DeviceStore>()(
     }
   },
 
+  syncChromeDevices: async () => {
+    try {
+      const { connected, devices } = await fetchChromeDevices();
+      if (!connected) {
+        set({ chromeConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => {
+        const caps = d.traits ?? [];
+        const supportsOnOff = caps.includes('action.devices.traits.OnOff');
+        const supportsBrightness = caps.includes('action.devices.traits.Brightness');
+        const supportsColorTemp = caps.includes('action.devices.traits.ColorTemperature');
+        const supportsThermostat = caps.includes('action.devices.traits.TemperatureSetting');
+
+        const isLight =
+          d.type.toLowerCase().includes('light') ||
+          supportsBrightness ||
+          supportsColorTemp;
+
+        const capabilities: Device['capabilities'] = [];
+        if (supportsOnOff) {
+          capabilities.push({ type: 'toggle' as const, property: 'isOn', label: 'Ligado' });
+        }
+        if (supportsBrightness && d.brightness != null) {
+          capabilities.push({ type: 'range' as const, property: 'brightness', label: 'Brilho', min: 0, max: 100, unit: '%' });
+        }
+        if (supportsColorTemp && d.colorTemperature != null) {
+          capabilities.push({ type: 'select' as const, property: 'colorTemperature', label: 'Temperatura', options: ['warm', 'neutral', 'cool'] });
+        }
+        if (supportsThermostat) {
+          capabilities.push({ type: 'range' as const, property: 'temperature', label: 'Temperatura', min: 15, max: 30, unit: '°C' });
+          capabilities.push({ type: 'select' as const, property: 'thermostatMode', label: 'Modo', options: ['HEAT', 'COOL', 'AUTO', 'OFF'] });
+        }
+
+        const state: Record<string, unknown> = { isOn: d.isOn ?? false };
+        if (supportsBrightness && d.brightness != null) {
+          state.brightness = d.brightness;
+        }
+        if (supportsColorTemp && d.colorTemperature != null) {
+          state.colorTemperature = d.colorTemperature > 5000 ? 'cool' : d.colorTemperature > 3500 ? 'neutral' : 'warm';
+        }
+        if (supportsThermostat) {
+          if (d.thermostatTemperatureSetpoint != null) {
+            state.temperature = d.thermostatTemperatureSetpoint;
+          }
+          if (d.thermostatMode) {
+            state.thermostatMode = d.thermostatMode;
+          }
+        }
+
+        return {
+          id: `chrome:${d.id}`,
+          name: d.name,
+          category: (isLight ? 'lights' : 'outlets') as 'lights' | 'outlets',
+          icon: isLight ? '💡' : supportsThermostat ? '🌡️' : '🔌',
+          status: (d.isOnline ? 'online' : 'offline') as 'online' | 'offline',
+          isOn: d.isOn ?? false,
+          capabilities,
+          state,
+          room: d.roomHint || 'Casa',
+          brand: 'Google Home',
+          source: 'chrome' as const,
+          chromeDeviceId: d.id,
+          chromeDeviceType: d.type,
+          chromeTraits: d.traits,
+        };
+      });
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'chrome'),
+        chromeConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
   setWizLocalBridgeUrl: (url) => {
     set({ wizLocalBridgeUrl: url });
   },
@@ -656,6 +778,7 @@ export const useDeviceStore = create<DeviceStore>()(
         wizConnected: state.wizConnected,
         tapoConnected: state.tapoConnected,
         xiaomiConnected: state.xiaomiConnected,
+        chromeConnected: state.chromeConnected,
         wizLocalConnected: state.wizLocalConnected,
         wizLocalBridgeUrl: state.wizLocalBridgeUrl,
         wizLocalSavedDevices: state.wizLocalSavedDevices,

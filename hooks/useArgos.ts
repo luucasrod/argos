@@ -132,7 +132,10 @@ export function useArgos() {
 
       if (intent.type === 'device_control' && intent.actions && intent.actions.length > 0) {
         const spoken = resolveIntentSpeech(intent);
-        if (spoken) await speak(spoken);
+        // A fala NÃO é aguardada aqui. Antes o dispositivo só era acionado depois
+        // do TTS terminar, então a lâmpada esperava a frase inteira — segundos de
+        // atraso para nada. Agora executa e fala ao mesmo tempo.
+        if (spoken) void speak(spoken);
 
         setStatus('executing');
 
