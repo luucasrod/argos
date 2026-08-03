@@ -1,7 +1,7 @@
 import * as Speech from 'expo-speech';
 import { AIPersonality } from '@/types/ai.types';
 import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
-import { stripEmojis } from '@/services/voice/speechText';
+import { stripForSpeech } from '@/services/voice/speechText';
 
 // getAvailableVoicesAsync() no Android leva segundos e a lista não muda durante a
 // sessão. Sem este cache, cada fala pagava esse custo antes de começar a falar.
@@ -24,7 +24,9 @@ async function getVoices(): Promise<VoiceList> {
 }
 
 export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
-  const spoken = stripEmojis(text?.trim() ?? '');
+  // stripForSpeech, não stripEmojis: o sintetizador lê "asterisco" e "cerquilha"
+  // quando o markdown escapa, e nem todo chamador passa por resolveIntentSpeech.
+  const spoken = stripForSpeech(text?.trim() ?? '');
   if (!spoken) return;
 
   Speech.stop();

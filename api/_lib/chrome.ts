@@ -162,8 +162,9 @@ export async function listChromeDevices(accessToken: string): Promise<GoogleDevi
   const devices: GoogleDeviceInfo[] = [];
 
   if (data.devices) {
-    for (const dev of data.devices) {
-      const traits = (dev.traits as string[]) ?? [];
+    for (const dev of data.devices as Array<Record<string, unknown>>) {
+      const traits = ((dev.traits as unknown) ?? []) as string[];
+      const devStates = (dev.states as Record<string, unknown>) ?? {};
 
       devices.push({
         id: String(dev.id ?? ''),
@@ -174,27 +175,27 @@ export async function listChromeDevices(accessToken: string): Promise<GoogleDevi
         deviceModel: String(dev.deviceModel ?? ''),
         hwVersion: String(dev.hwVersion ?? ''),
         swVersion: String(dev.swVersion ?? ''),
-        isOnline: dev.online === true,
-        isOn: dev.traits?.includes('action.devices.traits.OnOff')
-          ? dev.states?.online?.on === true
+        isOnline: (dev.online as unknown) === true,
+        isOn: traits.includes('action.devices.traits.OnOff')
+          ? ((devStates.online as Record<string, unknown>)?.on as unknown) === true
           : undefined,
         brightness: traits.includes('action.devices.traits.Brightness')
-          ? Number(dev.states?.brightness?.brightness) || undefined
+          ? Number((devStates.brightness as Record<string, unknown>)?.brightness) || undefined
           : undefined,
         colorTemperature: traits.includes('action.devices.traits.ColorTemperature')
-          ? Number(dev.states?.colorTemperature?.temperatureK) || undefined
+          ? Number((devStates.colorTemperature as Record<string, unknown>)?.temperatureK) || undefined
           : undefined,
         thermostatTemperatureSetpoint: traits.includes('action.devices.traits.TemperatureSetting')
-          ? Number(dev.states?.thermostatTemperatureSetpoint?.thermostatTemperatureSetpoint) || undefined
+          ? Number((devStates.thermostatTemperatureSetpoint as Record<string, unknown>)?.thermostatTemperatureSetpoint) || undefined
           : undefined,
         thermostatTemperatureAmbient: traits.includes('action.devices.traits.TemperatureSetting')
-          ? Number(dev.states?.thermostatTemperatureAmbient?.ambientTemperatureCelsius) || undefined
+          ? Number((devStates.thermostatTemperatureAmbient as Record<string, unknown>)?.ambientTemperatureCelsius) || undefined
           : undefined,
         thermostatHumidityAmbient: traits.includes('action.devices.traits.TemperatureSetting')
-          ? Number(dev.states?.thermostatHumidityAmbient?.ambientHumidityPercent) || undefined
+          ? Number((devStates.thermostatHumidityAmbient as Record<string, unknown>)?.ambientHumidityPercent) || undefined
           : undefined,
         thermostatMode: traits.includes('action.devices.traits.TemperatureSetting')
-          ? String(dev.states?.thermostatMode?.thermostatMode) || undefined
+          ? String((devStates.thermostatMode as Record<string, unknown>)?.thermostatMode) || undefined
           : undefined,
         traits,
       });

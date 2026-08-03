@@ -60,6 +60,11 @@ const COMMAND_PHRASES = [
   'a luz', 'a lampada', 'o brilho', 'a tomada', 'o ventilador',
   'do escritorio', 'da sala', 'do quarto', 'da cozinha', 'do banheiro',
   'da varanda', 'da garagem', 'do corredor',
+  // Música. Nome de faixa é vocabulário ABERTO e não cabe numa gramática fechada,
+  // então por voz só funcionam estes pedidos genéricos; para pedir uma música
+  // específica é preciso digitar (ou trocar o reconhecimento para texto livre).
+  'toca', 'coloca', 'poe', 'musica', 'uma musica', 'toca musica',
+  'coloca uma musica', 'toca uma musica', 'pausa', 'continua', 'proxima',
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */

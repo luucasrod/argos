@@ -8,7 +8,8 @@ export interface ParsedIntent {
     | 'open_url'
     | 'get_weather'
     | 'set_reminder'
-    | 'save_note';
+    | 'save_note'
+    | 'play_music';
   speech: string;
   text: string;
   // device_control
@@ -33,6 +34,9 @@ export interface ParsedIntent {
   delayMinutes?: number;
   // save_note
   noteContent?: string;
+  // play_music
+  musicQuery?: string;
+  musicAction?: 'play' | 'pause' | 'next' | 'previous';
   // extração de memória (presente em qualquer tipo de resposta)
   newMemory?: {
     title: string;

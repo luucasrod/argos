@@ -13,6 +13,7 @@ const LABELS: Record<DeviceCategoryType | 'all', string> = {
   cameras: '📷 Câmeras',
   sensors: '📡 Sensores',
   speakers: '🔊 Speakers',
+  thermostat: '🌡️ Termostatos',
   other: '📦 Outros',
 };
 

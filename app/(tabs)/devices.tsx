@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<DeviceCategory, string> = {
   cameras: '📷 Câmeras',
   sensors: '📡 Sensores',
   speakers: '🔊 Speakers',
+  thermostat: '🌡️ Termostatos',
   other: '📦 Outros',
 };
 

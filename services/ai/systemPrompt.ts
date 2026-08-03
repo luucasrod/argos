@@ -15,6 +15,10 @@ export function buildSystemPrompt(
   const activeMemories = memories.filter((m) => m.isActive);
   const activeAutomations = automations.filter((a) => a.isActive);
   const onlineDevices = devices.filter((d) => d.status === 'online');
+  // Os offline precisam aparecer no prompt. Antes eram omitidos, então a IA não
+  // sabia que existiam: ao pedir "liga a luz do escritório" com ela offline, o
+  // modelo inventava um deviceId e afirmava ter ligado.
+  const offlineDevices = devices.filter((d) => d.status !== 'online');
 
   const toneGuide = {
     formal: 'Seja profissional, preciso e formal. Evite gírias.',
@@ -82,6 +86,17 @@ Você ANALISA intenções do usuário e:
 
 ## Dispositivos disponíveis (${onlineDevices.length} online)
 ${onlineDevices.map((d) => `- ${d.name} (${d.category}) | ${d.isOn ? 'Ligado' : 'Desligado'} | ID: ${d.id}`).join('\n')}
+
+## Dispositivos OFFLINE (${offlineDevices.length}) — NÃO é possível controlar
+${offlineDevices.length > 0
+  ? offlineDevices.map((d) => `- ${d.name} (${d.category}) | ID: ${d.id}`).join('\n')
+  : '(nenhum)'}
+
+REGRA CRÍTICA sobre dispositivos offline:
+Se o usuário pedir para controlar um dispositivo da lista OFFLINE, NÃO gere ação de
+device_control e NÃO diga que executou. Responda com type "text" avisando que o
+aparelho está offline e sugerindo verificar energia, disjuntor ou conexão Wi-Fi.
+Nunca invente um deviceId que não esteja em nenhuma das duas listas acima.
 
 ## Automações ativas (${activeAutomations.length})
 ${activeAutomations.map((a) => `- "${a.name}": ${a.description}`).join('\n')}
@@ -187,6 +202,20 @@ Para SALVAR NOTA:
   "noteContent": "Conteúdo completo da nota que o usuário quer salvar"
 }
 Use quando o usuário pedir para salvar, anotar ou registrar algo importante.
+
+Para TOCAR MÚSICA:
+{
+  "type": "play_music",
+  "speech": "Tocando agora.",
+  "text": "Tocando no YouTube Music.",
+  "musicQuery": "nome da música, artista, álbum ou playlist"
+}
+Use quando pedirem para tocar, colocar ou ouvir música — "toca Bohemian Rhapsody",
+"coloca um rock", "põe a playlist de treino", "quero ouvir Djavan".
+Em "musicQuery" ponha o termo de busca do jeito mais direto possível, sem verbos:
+"toca aquela do Djavan, Flor de Lis" → musicQuery: "Djavan Flor de Lis".
+Se a pessoa não disser o que tocar ("coloca uma música"), deixe musicQuery vazio.
+Mantenha o "speech" MUITO curto: isso costuma ser usado dirigindo.
 
 ## Extração automática de memórias
 Em QUALQUER resposta, se o usuário revelar informações relevantes sobre si mesmo (nome, preferências, rotinas, localização, hábitos), adicione o campo "newMemory" ao JSON:

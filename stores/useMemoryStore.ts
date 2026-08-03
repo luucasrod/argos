@@ -22,68 +22,16 @@ interface MemoryStore {
   getMemoriesByCategory: (category: Memory['category']) => Memory[];
 }
 
-const defaultMemories: Memory[] = [
-  {
-    id: 'mem-1',
-    category: 'routine',
-    title: 'Horário de dormir',
-    content: 'Você costuma dormir entre 1h e 1h30 da manhã',
-    confidence: 0.85,
-    source: 'ai_inferred',
-    createdAt: new Date(),
-    tags: ['sono', 'rotina'],
-    isActive: true,
-    status: 'confirmed',
-  },
-  {
-    id: 'mem-2',
-    category: 'preference',
-    title: 'Música para trabalho',
-    content: 'Prefere Lo-Fi quando está trabalhando',
-    confidence: 0.9,
-    source: 'user_explicit',
-    createdAt: new Date(),
-    tags: ['música', 'trabalho', 'foco'],
-    isActive: true,
-    status: 'confirmed',
-  },
-  {
-    id: 'mem-pending-1',
-    category: 'habit',
-    title: 'Café pela manhã',
-    content: 'Parece que você toma café todos os dias entre 8h e 9h',
-    confidence: 0.75,
-    source: 'ai_inferred',
-    createdAt: new Date(),
-    tags: ['café', 'manhã', 'rotina'],
-    isActive: true,
-    status: 'pending',
-  },
-  {
-    id: 'mem-pending-2',
-    category: 'preference',
-    title: 'Tema escuro',
-    content: 'Você sempre usa aplicativos no tema escuro',
-    confidence: 0.95,
-    source: 'behavior',
-    createdAt: new Date(),
-    tags: ['design', 'preferência'],
-    isActive: true,
-    status: 'pending',
-  },
-  {
-    id: 'mem-pending-3',
-    category: 'person',
-    title: 'Masya Studio',
-    content: 'Este é seu projeto principal — um estúdio criativo',
-    confidence: 0.88,
-    source: 'user_explicit',
-    createdAt: new Date(),
-    tags: ['trabalho', 'projeto'],
-    isActive: true,
-    status: 'pending',
-  },
-];
+/**
+ * Começa VAZIO de propósito.
+ *
+ * Antes havia cinco memórias de exemplo ("Você costuma dormir entre 1h e 1h30",
+ * "Masya Studio é seu projeto principal"...) que eram apresentadas como fatos
+ * reais sobre o usuário. Como o `partialize` não persistia `memories`, elas
+ * voltavam a CADA abertura do app, mesmo depois de apagadas — e ainda entravam
+ * no prompt do sistema, fazendo o Argos afirmar coisas inventadas sobre a pessoa.
+ */
+const defaultMemories: Memory[] = [];
 
 export const useMemoryStore = create<MemoryStore>()(
   persist(
@@ -120,6 +68,9 @@ export const useMemoryStore = create<MemoryStore>()(
           source: memory.source,
           tags: memory.tags,
           is_active: memory.isActive,
+          // Sem isto o status nunca era gravado: ao voltar do Supabase a memória
+          // perdia o "pending" e a tela de confirmação ficava sempre vazia.
+          status: memory.status ?? 'pending',
           created_at: memory.createdAt?.toISOString() ?? new Date().toISOString(),
         });
       },
@@ -159,7 +110,7 @@ export const useMemoryStore = create<MemoryStore>()(
 
         if (error || !data) return;
 
-        if (data.length > 0) {
+        {
           const remoteMemories: Memory[] = data.map((row) => ({
             id: row.id,
             category: row.category,
@@ -170,24 +121,95 @@ export const useMemoryStore = create<MemoryStore>()(
             createdAt: new Date(row.created_at),
             tags: row.tags ?? [],
             isActive: row.is_active ?? true,
+            // O mapeamento ignorava o status, então TODA memória vinda do servidor
+            // chegava sem ele — e getPendingMemories() (que filtra por 'pending')
+            // nunca devolvia nada. Linhas antigas sem a coluna contam como aceitas.
+            status: (row.status as Memory['status']) ?? 'confirmed',
           }));
-          set({ memories: remoteMemories });
+
+          /*
+           * MESCLA, não substitui.
+           *
+           * Antes era `set({ memories: remoteMemories })`, o que apagava toda
+           * memória que só existia no aparelho — exatamente o caso de quem usou o
+           * Argos sem internet ou antes de entrar na conta: o addMemory gravava
+           * local, não conseguia inserir no Supabase, e o primeiro login seguinte
+           * varria tudo.
+           *
+           * O remoto continua sendo a fonte de verdade para o que existe nos dois
+           * lados (por id); o que só existe local é preservado e enviado agora.
+           */
+          const remoteIds = new Set(remoteMemories.map((m) => m.id));
+          const localOnly = get().memories.filter((m) => !remoteIds.has(m.id));
+
+          set({ memories: [...remoteMemories, ...localOnly] });
+
+          // Sobe as que nunca chegaram ao servidor. Rejeitadas ficam de fora: elas
+          // estão ausentes da consulta por causa do filtro is_active, e reenviá-las
+          // as ressuscitaria.
+          const paraEnviar = localOnly.filter((m) => m.status !== 'rejected' && m.isActive);
+          if (paraEnviar.length > 0) {
+            await supabase.from('memories').upsert(
+              paraEnviar.map((m) => ({
+                id: m.id,
+                user_id: userId,
+                category: m.category,
+                title: m.title,
+                content: m.content,
+                confidence: m.confidence,
+                source: m.source,
+                tags: m.tags,
+                is_active: m.isActive,
+                status: m.status ?? 'pending',
+                created_at: m.createdAt?.toISOString() ?? new Date().toISOString(),
+              }))
+            );
+          }
         }
       },
 
-      confirmMemory: (id) =>
+      /*
+       * Confirmar e rejeitar precisam ir para o Supabase.
+       *
+       * Antes só alteravam o estado local. Como o syncFromSupabase sobrescreve o
+       * local com o remoto no login seguinte, a decisão do usuário era desfeita
+       * silenciosamente — a memória rejeitada voltava a valer e a confirmada
+       * voltava a perguntar.
+       */
+      confirmMemory: async (id) => {
+        const at = new Date();
         set((state) => ({
           memories: state.memories.map((m) =>
-            m.id === id ? { ...m, status: 'confirmed' as const, lastConfirmed: new Date() } : m
+            m.id === id ? { ...m, status: 'confirmed' as const, lastConfirmed: at } : m
           ),
-        })),
+        }));
 
-      rejectMemory: (id) =>
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        await supabase
+          .from('memories')
+          .update({ status: 'confirmed', last_confirmed: at.toISOString() })
+          .eq('id', id)
+          .eq('user_id', session.user.id);
+      },
+
+      rejectMemory: async (id) => {
         set((state) => ({
           memories: state.memories.map((m) =>
             m.id === id ? { ...m, status: 'rejected' as const, isActive: false } : m
           ),
-        })),
+        }));
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        await supabase
+          .from('memories')
+          .update({ status: 'rejected', is_active: false })
+          .eq('id', id)
+          .eq('user_id', session.user.id);
+      },
 
       getPendingMemories: () =>
         get().memories.filter((m) => m.status === 'pending' && m.isActive),
@@ -209,8 +231,17 @@ export const useMemoryStore = create<MemoryStore>()(
     {
       name: 'argos-memory',
       storage: createJSONStorage(() => AsyncStorage),
-      // Não persiste memórias localmente quando autenticado (usa Supabase)
-      partialize: (state) => ({ insights: state.insights }),
+      /*
+       * Persiste as memórias localmente TAMBÉM.
+       *
+       * Antes só os insights eram gravados, com a justificativa de que o Supabase
+       * seria a fonte de verdade. Na prática isso significava: sem internet ou sem
+       * login, tudo que o Argos aprendeu na sessão era perdido ao fechar o app —
+       * e o estado voltava para as memórias de exemplo. O Supabase continua sendo
+       * a fonte de verdade quando há sessão (o syncFromSupabase sobrescreve),
+       * mas agora existe uma cópia local para o app funcionar offline.
+       */
+      partialize: (state) => ({ insights: state.insights, memories: state.memories }),
       onRehydrateStorage: () => (state) => {
         if (!state?.insights) return;
         state.insights = state.insights.map((i) => normalizeInsight(i));

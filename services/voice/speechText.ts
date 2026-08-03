@@ -12,14 +12,41 @@ export function stripEmojis(text: string): string {
   return text.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim();
 }
 
-/** Remove markdown para leitura em voz alta. */
+/**
+ * Prepara o texto para leitura em voz alta.
+ *
+ * O sintetizador lê símbolo como símbolo: sem esta limpeza ele fala "asterisco",
+ * "cerquilha" e o endereço inteiro de um link. Cobre negrito, itálico, títulos,
+ * listas, código, tabelas e links.
+ */
 export function stripForSpeech(text: string): string {
   return stripEmojis(
     text
-      .replace(/\*\*/g, '')
+      // links [texto](url) -> texto
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/#{1,6}\s/g, '')
+      // blocos e trechos de código
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      // títulos e citações no início da linha
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      .replace(/^\s{0,3}>\s?/gm, '')
+      // marcadores de lista no início da linha
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // separadores de tabela e linhas horizontais
+      .replace(/^\s*\|?[\s:|-]{4,}\|?\s*$/gm, ' ')
+      .replace(/\|/g, ' ')
+      // negrito, itálico e riscado
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/\*([^*\n]+)\*/g, '$1')
+      .replace(/~~([^~]+)~~/g, '$1')
+      // sobras de marcação soltas
+      .replace(/[*_`#]/g, '')
+      // quebras viram pausa falada
       .replace(/\n+/g, '. ')
+      .replace(/\.\s*\.\s*/g, '. ')
+      .replace(/\s{2,}/g, ' ')
       .trim()
   );
 }

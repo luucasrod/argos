@@ -131,6 +131,45 @@ export function useArgos() {
       const assistantMessageId = `msg-${Date.now()}-assistant`;
 
       if (intent.type === 'device_control' && intent.actions && intent.actions.length > 0) {
+        /*
+         * Trava de honestidade: nunca confirmar o que não foi feito.
+         *
+         * O Argos dizia "luz do escritório ligada" com a lâmpada desligada no
+         * disjuntor. Três falhas somadas: o prompt escondia os dispositivos
+         * offline (a IA inventava o deviceId), o toggleDevice com id inexistente
+         * não faz nada e não reclama, e o laço marcava sucesso sem verificar.
+         * Aqui o estado real do aparelho decide o que é executado e o que é dito.
+         */
+        const known = useDeviceStore.getState().devices;
+        const checked = intent.actions.map((a) => {
+          const device = known.find((d) => d.id === a.deviceId);
+          return { action: a, device, ok: !!device && device.status === 'online' };
+        });
+        const blocked = checked.filter((c) => !c.ok);
+
+        if (blocked.length === checked.length) {
+          // Nada é executável — avisa em vez de fingir.
+          const nomes = blocked
+            .map((b) => b.device?.name ?? b.action.label ?? 'o dispositivo')
+            .filter((v, i, arr) => arr.indexOf(v) === i);
+          const alvo = nomes.join(', ');
+          const semCadastro = blocked.every((b) => !b.device);
+          const aviso = semCadastro
+            ? `Não encontrei ${alvo} entre os seus dispositivos.`
+            : `${alvo} está offline, então não consigo controlar agora. Verifique a energia, o disjuntor ou a conexão Wi-Fi.`;
+
+          void speak(aviso);
+          setStatus('idle');
+          addMessage({
+            id: assistantMessageId,
+            role: 'assistant',
+            content: aviso,
+            timestamp: new Date(),
+            type: 'error',
+          });
+          return;
+        }
+
         const spoken = resolveIntentSpeech(intent);
         // A fala NÃO é aguardada aqui. Antes o dispositivo só era acionado depois
         // do TTS terminar, então a lâmpada esperava a frase inteira — segundos de
@@ -158,6 +197,14 @@ export function useArgos() {
 
             await new Promise((r) => setTimeout(r, 150));
 
+            // Caso parcial: alguns alvos online, outros não. O que está offline é
+            // marcado como erro em vez de contar como feito.
+            if (!checked[i]?.ok) {
+              updateExecutionStep(i, 'error');
+              stepResults.push('error');
+              continue;
+            }
+
             try {
               if (action.action === 'toggle') {
                 toggleDevice(action.deviceId);
@@ -184,7 +231,11 @@ export function useArgos() {
             id: assistantMessageId,
             role: 'assistant',
             content: anyOk
-              ? intent.text || intent.speech || spoken
+              ? blocked.length > 0
+                ? `${intent.text || intent.speech || spoken}\n\nNão consegui em: ${blocked
+                    .map((b) => b.device?.name ?? b.action.label)
+                    .join(', ')} (offline).`
+                : intent.text || intent.speech || spoken
               : 'Não consegui falar com o dispositivo agora. Confira a conexão da integração.',
             timestamp: new Date(),
             type: anyOk ? 'action' : 'error',
@@ -346,6 +397,27 @@ export function useArgos() {
             type: 'error',
           });
         }
+
+      } else if (intent.type === 'play_music') {
+        /*
+         * Música: o retorno vem do próprio serviço, então o Argos só afirma que
+         * está tocando se o intent do Android foi aceito de verdade — mesma regra
+         * de honestidade aplicada aos dispositivos.
+         */
+        const { playMusic, openMusicApp } = await import('@/services/media/playMusic');
+        const query = (intent.musicQuery ?? '').trim();
+        const result = query ? await playMusic(query) : await openMusicApp();
+
+        await speak(result.message);
+        setStatus('idle');
+
+        addMessage({
+          id: assistantMessageId,
+          role: 'assistant',
+          content: result.message,
+          timestamp: new Date(),
+          type: result.ok ? 'action' : 'error',
+        });
 
       } else if (intent.type === 'set_reminder') {
         const title = intent.title || 'Lembrete';
@@ -605,6 +677,11 @@ export function useArgos() {
             createdAt: new Date(),
             tags: intent.newMemory.tags ?? [],
             isActive: true,
+            // Memória inferida pela IA entra como PENDENTE, para você confirmar
+            // ou rejeitar na aba Inteligência. Sem este campo ela era gravada com
+            // status indefinido e a tela de confirmação nunca a mostrava — ou
+            // seja, o Argos guardava conclusões sobre você sem nunca perguntar.
+            status: 'pending',
           });
         }
 
