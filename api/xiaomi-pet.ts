@@ -44,14 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Reutiliza a mesma sessão Xiaomi
-        const fans = await xiaomiListFans(
-          {
-            serviceToken: account.service_token,
-            userId: account.user_id,
-            deviceId: account.device_id,
-          },
-          account.region
-        );
+        const { region, devices: fans } = await xiaomiListFans(account.session, account.region);
 
         // Filtra apenas dispositivos pet e mapeia
         const petDevices: XiaomiPetDeviceDto[] = [];
@@ -108,18 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(401).json({ error: 'Xiaomi não conectado' });
         }
 
-        await xiaomiSetProperty(
-          {
-            serviceToken: account.service_token,
-            userId: account.user_id,
-            deviceId: account.device_id,
-          },
-          account.region,
-          did,
-          siid,
-          piid,
-          value
-        );
+        await xiaomiSetProperty(account.session, account.region, did, siid, piid, value);
 
         return res.status(200).json({ success: true });
       } catch (err) {
