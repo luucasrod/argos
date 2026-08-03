@@ -34,7 +34,7 @@ export interface Device {
   room: string;
   brand: string;
   lastSeen?: Date;
-  source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi' | 'chrome';
+  source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi' | 'xiaomi-pet' | 'chrome';
   ewelinkDeviceId?: string;
   tuyaDeviceId?: string;
   alexaEntityId?: string;
@@ -55,4 +55,16 @@ export interface Device {
   chromeDeviceId?: string;
   chromeDeviceType?: string;
   chromeTraits?: string[];
+  xiaomiPetDid?: string;
+  xiaomiPetType?: 'feeder' | 'litter-box' | 'water-feeder' | 'other-pet';
+  xiaomiPetControl?: {
+    power?: { siid: number; piid: number };
+    feedAmount?: { siid: number; piid: number; min: number; max: number };
+    feedingSchedule?: { siid: number; piid: number };
+    waterLevel?: { siid: number; piid: number; min: number; max: number };
+    wasteLevel?: { siid: number; piid: number; min: number; max: number };
+    cleaningMode?: { siid: number; piid: number; options: Array<{ value: number; label: string }> };
+    lightControl?: { siid: number; piid: number };
+    temperature?: { siid: number; piid: number };
+  };
 }

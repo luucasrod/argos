@@ -11,6 +11,7 @@ import { controlWizLocal, scanWizLocal } from '@/services/devices/wizLocalBridge
 import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoService';
 import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
 import { controlChromeDevice, fetchChromeDevices } from '@/services/devices/chromeService';
+import { controlXiaomiPetDevice, fetchXiaomiPetDevices } from '@/services/devices/xiaomiPetService';
 
 export interface WizLocalSavedDevice {
   ip: string;
@@ -26,10 +27,11 @@ interface DeviceStore {
   wizConnected: boolean;
   tapoConnected: boolean;
   xiaomiConnected: boolean;
+  xiaomiPetConnected: boolean;
+  chromeConnected: boolean;
   wizLocalConnected: boolean;
   wizLocalBridgeUrl: string;
   wizLocalSavedDevices: WizLocalSavedDevice[];
-  chromeConnected: boolean;
   customNames: Record<string, string>;
   customOrder: Record<string, number>;
   setDeviceOrder: (orderedIds: string[]) => void;
@@ -43,6 +45,7 @@ interface DeviceStore {
   syncWizDevices: () => Promise<{ count: number }>;
   syncTapoDevices: () => Promise<{ count: number }>;
   syncXiaomiDevices: () => Promise<{ count: number }>;
+  syncXiaomiPetDevices: () => Promise<{ count: number }>;
   syncChromeDevices: () => Promise<{ count: number }>;
   setWizLocalBridgeUrl: (url: string) => void;
   syncWizLocalDevices: () => Promise<{ count: number }>;
@@ -84,6 +87,7 @@ export const useDeviceStore = create<DeviceStore>()(
   wizConnected: false,
   tapoConnected: false,
   xiaomiConnected: false,
+  xiaomiPetConnected: false,
   chromeConnected: false,
   wizLocalConnected: false,
   wizLocalBridgeUrl: '',
@@ -549,6 +553,120 @@ export const useDeviceStore = create<DeviceStore>()(
     }
   },
 
+  syncXiaomiPetDevices: async () => {
+    try {
+      const { connected, devices } = await fetchXiaomiPetDevices();
+      if (!connected) {
+        set({ xiaomiPetConnected: false });
+        return { count: 0 };
+      }
+      const mapped: Device[] = devices.map((d) => {
+        const petIcons: Record<string, string> = {
+          'feeder': '🐕',
+          'litter-box': '🚽',
+          'water-feeder': '💧',
+          'other-pet': '🐾',
+        };
+        const petLabels: Record<string, string> = {
+          'feeder': 'Alimentador',
+          'litter-box': 'Caixa de Areia',
+          'water-feeder': 'Bebedouro',
+          'other-pet': 'Acessório Pet',
+        };
+
+        const capabilities: Device['capabilities'] = [];
+        if (d.power) {
+          capabilities.push({ type: 'toggle' as const, property: 'isOn', label: 'Ligado' });
+        }
+        if (d.feedAmount) {
+          capabilities.push({
+            type: 'range' as const,
+            property: 'feedAmount',
+            label: 'Quantidade Ração',
+            min: d.feedAmount.min,
+            max: d.feedAmount.max,
+            unit: 'g',
+          });
+        }
+        if (d.waterLevel) {
+          capabilities.push({
+            type: 'readonly' as const,
+            property: 'waterLevel',
+            label: 'Nível de Água',
+          });
+        }
+        if (d.wasteLevel) {
+          capabilities.push({
+            type: 'readonly' as const,
+            property: 'wasteLevel',
+            label: 'Nível de Resíduos',
+          });
+        }
+        if (d.cleaningMode) {
+          capabilities.push({
+            type: 'select' as const,
+            property: 'cleaningMode',
+            label: 'Modo Limpeza',
+            options: d.cleaningMode.options.map((o) => o.label),
+          });
+        }
+        if (d.lightControl) {
+          capabilities.push({ type: 'toggle' as const, property: 'lightControl', label: 'Luz' });
+        }
+        if (d.temperature) {
+          capabilities.push({
+            type: 'readonly' as const,
+            property: 'temperature',
+            label: 'Temperatura',
+          });
+        }
+
+        const state: Record<string, unknown> = { isOn: d.isOn };
+        if (d.feedAmountValue != null) state.feedAmount = d.feedAmountValue;
+        if (d.waterLevelValue != null) state.waterLevel = d.waterLevelValue;
+        if (d.wasteLevelValue != null) state.wasteLevel = d.wasteLevelValue;
+        if (d.cleaningModeValue != null && d.cleaningMode) {
+          state.cleaningMode = d.cleaningMode.options.find((o) => o.value === d.cleaningModeValue)?.label;
+        }
+        if (d.lightControlValue != null) state.lightControl = d.lightControlValue;
+        if (d.temperatureValue != null) state.temperature = d.temperatureValue;
+
+        return {
+          id: `xiaomi-pet:${d.did}`,
+          name: d.name,
+          category: 'other' as const,
+          icon: petIcons[d.deviceType] || '🐾',
+          status: (d.isOnline ? 'online' : 'offline') as 'online' | 'offline',
+          isOn: d.isOn,
+          capabilities,
+          state,
+          room: 'Casa',
+          brand: 'Xiaomi Pet',
+          source: 'xiaomi-pet' as const,
+          xiaomiPetDid: d.did,
+          xiaomiPetType: d.deviceType,
+          xiaomiPetControl: {
+            power: d.power,
+            feedAmount: d.feedAmount,
+            feedingSchedule: d.feedingSchedule,
+            waterLevel: d.waterLevel,
+            wasteLevel: d.wasteLevel,
+            cleaningMode: d.cleaningMode,
+            lightControl: d.lightControl,
+            temperature: d.temperature,
+          },
+        };
+      });
+      set((state) => ({
+        devices: rebuildDeviceList(state.devices, mapped, 'xiaomi-pet'),
+        xiaomiPetConnected: true,
+      }));
+      return { count: mapped.length };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
   syncAlexaDevices: async () => {
     try {
       const { connected, devices } = await fetchAlexaDevices();
@@ -778,6 +896,7 @@ export const useDeviceStore = create<DeviceStore>()(
         wizConnected: state.wizConnected,
         tapoConnected: state.tapoConnected,
         xiaomiConnected: state.xiaomiConnected,
+        xiaomiPetConnected: state.xiaomiPetConnected,
         chromeConnected: state.chromeConnected,
         wizLocalConnected: state.wizLocalConnected,
         wizLocalBridgeUrl: state.wizLocalBridgeUrl,
