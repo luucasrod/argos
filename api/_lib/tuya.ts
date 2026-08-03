@@ -316,6 +316,20 @@ export interface TuyaDevice {
   supportsColor: boolean;
   supportsColorTemp: boolean;
   supportsBrightness: boolean;
+  /**
+   * Credenciais do protocolo LOCAL (LAN). Sem elas só resta o caminho pela nuvem:
+   * celular → nuvem Tuya → lâmpada, com 1 a 3 segundos de latência. Com elas o
+   * app fala direto com a lâmpada no mesmo Wi-Fi, em dezenas de milissegundos,
+   * e continua funcionando sem internet.
+   *
+   * A `local_key` vem do endpoint /v1.0/users/{uid}/devices que já usamos — é
+   * por dispositivo e só muda se o aparelho for removido e pareado de novo.
+   */
+  localKey: string | null;
+  /** Último IP conhecido na rede local. A descoberta por broadcast confirma. */
+  ip: string | null;
+  /** Versão do protocolo LAN (3.1, 3.3, 3.4, 3.5) — muda a criptografia. */
+  protocolVersion: string | null;
 }
 
 // Categorias Tuya consideradas "lâmpadas"
@@ -400,6 +414,12 @@ export function mapTuyaDevices(rawList: unknown[]): TuyaDevice[] {
         category: string;
         online: boolean;
         status?: TuyaStatusItem[];
+        // Campos do protocolo local, devolvidos pelo /v1.0/users/{uid}/devices.
+        local_key?: string;
+        ip?: string;
+        // A nuvem devolve ora "3.3", ora 33 — normalizado abaixo.
+        product_id?: string;
+        version?: string | number;
       };
 
       const status = dev.status ?? [];
@@ -443,8 +463,22 @@ export function mapTuyaDevices(rawList: unknown[]): TuyaDevice[] {
         supportsColor,
         supportsColorTemp,
         supportsBrightness,
+        localKey: dev.local_key ?? null,
+        ip: dev.ip ?? null,
+        protocolVersion: normalizeProtocolVersion(dev.version),
       };
     });
+}
+
+/** A nuvem devolve a versão do protocolo como "3.3", 33 ou nada. */
+function normalizeProtocolVersion(raw: string | number | undefined): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (s.includes('.')) return s;
+  // "33" -> "3.3", "35" -> "3.5"
+  if (/^\d{2}$/.test(s)) return s[0] + '.' + s[1];
+  return s;
 }
 
 // ─── Public API wrappers ───────────────────────────────────────────────────────
