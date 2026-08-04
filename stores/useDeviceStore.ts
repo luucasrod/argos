@@ -359,6 +359,19 @@ export const useDeviceStore = create<DeviceStore>()(
         set({ tuyaConnected: false });
         return { count: 0 };
       }
+
+      // Diagnóstico do controle local: mostra o IP e a versão do protocolo que a
+      // nuvem da Tuya conhece de cada lâmpada. É o que decide se dá para falar
+      // com ela direto na rede (3.1/3.3) ou não (3.4/3.5), e em qual endereço.
+      devices.forEach((d) => {
+        console.log(
+          '[argos-tuya] ' + d.name +
+            ' | online=' + d.online +
+            ' | ip=' + (d.ip ?? 'sem ip') +
+            ' | versao=' + (d.protocolVersion ?? 'sem versao') +
+            ' | localKey=' + (d.localKey ? 'presente(' + d.localKey.length + ')' : 'AUSENTE')
+        );
+      });
       const mapped: Device[] = devices.map((d) => ({
         id: `tuya:${d.id}`,
         name: d.name,

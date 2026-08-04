@@ -23,6 +23,10 @@ export interface TuyaDeviceInfo {
   supportsColor: boolean;
   supportsColorTemp: boolean;
   supportsBrightness: boolean;
+  /** Credenciais do protocolo LAN — ver services/devices/tuyaLocal.native.ts. */
+  localKey?: string | null;
+  ip?: string | null;
+  protocolVersion?: string | null;
 }
 
 export async function loginTuya(email: string, password: string, countryCode?: string): Promise<void> {
