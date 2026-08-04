@@ -165,141 +165,125 @@ function updateSession(sessionId: string | undefined, userMsg: string, assistant
 // ── Carregamento de dispositivos ──────────────────────────────────────────────
 
 async function loadDevices(userId: string): Promise<{ devices: UnifiedDevice[]; ctx: ExecutionContext }> {
-  const devices: UnifiedDevice[] = [];
   const ctx: ExecutionContext = {
     wizDevices: new Map(),
     ewelinkDevices: new Map(),
     xiaomiDevices: new Map(),
   };
 
-  // ── WiZ ──────────────────────────────────────────────────────────────────
-  try {
-    const { data: wizRow } = await supabaseAdmin
-      .from('wiz_accounts')
-      .select('access_token, home_id')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (wizRow) {
+  const [wizResult, ewelinkResult, xiaomiResult, tuyaResult] = await Promise.allSettled([
+    // ── WiZ ────────────────────────────────────────────────────────────────
+    (async () => {
+      const { data: wizRow } = await supabaseAdmin
+        .from('wiz_accounts')
+        .select('access_token, home_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!wizRow) return [] as UnifiedDevice[];
       const row = wizRow as { access_token: string; home_id: string | null };
-      const token = row.access_token;
-      const homeId = row.home_id ?? '';
-      ctx.wizCreds = { token, homeId };
-
-      const lights = await wizListDevices(token, homeId);
-      for (const light of lights) {
+      ctx.wizCreds = { token: row.access_token, homeId: row.home_id ?? '' };
+      const lights = await wizListDevices(row.access_token, row.home_id ?? '');
+      return lights.map((light) => {
         ctx.wizDevices.set(light.mac, light);
         const typeUp = light.type.toUpperCase();
-        devices.push({
+        return {
           id: `wiz:${light.mac}`,
           name: light.name.trim(),
           category: 'lights',
           isOn: light.isOn,
           supportsColor: typeUp.includes('COLOR') || typeUp.includes('RGB'),
           supportsBrightness: light.brightness != null || typeUp.includes('DIMMABLE') || typeUp.includes('TW'),
-          source: 'wiz',
-        });
-      }
-    }
-  } catch (err) {
-    console.error('[ha] falha ao carregar dispositivos WiZ', err);
-  }
-
-  // ── eWeLink ──────────────────────────────────────────────────────────────
-  try {
-    const tokenInfo = await getValidEwelinkToken(supabaseAdmin as ReturnType<typeof supabaseAsUser>, userId);
-    if (tokenInfo) {
+          source: 'wiz' as const,
+        };
+      });
+    })(),
+    // ── eWeLink ─────────────────────────────────────────────────────────────
+    (async () => {
+      const tokenInfo = await getValidEwelinkToken(supabaseAdmin as ReturnType<typeof supabaseAsUser>, userId);
+      if (!tokenInfo) return [] as UnifiedDevice[];
       ctx.ewelinkToken = tokenInfo;
       const result = await ewelinkRequest(tokenInfo.region, '/v2/device/thing?num=0', {
         accessToken: tokenInfo.accessToken,
       });
-      if (result.error === 0) {
-        const thingList =
-          (result.data.thingList as Array<{ itemType: number; itemData: Record<string, unknown> }>) ?? [];
-        for (const t of thingList) {
-          if (t.itemType !== 1 && t.itemType !== 2) continue;
+      if (result.error !== 0) return [] as UnifiedDevice[];
+      const thingList =
+        (result.data.thingList as Array<{ itemType: number; itemData: Record<string, unknown> }>) ?? [];
+      return thingList
+        .filter((t) => t.itemType === 1 || t.itemType === 2)
+        .map((t) => {
           const d = t.itemData;
           const params = (d.params as Record<string, unknown>) ?? {};
           const switches = params.switches as Array<{ switch: string; outlet: number }> | undefined;
           const isOn = switches?.length ? switches.some((s) => s.switch === 'on') : params.switch === 'on';
           const deviceid = d.deviceid as string;
           ctx.ewelinkDevices.set(deviceid, { deviceid, switches });
-          devices.push({
+          return {
             id: `ewelink:${deviceid}`,
             name: (d.name as string).trim(),
             category: 'outlets',
             isOn,
-            source: 'ewelink',
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[ha] falha ao carregar dispositivos eWeLink', err);
-  }
-
-  // ── Xiaomi (ventiladores) ────────────────────────────────────────────────
-  try {
-    const { data: xiaomiRow } = await supabaseAdmin
-      .from('xiaomi_accounts')
-      .select('region, ssecurity, mi_user_id, c_user_id, service_token, pass_token')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (xiaomiRow) {
+            source: 'ewelink' as const,
+          };
+        });
+    })(),
+    // ── Xiaomi ──────────────────────────────────────────────────────────────
+    (async () => {
+      const { data: xiaomiRow } = await supabaseAdmin
+        .from('xiaomi_accounts')
+        .select('region, ssecurity, mi_user_id, c_user_id, service_token, pass_token')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!xiaomiRow) return [] as UnifiedDevice[];
       const row = xiaomiRow as {
-        region: string;
-        ssecurity: string;
-        mi_user_id: string;
-        c_user_id: string;
-        service_token: string;
-        pass_token: string;
+        region: string; ssecurity: string; mi_user_id: string;
+        c_user_id: string; service_token: string; pass_token: string;
       };
       const session: XiaomiSession = {
-        ssecurity: row.ssecurity,
-        userId: row.mi_user_id,
-        cUserId: row.c_user_id,
-        serviceToken: row.service_token,
-        passToken: row.pass_token,
+        ssecurity: row.ssecurity, userId: row.mi_user_id, cUserId: row.c_user_id,
+        serviceToken: row.service_token, passToken: row.pass_token,
       };
       ctx.xiaomiSession = { session, region: row.region };
-
       const { devices: fans } = await xiaomiListFans(session, row.region);
-      for (const fan of fans) {
+      return fans.map((fan) => {
         ctx.xiaomiDevices.set(fan.did, fan);
-        devices.push({
+        return {
           id: `xiaomi:${fan.did}`,
           name: fan.name.trim(),
           category: 'fans',
           isOn: fan.isOn,
           supportsBrightness: !!fan.speed,
-          source: 'xiaomi',
-        });
-      }
-    }
-  } catch (err) {
-    console.error('[ha] falha ao carregar dispositivos Xiaomi', err);
-  }
-
-  // ── Tuya / Smart Life ────────────────────────────────────────────────────
-  try {
-    const creds = await getProjectCredentials();
-    ctx.tuyaCreds = creds;
-    const lights = await tuyaListDevices(creds.uid, creds.accessToken, creds.region);
-    for (const light of lights) {
-      devices.push({
+          source: 'xiaomi' as const,
+        };
+      });
+    })(),
+    // ── Tuya ────────────────────────────────────────────────────────────────
+    (async () => {
+      const creds = await getProjectCredentials();
+      ctx.tuyaCreds = creds;
+      const lights = await tuyaListDevices(creds.uid, creds.accessToken, creds.region);
+      return lights.map((light) => ({
         id: `tuya:${light.id}`,
         name: light.name,
         category: 'lights',
         isOn: light.isOn,
         supportsColor: light.supportsColor,
         supportsBrightness: light.supportsBrightness,
-        source: 'tuya',
-      });
-    }
-  } catch (err) {
-    console.error('[ha] falha ao carregar dispositivos Tuya', err);
-  }
+        source: 'tuya' as const,
+      }));
+    })(),
+  ]);
+
+  if (wizResult.status === 'rejected') console.error('[ha] falha WiZ', wizResult.reason);
+  if (ewelinkResult.status === 'rejected') console.error('[ha] falha eWeLink', ewelinkResult.reason);
+  if (xiaomiResult.status === 'rejected') console.error('[ha] falha Xiaomi', xiaomiResult.reason);
+  if (tuyaResult.status === 'rejected') console.error('[ha] falha Tuya', tuyaResult.reason);
+
+  const devices: UnifiedDevice[] = [
+    ...(wizResult.status === 'fulfilled' ? wizResult.value : []),
+    ...(ewelinkResult.status === 'fulfilled' ? ewelinkResult.value : []),
+    ...(xiaomiResult.status === 'fulfilled' ? xiaomiResult.value : []),
+    ...(tuyaResult.status === 'fulfilled' ? tuyaResult.value : []),
+  ];
 
   return { devices, ctx };
 }
@@ -488,8 +472,9 @@ function matchToggleCommand(text: string, devices: UnifiedDevice[]): { speech: s
   if (words.length > 12) return null;
 
   let isOn: boolean | null = null;
-  if (ON_WORDS.some((w) => text.includes(w))) isOn = true;
-  else if (OFF_WORDS.some((w) => text.includes(w))) isOn = false;
+  // OFF_WORDS first: "desliga" contains "liga" (ON_WORD), checking OFF first avoids false positives.
+  if (OFF_WORDS.some((w) => text.includes(w))) isOn = false;
+  else if (ON_WORDS.some((w) => text.includes(w))) isOn = true;
   if (isOn === null) return null;
 
   const targets = findTargetDevices(text, devices);
@@ -787,6 +772,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await supabaseAdmin.from('ha_keys').delete().eq('user_id', user.id);
       return res.status(200).json({ ok: true });
     }
+  }
+
+  // ── GET /api/ha?action=wiz-devices — lista MAC+nome dos dispositivos WiZ ──
+  // Usado pelo Jarvis PC para mapear IPs locais (scan de subnet) a nomes.
+  if (action === 'wiz-devices' && req.method === 'GET') {
+    const haKey = req.headers['x-ha-key'] as string | undefined;
+    if (!haKey) return res.status(401).json({ error: 'Missing x-ha-key header' });
+
+    const { data: keyData } = await supabaseAdmin
+      .from('ha_keys')
+      .select('user_id')
+      .eq('api_key', haKey)
+      .maybeSingle();
+    if (!keyData) return res.status(401).json({ error: 'Invalid API key' });
+
+    const { data: wizRow } = await supabaseAdmin
+      .from('wiz_accounts')
+      .select('access_token, home_id')
+      .eq('user_id', keyData.user_id as string)
+      .maybeSingle();
+
+    if (!wizRow) return res.json({ devices: [] });
+    const row = wizRow as { access_token: string; home_id: string | null };
+    const lights = await wizListDevices(row.access_token, row.home_id ?? '');
+    const devices = lights.map((l) => ({ mac: l.mac.toLowerCase(), name: l.name.trim() }));
+    return res.json({ devices });
   }
 
   // ── Endpoint de conversa ──────────────────────────────────────────────────
