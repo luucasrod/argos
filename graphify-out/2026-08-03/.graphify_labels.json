@@ -1,0 +1,11 @@
+{
+  "0": "useArgos.ts",
+  "1": "Módulos Nativos Kotlin para Argos",
+  "2": "_lib/chrome.ts",
+  "3": "voskWakeWord.native.ts",
+  "4": "devices.tsx",
+  "5": "playMusic.ts",
+  "6": "resetUtterance",
+  "7": "startVoskWakeWord",
+  "8": "DeviceCategory.tsx"
+}

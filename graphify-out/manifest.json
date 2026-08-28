@@ -1,0 +1,1317 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1778952149.6063128,
+    "ast_hash": "dc580fca35a0e98ed20777ede5e545a1",
+    "semantic_hash": ""
+  },
+  "api/_lib/ewelink.ts": {
+    "mtime": 1787949401.1774402,
+    "ast_hash": "047e04141dd47b818af7fecc3dcc29e3",
+    "semantic_hash": ""
+  },
+  "api/chat.ts": {
+    "mtime": 1784014514.7988014,
+    "ast_hash": "5ba14fab975a050d2bcc0e8496bc2cc2",
+    "semantic_hash": ""
+  },
+  "app.config.js": {
+    "mtime": 1787949401.182446,
+    "ast_hash": "06bd89d9d7bea7f32eb29676f6682169",
+    "semantic_hash": ""
+  },
+  "app.json": {
+    "mtime": 1787949401.1834483,
+    "ast_hash": "44d0d1a15ecb6cae51a4211b5d791543",
+    "semantic_hash": ""
+  },
+  "app/(modals)/_layout.tsx": {
+    "mtime": 1787949401.1844456,
+    "ast_hash": "ca6679bc25510a12fff6c59c431fbac8",
+    "semantic_hash": ""
+  },
+  "app/(modals)/_layout.web.tsx": {
+    "mtime": 1778959702.0911777,
+    "ast_hash": "e51f31aad8e1a9d1a49e0329ce0b15a9",
+    "semantic_hash": ""
+  },
+  "app/(modals)/create-automation.tsx": {
+    "mtime": 1787949401.1854446,
+    "ast_hash": "5f6978edcc3550e5c2b641310290ebf1",
+    "semantic_hash": ""
+  },
+  "app/(modals)/execution.tsx": {
+    "mtime": 1778952573.971328,
+    "ast_hash": "ff8cf7e5c30be2c14d8542241a802b19",
+    "semantic_hash": ""
+  },
+  "app/(modals)/memory.tsx": {
+    "mtime": 1787949401.1864448,
+    "ast_hash": "aaaf574fd22898c6bacb32e507a0880b",
+    "semantic_hash": ""
+  },
+  "app/(modals)/routine-detail.tsx": {
+    "mtime": 1778952583.7673855,
+    "ast_hash": "ef39dcda5fd94bd42ccd3ae0f94061d7",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/_layout.tsx": {
+    "mtime": 1787949401.1874483,
+    "ast_hash": "bf289d2890c5ceba6aa7c5450e76242c",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/_layout.web.tsx": {
+    "mtime": 1787949401.1894455,
+    "ast_hash": "cb8ef46a59584b5dc421b0ef47e68f68",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/automations.tsx": {
+    "mtime": 1787949401.1904461,
+    "ast_hash": "cbf106143fb9c9742aba21164311c69f",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/chat.tsx": {
+    "mtime": 1787949401.191448,
+    "ast_hash": "b1c8c2f52b7aa9dfeff1415f06a78daa",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/devices.tsx": {
+    "mtime": 1787949401.192444,
+    "ast_hash": "6366021d3239a3070243aad65cb1fcdf",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/index.tsx": {
+    "mtime": 1787949401.1934447,
+    "ast_hash": "118d599110c1bf7269a527a2b9d38aba",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/index.web.tsx": {
+    "mtime": 1787949401.1944454,
+    "ast_hash": "0966774e7b5f433ff774d09761c6a8e4",
+    "semantic_hash": ""
+  },
+  "app/(tabs)/settings.tsx": {
+    "mtime": 1787949401.1954448,
+    "ast_hash": "4f57ea62c3107a0b8acbe11aff6bb8f2",
+    "semantic_hash": ""
+  },
+  "app/+html.tsx": {
+    "mtime": 1787949401.1964445,
+    "ast_hash": "92d05be20ff1c7c3b85be7fb6d5d7cb6",
+    "semantic_hash": ""
+  },
+  "app/_layout.tsx": {
+    "mtime": 1787949401.1974468,
+    "ast_hash": "f2143a9db86ff48e1f99a6d2a125a3dc",
+    "semantic_hash": ""
+  },
+  "app/_layout.web.tsx": {
+    "mtime": 1787949401.1984468,
+    "ast_hash": "ab68dd576042c86ade4e132f51f9eece",
+    "semantic_hash": ""
+  },
+  "app/integrations/ewelink/callback.tsx": {
+    "mtime": 1782056088.5173104,
+    "ast_hash": "bb04d0fc626b924f14a50e3fc278b4c1",
+    "semantic_hash": ""
+  },
+  "app/login.tsx": {
+    "mtime": 1787949401.199445,
+    "ast_hash": "df927af7ea99a26ce324ae3735a15973",
+    "semantic_hash": ""
+  },
+  "babel.config.js": {
+    "mtime": 1778998471.1579988,
+    "ast_hash": "96f47e0ca854221076e1f96e7cf57be5",
+    "semantic_hash": ""
+  },
+  "components/apps/OpenAppBanner.tsx": {
+    "mtime": 1782058398.8839414,
+    "ast_hash": "3a5bf4011905e2a09d096bc3c22a302c",
+    "semantic_hash": ""
+  },
+  "components/automation/ActionList.tsx": {
+    "mtime": 1778952541.1248443,
+    "ast_hash": "dc34de9848fe18d3c21f591acf17235b",
+    "semantic_hash": ""
+  },
+  "components/automation/AutomationCard.tsx": {
+    "mtime": 1782064524.8855858,
+    "ast_hash": "417226dc47a0e7efe4d110dedbfe95b2",
+    "semantic_hash": ""
+  },
+  "components/automation/PresetAutomation.tsx": {
+    "mtime": 1778952541.9060292,
+    "ast_hash": "66fd8d59852a7febfe1a3d96ef613f0c",
+    "semantic_hash": ""
+  },
+  "components/automation/TriggerBadge.tsx": {
+    "mtime": 1778952539.508745,
+    "ast_hash": "0321ec0827a1b1930c9add1b5b663603",
+    "semantic_hash": ""
+  },
+  "components/chat/ActionCard.tsx": {
+    "mtime": 1778952528.8849635,
+    "ast_hash": "e629402dfc624e5749e3948c441b6d40",
+    "semantic_hash": ""
+  },
+  "components/chat/MessageBubble.tsx": {
+    "mtime": 1778952526.926086,
+    "ast_hash": "1f39a6fd40120487ebe1b1b5d98dc378",
+    "semantic_hash": ""
+  },
+  "components/chat/SuggestionPill.tsx": {
+    "mtime": 1778952530.3180325,
+    "ast_hash": "7f66b59653f5bfdba523860e3837ef23",
+    "semantic_hash": ""
+  },
+  "components/chat/VoiceInput.tsx": {
+    "mtime": 1778952532.6262414,
+    "ast_hash": "e056b3e6a27c99af68190d2822b5e6ab",
+    "semantic_hash": ""
+  },
+  "components/devices/DeviceCard.tsx": {
+    "mtime": 1778952899.962308,
+    "ast_hash": "8154d6a62152309cd925c99802160765",
+    "semantic_hash": ""
+  },
+  "components/devices/DeviceCategory.tsx": {
+    "mtime": 1787949401.200446,
+    "ast_hash": "98f2de1320d1f93b9af03dfb6dda9441",
+    "semantic_hash": ""
+  },
+  "components/devices/DeviceToggle.tsx": {
+    "mtime": 1778952548.651332,
+    "ast_hash": "bc612b5fa7c98c234468be17b69e4207",
+    "semantic_hash": ""
+  },
+  "components/execution/ExecutionOverlay.tsx": {
+    "mtime": 1778952562.0371072,
+    "ast_hash": "f5202a040e0069facda07b7daa01932b",
+    "semantic_hash": ""
+  },
+  "components/execution/ExecutionStep.tsx": {
+    "mtime": 1778952559.2194955,
+    "ast_hash": "642a1e505907025685ef4435074e7204",
+    "semantic_hash": ""
+  },
+  "components/memory/HabitInsight.tsx": {
+    "mtime": 1778952556.8061068,
+    "ast_hash": "6edec456cce64976a2b1ced8e94edd53",
+    "semantic_hash": ""
+  },
+  "components/memory/MemoryCard.tsx": {
+    "mtime": 1778952553.9964423,
+    "ast_hash": "130b9ed8039a317ccda970dce1662677",
+    "semantic_hash": ""
+  },
+  "components/orb/OrbCore.tsx": {
+    "mtime": 1787949401.2014446,
+    "ast_hash": "807bce3d492219ae761ddd4b8a4d7171",
+    "semantic_hash": ""
+  },
+  "components/orb/OrbRings.tsx": {
+    "mtime": 1778952502.078808,
+    "ast_hash": "0f85826eb7eb0afa5b4ddf356fca0899",
+    "semantic_hash": ""
+  },
+  "components/orb/OrbStatus.tsx": {
+    "mtime": 1787949401.2024493,
+    "ast_hash": "ea9fca9aa267486efb7f08b81e63ab90",
+    "semantic_hash": ""
+  },
+  "components/settings/VoiceInstallHelp.tsx": {
+    "mtime": 1782058633.3256915,
+    "ast_hash": "c9d2e66fbfd23c026c385c5f27900fb4",
+    "semantic_hash": ""
+  },
+  "components/ui/BottomSheet.tsx": {
+    "mtime": 1778952519.1114473,
+    "ast_hash": "9291080a167ae9f008df10116699b079",
+    "semantic_hash": ""
+  },
+  "components/ui/GlassCard.tsx": {
+    "mtime": 1778952898.6938553,
+    "ast_hash": "75c7548e3d738c7e742a64d6c30207e3",
+    "semantic_hash": ""
+  },
+  "components/ui/GradientText.tsx": {
+    "mtime": 1778952521.7229054,
+    "ast_hash": "ed73233dbad7318167dfd047f5ddf8ca",
+    "semantic_hash": ""
+  },
+  "components/ui/PressableFeedback.tsx": {
+    "mtime": 1778952514.1004133,
+    "ast_hash": "b7b132e587961de6cd51b31b2740602a",
+    "semantic_hash": ""
+  },
+  "components/ui/StatusBar.tsx": {
+    "mtime": 1778952516.4904268,
+    "ast_hash": "b98d16b585231a20e12a6cba4682bfb1",
+    "semantic_hash": ""
+  },
+  "constants/animations.ts": {
+    "mtime": 1778952381.5352657,
+    "ast_hash": "46cbc85ae16a91da2f3554c990bc4daa",
+    "semantic_hash": ""
+  },
+  "constants/colors.ts": {
+    "mtime": 1780865592.2876034,
+    "ast_hash": "b1a70e74431aa9a5a0199e2a516a5b5f",
+    "semantic_hash": ""
+  },
+  "constants/devices.ts": {
+    "mtime": 1787949401.2034473,
+    "ast_hash": "f379227f750be8ebccbfb454635ea65b",
+    "semantic_hash": ""
+  },
+  "constants/orb.ts": {
+    "mtime": 1780866305.5486915,
+    "ast_hash": "e9c15c6fe6ad495f3d3cd42b5d99b39d",
+    "semantic_hash": ""
+  },
+  "constants/presets.ts": {
+    "mtime": 1778952407.8168066,
+    "ast_hash": "c1118463e6f24cf23d76de5fc290ce06",
+    "semantic_hash": ""
+  },
+  "constants/voice.ts": {
+    "mtime": 1782057383.0476005,
+    "ast_hash": "94a63944fc31d6720649c6343199235e",
+    "semantic_hash": ""
+  },
+  "hooks/useARIA.ts": {
+    "mtime": 1779107965.8641565,
+    "ast_hash": "325052f2cd3c2e1b9a38e4ae4d114569",
+    "semantic_hash": ""
+  },
+  "hooks/useArgos.ts": {
+    "mtime": 1787949401.2057052,
+    "ast_hash": "bab16d5a0759ce4a7078441bd3804dda",
+    "semantic_hash": ""
+  },
+  "hooks/useAutomation.ts": {
+    "mtime": 1778952479.923149,
+    "ast_hash": "65bf1401210fe961d5ed0fdd12f012db",
+    "semantic_hash": ""
+  },
+  "hooks/useHaptic.ts": {
+    "mtime": 1780865592.7475731,
+    "ast_hash": "dda015303d73f3ad379b74b826f57eeb",
+    "semantic_hash": ""
+  },
+  "hooks/useSupabaseSync.ts": {
+    "mtime": 1780867994.3597338,
+    "ast_hash": "bf5b9c30cdf83fc6fe92a961da10d90a",
+    "semantic_hash": ""
+  },
+  "hooks/useTheme.ts": {
+    "mtime": 1778952481.160972,
+    "ast_hash": "913c1cbc2d500f5a3d40a476db61c10a",
+    "semantic_hash": ""
+  },
+  "hooks/useVoice.ts": {
+    "mtime": 1787949401.206706,
+    "ast_hash": "2b5f1188532d71602fa77940ac735c77",
+    "semantic_hash": ""
+  },
+  "hooks/useVoice.web.ts": {
+    "mtime": 1787949401.207705,
+    "ast_hash": "ab6385e875ce29dfe974af13dfdbc25e",
+    "semantic_hash": ""
+  },
+  "metro.config.js": {
+    "mtime": 1778952364.451575,
+    "ast_hash": "dcb5d6305afce631e9df229a6693f679",
+    "semantic_hash": ""
+  },
+  "nativewind-env.d.ts": {
+    "mtime": 1778952364.9045765,
+    "ast_hash": "b02bcf4fde15f746f6e5248537d0b156",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1787949401.212724,
+    "ast_hash": "5523bc4b6d18b27cc939f8ef77f4aa15",
+    "semantic_hash": ""
+  },
+  "public/manifest.json": {
+    "mtime": 1780864839.0250735,
+    "ast_hash": "b831cffb495bcb084f1f5806fd745f41",
+    "semantic_hash": ""
+  },
+  "public/sw.js": {
+    "mtime": 1787949401.212724,
+    "ast_hash": "bf5d00c6841ed0a11c5d80c0148489fc",
+    "semantic_hash": ""
+  },
+  "scripts/inject-pwa.mjs": {
+    "mtime": 1787949401.214356,
+    "ast_hash": "e56b11fe1a14f852d751978cac450d0f",
+    "semantic_hash": ""
+  },
+  "services/ai/anthropic.ts": {
+    "mtime": 1782055702.9491441,
+    "ast_hash": "bbdab21124386e5e7013ef36bc7afcfa",
+    "semantic_hash": ""
+  },
+  "services/ai/anthropicProxy.ts": {
+    "mtime": 1787949401.215362,
+    "ast_hash": "c26604b114c61aa686085862cfb6f035",
+    "semantic_hash": ""
+  },
+  "services/ai/automationBuilder.ts": {
+    "mtime": 1778952446.7279594,
+    "ast_hash": "8e0d4748aca47ce5e2c92d8e832515d2",
+    "semantic_hash": ""
+  },
+  "services/ai/chatMessages.ts": {
+    "mtime": 1780865592.7076535,
+    "ast_hash": "7859549d7833d5f4f96379b4087f00ab",
+    "semantic_hash": ""
+  },
+  "services/ai/config.ts": {
+    "mtime": 1787949401.215362,
+    "ast_hash": "8f4d8691b9bc70cb3b440a4cf2ddf82a",
+    "semantic_hash": ""
+  },
+  "services/ai/intentParser.ts": {
+    "mtime": 1787949401.2165658,
+    "ast_hash": "872174fe40b98a51838dffa707b60c15",
+    "semantic_hash": ""
+  },
+  "services/ai/systemPrompt.ts": {
+    "mtime": 1787949401.2175655,
+    "ast_hash": "2343b282ff1968eaafb08e90f91481b7",
+    "semantic_hash": ""
+  },
+  "services/auth/config.ts": {
+    "mtime": 1782060846.359603,
+    "ast_hash": "84d564e234032c6fe564bbf9e43d37fe",
+    "semantic_hash": ""
+  },
+  "services/auth/session.ts": {
+    "mtime": 1787949401.2175655,
+    "ast_hash": "e5addd01a10d363cc55b85e83705a0c0",
+    "semantic_hash": ""
+  },
+  "services/auth/supabase.ts": {
+    "mtime": 1782063619.643469,
+    "ast_hash": "6c3a825fad26c6c8187502a9e9aca3ea",
+    "semantic_hash": ""
+  },
+  "services/automation/automationEngine.ts": {
+    "mtime": 1778952455.0325475,
+    "ast_hash": "ba6af829719fb18a76439a9ac0f9110f",
+    "semantic_hash": ""
+  },
+  "services/automation/triggerEvaluator.ts": {
+    "mtime": 1778952456.8766146,
+    "ast_hash": "f12ed9a1dc59b106e9d0f8aa9af737b8",
+    "semantic_hash": ""
+  },
+  "services/browser/appLinks.ts": {
+    "mtime": 1782058427.7145727,
+    "ast_hash": "6d2a204d37049d926dc73b8e51aa4b06",
+    "semantic_hash": ""
+  },
+  "services/browser/browserActions.ts": {
+    "mtime": 1782058389.4894843,
+    "ast_hash": "eaeb84b59957bef108661d1f0ae436a8",
+    "semantic_hash": ""
+  },
+  "services/browser/weatherService.ts": {
+    "mtime": 1780865648.5028214,
+    "ast_hash": "bd593f363af8d1d12a0d2372c936e667",
+    "semantic_hash": ""
+  },
+  "services/devices/ewelinkService.ts": {
+    "mtime": 1787949401.2185664,
+    "ast_hash": "3b73f06e013e3fa5e6480057bf57cba5",
+    "semantic_hash": ""
+  },
+  "services/storage/migrations.ts": {
+    "mtime": 1778952452.030884,
+    "ast_hash": "c0667f1d46ab244fe4b4d3bc9efa3050",
+    "semantic_hash": ""
+  },
+  "services/storage/mmkvStorage.ts": {
+    "mtime": 1779107785.1620915,
+    "ast_hash": "df7ce9795149f5f3a94a19115c2e79f3",
+    "semantic_hash": ""
+  },
+  "services/voice/speechText.ts": {
+    "mtime": 1787949401.2195666,
+    "ast_hash": "7eca40868c03be8ea23141b1e680c682",
+    "semantic_hash": ""
+  },
+  "services/voice/speechToText.ts": {
+    "mtime": 1778952450.0532596,
+    "ast_hash": "c996b30aff8e8ba15445871a7d43f3d0",
+    "semantic_hash": ""
+  },
+  "services/voice/speechUnlock.ts": {
+    "mtime": 1784031587.8813937,
+    "ast_hash": "31a2cd6a99e8100eaecf5142170bba62",
+    "semantic_hash": ""
+  },
+  "services/voice/speechUnlock.web.ts": {
+    "mtime": 1787949401.2205658,
+    "ast_hash": "1b8229414a31a19911f0a534d4d4cf72",
+    "semantic_hash": ""
+  },
+  "services/voice/textToSpeech.ts": {
+    "mtime": 1787949401.2205658,
+    "ast_hash": "663190cb57b8a5b150a177f0b94d9737",
+    "semantic_hash": ""
+  },
+  "services/voice/textToSpeech.web.ts": {
+    "mtime": 1787949401.2215662,
+    "ast_hash": "b05674cfb3b90fd0de73bb2a36df777a",
+    "semantic_hash": ""
+  },
+  "services/voice/voicePicker.ts": {
+    "mtime": 1782058643.792993,
+    "ast_hash": "6d2cfa7bcbab2f028c94ea85b24737cc",
+    "semantic_hash": ""
+  },
+  "services/voice/voiceSession.ts": {
+    "mtime": 1787949401.2225664,
+    "ast_hash": "e3a0eb070225b1c545ba2774373b0f9b",
+    "semantic_hash": ""
+  },
+  "stores/useAIStore.ts": {
+    "mtime": 1787949401.2235677,
+    "ast_hash": "c730a042f3b9e4614439f274cbbae033",
+    "semantic_hash": ""
+  },
+  "stores/useAuthStore.ts": {
+    "mtime": 1787949401.2245662,
+    "ast_hash": "d0288c3b1eb486c8583614a6f30f5f74",
+    "semantic_hash": ""
+  },
+  "stores/useAutomationStore.ts": {
+    "mtime": 1779107775.698108,
+    "ast_hash": "980cbb5cb5bd0ad5bd84fa0215200f6d",
+    "semantic_hash": ""
+  },
+  "stores/useDeviceStore.ts": {
+    "mtime": 1787949401.2245662,
+    "ast_hash": "eec97e0edec8c670a514242140742e39",
+    "semantic_hash": ""
+  },
+  "stores/useMemoryStore.ts": {
+    "mtime": 1787949401.2257614,
+    "ast_hash": "3e0fefccf7763d92be959d7f91bcfc2f",
+    "semantic_hash": ""
+  },
+  "stores/useSettingsStore.ts": {
+    "mtime": 1787949401.226763,
+    "ast_hash": "2156de70bfa399f253a415a4af979107",
+    "semantic_hash": ""
+  },
+  "stores/useVoiceStore.ts": {
+    "mtime": 1778952431.3872457,
+    "ast_hash": "ac4c333e3728b49815c0778ed7477201",
+    "semantic_hash": ""
+  },
+  "tailwind.config.js": {
+    "mtime": 1778952363.8895743,
+    "ast_hash": "dce82a8d8e92d3f276ee83c192aa3858",
+    "semantic_hash": ""
+  },
+  "tsconfig.json": {
+    "mtime": 1786046240.3754742,
+    "ast_hash": "a52f45233893f9bf495b79aa14ab3b86",
+    "semantic_hash": ""
+  },
+  "types/ai.types.ts": {
+    "mtime": 1778952369.4014473,
+    "ast_hash": "28b147155177f3c2055af398d585c8aa",
+    "semantic_hash": ""
+  },
+  "types/automation.types.ts": {
+    "mtime": 1778952372.11105,
+    "ast_hash": "81f8766200693aecf5c2c3ec000cb7f2",
+    "semantic_hash": ""
+  },
+  "types/device.types.ts": {
+    "mtime": 1787949401.2277634,
+    "ast_hash": "f74a81a82e186234a3d8f81bd2dc319a",
+    "semantic_hash": ""
+  },
+  "types/memory.types.ts": {
+    "mtime": 1787949401.2287629,
+    "ast_hash": "8058435322463375e8b6785d678a2fcd",
+    "semantic_hash": ""
+  },
+  "types/settings.types.ts": {
+    "mtime": 1787949401.2287629,
+    "ast_hash": "d4bd9e539b2b907d35dea99c64378448",
+    "semantic_hash": ""
+  },
+  "utils/formatters.ts": {
+    "mtime": 1778952482.9703262,
+    "ast_hash": "2e3a2b8f6f12e3cd3338fc67d2836385",
+    "semantic_hash": ""
+  },
+  "utils/helpers.ts": {
+    "mtime": 1778952485.0544443,
+    "ast_hash": "9587302b912559936c405bca6ab465a2",
+    "semantic_hash": ""
+  },
+  "vercel.json": {
+    "mtime": 1787949401.2287629,
+    "ast_hash": "65c60d7b49716ac3d18bf94ace841c88",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1787949524.2397137,
+    "ast_hash": "14c20ac222e0fdf23d9fdfe34340e0f6",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1787949507.881505,
+    "ast_hash": "5ba40ef7ba050ce8bfeb25e15b5be55b",
+    "semantic_hash": ""
+  },
+  "connect.html": {
+    "mtime": 1780866268.068169,
+    "ast_hash": "819f04fb67e6a47ea4f048f3db5e69ee",
+    "semantic_hash": ""
+  },
+  "public/offline.html": {
+    "mtime": 1780864850.45317,
+    "ast_hash": "118c466fa9a33abebca227961832b105",
+    "semantic_hash": ""
+  },
+  "assets/adaptive-icon.png": {
+    "mtime": 1778952112.611432,
+    "ast_hash": "97dae5a0e62ad8551d8a31897b425e63",
+    "semantic_hash": ""
+  },
+  "assets/favicon.png": {
+    "mtime": 1778952112.6124332,
+    "ast_hash": "4f1cb2cac2370cd5050681232e8575a8",
+    "semantic_hash": ""
+  },
+  "assets/icon.png": {
+    "mtime": 1778952112.6124332,
+    "ast_hash": "4e3f888fc8475f69fd5fa32f1ad5216a",
+    "semantic_hash": ""
+  },
+  "assets/splash-icon.png": {
+    "mtime": 1778952112.6144319,
+    "ast_hash": "97dae5a0e62ad8551d8a31897b425e63",
+    "semantic_hash": ""
+  },
+  "api/ewelink/authorize.ts": {
+    "mtime": 1787949401.1784387,
+    "ast_hash": "3e7cf0267ed96162d4d3f8ac1bb674c4",
+    "semantic_hash": ""
+  },
+  "api/ewelink/control.ts": {
+    "mtime": 1787949401.1794398,
+    "ast_hash": "d1f07a3de376f0f2ef3266791715d216",
+    "semantic_hash": ""
+  },
+  "api/ewelink/devices.ts": {
+    "mtime": 1787949401.1804397,
+    "ast_hash": "ee22bbf82bbffe8d7f73bda7d8d197b4",
+    "semantic_hash": ""
+  },
+  "api/ewelink/exchange.ts": {
+    "mtime": 1787949401.1814451,
+    "ast_hash": "7145b4f4774251229d79855c270df351",
+    "semantic_hash": ""
+  },
+  "api/ewelink/login.ts": {
+    "mtime": 1787949401.182446,
+    "ast_hash": "5e793e35e21f60b3ce86692bf08b46b0",
+    "semantic_hash": ""
+  },
+  "docs/ai/CONTEXT.md": {
+    "mtime": 1787949419.7369196,
+    "ast_hash": "d68f4bc3528bf0bca05b700060dee53b",
+    "semantic_hash": ""
+  },
+  "docs/ai/PROJECT_MAP.md": {
+    "mtime": 1787949441.6611483,
+    "ast_hash": "e8be10ac1ffcf5d9c68ad9bb6c658721",
+    "semantic_hash": ""
+  },
+  "docs/ai/WORK_PROTOCOL.md": {
+    "mtime": 1787949485.839358,
+    "ast_hash": "1dcfd1be50a6c697f9f4b02fb6f486d8",
+    "semantic_hash": ""
+  },
+  "argos_prompt_arquitetura_ia_local_hibrida.pdf": {
+    "mtime": 1787949473.3025713,
+    "ast_hash": "ec968bda85150162af5a7c968d96818a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/.claude/settings.json": {
+    "mtime": 1787949540.0786657,
+    "ast_hash": "0e5fa9ee1de7421260d9f6695b5b6683",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/_lib/ewelink.ts": {
+    "mtime": 1787949540.0806637,
+    "ast_hash": "047e04141dd47b818af7fecc3dcc29e3",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/chat.ts": {
+    "mtime": 1787949540.081669,
+    "ast_hash": "896447bb703fc897a7ea358349a931b4",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/ewelink/authorize.ts": {
+    "mtime": 1787949540.0826693,
+    "ast_hash": "3e7cf0267ed96162d4d3f8ac1bb674c4",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/ewelink/control.ts": {
+    "mtime": 1787949540.0826693,
+    "ast_hash": "d1f07a3de376f0f2ef3266791715d216",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/ewelink/devices.ts": {
+    "mtime": 1787949540.083668,
+    "ast_hash": "ee22bbf82bbffe8d7f73bda7d8d197b4",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/ewelink/exchange.ts": {
+    "mtime": 1787949540.083668,
+    "ast_hash": "7145b4f4774251229d79855c270df351",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/api/ewelink/login.ts": {
+    "mtime": 1787949540.083668,
+    "ast_hash": "5e793e35e21f60b3ce86692bf08b46b0",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app.config.js": {
+    "mtime": 1787949540.0846674,
+    "ast_hash": "06bd89d9d7bea7f32eb29676f6682169",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app.json": {
+    "mtime": 1787949540.0846674,
+    "ast_hash": "44d0d1a15ecb6cae51a4211b5d791543",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/_layout.tsx": {
+    "mtime": 1787949540.0856707,
+    "ast_hash": "ca6679bc25510a12fff6c59c431fbac8",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/_layout.web.tsx": {
+    "mtime": 1787949540.0856707,
+    "ast_hash": "ac0137f667f3927f67ce747e025ab744",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/create-automation.tsx": {
+    "mtime": 1787949540.0856707,
+    "ast_hash": "5f6978edcc3550e5c2b641310290ebf1",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/execution.tsx": {
+    "mtime": 1787949540.0866709,
+    "ast_hash": "a17dc4ddbdc5eb2ea2b47aa21f0dd359",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/memory.tsx": {
+    "mtime": 1787949540.0866709,
+    "ast_hash": "aaaf574fd22898c6bacb32e507a0880b",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(modals)/routine-detail.tsx": {
+    "mtime": 1787949540.0876684,
+    "ast_hash": "af9550f6f05e7fbea6d78f4d9db2e23b",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/_layout.tsx": {
+    "mtime": 1787949540.0886686,
+    "ast_hash": "bf289d2890c5ceba6aa7c5450e76242c",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/_layout.web.tsx": {
+    "mtime": 1787949540.0886686,
+    "ast_hash": "cb8ef46a59584b5dc421b0ef47e68f68",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/automations.tsx": {
+    "mtime": 1787949540.0896676,
+    "ast_hash": "cbf106143fb9c9742aba21164311c69f",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/chat.tsx": {
+    "mtime": 1787949540.0896676,
+    "ast_hash": "b1c8c2f52b7aa9dfeff1415f06a78daa",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/devices.tsx": {
+    "mtime": 1787949540.0906675,
+    "ast_hash": "6366021d3239a3070243aad65cb1fcdf",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/index.tsx": {
+    "mtime": 1787949540.0906675,
+    "ast_hash": "118d599110c1bf7269a527a2b9d38aba",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/index.web.tsx": {
+    "mtime": 1787949540.0916674,
+    "ast_hash": "0966774e7b5f433ff774d09761c6a8e4",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/(tabs)/settings.tsx": {
+    "mtime": 1787949540.0916674,
+    "ast_hash": "4f57ea62c3107a0b8acbe11aff6bb8f2",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/+html.tsx": {
+    "mtime": 1787949540.0926673,
+    "ast_hash": "92d05be20ff1c7c3b85be7fb6d5d7cb6",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/_layout.tsx": {
+    "mtime": 1787949540.0926673,
+    "ast_hash": "f2143a9db86ff48e1f99a6d2a125a3dc",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/_layout.web.tsx": {
+    "mtime": 1787949540.0926673,
+    "ast_hash": "ab68dd576042c86ade4e132f51f9eece",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/integrations/ewelink/callback.tsx": {
+    "mtime": 1787949540.0936706,
+    "ast_hash": "102f13fbdaae83c14f4cc3432e793f86",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/app/login.tsx": {
+    "mtime": 1787949540.0946703,
+    "ast_hash": "df927af7ea99a26ce324ae3735a15973",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/babel.config.js": {
+    "mtime": 1787949540.1001263,
+    "ast_hash": "8fb80fccb3507b764ec99f5d8f774112",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/apps/OpenAppBanner.tsx": {
+    "mtime": 1787949540.101133,
+    "ast_hash": "772fcf7187f20b69f2eaac0c4a013fc9",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/automation/ActionList.tsx": {
+    "mtime": 1787949540.101133,
+    "ast_hash": "16619f029b74f693388b04a3763c0e30",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/automation/AutomationCard.tsx": {
+    "mtime": 1787949540.1021328,
+    "ast_hash": "ee56c0586aa362797ae150449b68d88a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/automation/PresetAutomation.tsx": {
+    "mtime": 1787949540.1021328,
+    "ast_hash": "5d31b6f62aa2202b0614cc0b165df4b5",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/automation/TriggerBadge.tsx": {
+    "mtime": 1787949540.1031332,
+    "ast_hash": "5513bbb9a4a7328bfff7dcd04c3aa5cc",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/chat/ActionCard.tsx": {
+    "mtime": 1787949540.1031332,
+    "ast_hash": "dd7a3a5369b2919f218b8237dd9d498a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/chat/MessageBubble.tsx": {
+    "mtime": 1787949540.104134,
+    "ast_hash": "f917cbec58e51e877a6d16bae3fc8cfa",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/chat/SuggestionPill.tsx": {
+    "mtime": 1787949540.104134,
+    "ast_hash": "81bd937248171a709dd55dd571035f4e",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/chat/VoiceInput.tsx": {
+    "mtime": 1787949540.1051314,
+    "ast_hash": "4895e9e60cb3fe3345e7f5629d5d1d66",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/devices/DeviceCard.tsx": {
+    "mtime": 1787949540.1061316,
+    "ast_hash": "4d0f37ba69f0a76ffb6aa0c65e735d34",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/devices/DeviceCategory.tsx": {
+    "mtime": 1787949540.1061316,
+    "ast_hash": "98f2de1320d1f93b9af03dfb6dda9441",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/devices/DeviceToggle.tsx": {
+    "mtime": 1787949540.1061316,
+    "ast_hash": "a9de4f56e3d552408659e4bfdce9ec79",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/execution/ExecutionOverlay.tsx": {
+    "mtime": 1787949540.1071327,
+    "ast_hash": "29cffde915588c3d70482cd4d400bf74",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/execution/ExecutionStep.tsx": {
+    "mtime": 1787949540.1081333,
+    "ast_hash": "216c5342bd520d83789f6ea3fb5a657d",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/memory/HabitInsight.tsx": {
+    "mtime": 1787949540.1081333,
+    "ast_hash": "ec4cc4e49bf8819de636b0ab98462820",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/memory/MemoryCard.tsx": {
+    "mtime": 1787949540.1081333,
+    "ast_hash": "e52eae5f88d6aec0c9812591d952cc11",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/orb/OrbCore.tsx": {
+    "mtime": 1787949540.1091344,
+    "ast_hash": "807bce3d492219ae761ddd4b8a4d7171",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/orb/OrbRings.tsx": {
+    "mtime": 1787949540.1091344,
+    "ast_hash": "cdf45d2627f4826c07b5a4a744771b48",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/orb/OrbStatus.tsx": {
+    "mtime": 1787949540.1101332,
+    "ast_hash": "ea9fca9aa267486efb7f08b81e63ab90",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/settings/VoiceInstallHelp.tsx": {
+    "mtime": 1787949540.1111329,
+    "ast_hash": "218910735299f52101016503bfa1e081",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/ui/BottomSheet.tsx": {
+    "mtime": 1787949540.1111329,
+    "ast_hash": "53e4e391e3818523476a0acf079e34c5",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/ui/GlassCard.tsx": {
+    "mtime": 1787949540.1121335,
+    "ast_hash": "cfe819dcdfe27d261466d93e5a53b863",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/ui/GradientText.tsx": {
+    "mtime": 1787949540.1121335,
+    "ast_hash": "e5d9ea116a4425aa5f93e85b295715cb",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/ui/PressableFeedback.tsx": {
+    "mtime": 1787949540.1131325,
+    "ast_hash": "d71b4c38961f6ebe1363bbd9c5dc671a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/components/ui/StatusBar.tsx": {
+    "mtime": 1787949540.1131325,
+    "ast_hash": "45a6273967df7dad69f34c5a603547a7",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/animations.ts": {
+    "mtime": 1787949540.1141315,
+    "ast_hash": "232200111f6b19e0e0e81844ddd8731c",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/colors.ts": {
+    "mtime": 1787949540.1141315,
+    "ast_hash": "ae3a8d4c7d424562baa2a588e9cf7ebf",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/devices.ts": {
+    "mtime": 1787949540.1151347,
+    "ast_hash": "f379227f750be8ebccbfb454635ea65b",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/orb.ts": {
+    "mtime": 1787949540.1151347,
+    "ast_hash": "bb2d8bd10a9a013c8d7a8f1b39e29bce",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/presets.ts": {
+    "mtime": 1787949540.1161318,
+    "ast_hash": "f1430ae3b59b76c1a3a7d41a42b70994",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/constants/voice.ts": {
+    "mtime": 1787949540.1161318,
+    "ast_hash": "c7740fe16f47282f46ed3c6cb0b96540",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useARIA.ts": {
+    "mtime": 1787949540.1191316,
+    "ast_hash": "2fa3c5143737a814617e764867e1637c",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useArgos.ts": {
+    "mtime": 1787949540.1191316,
+    "ast_hash": "bab16d5a0759ce4a7078441bd3804dda",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useAutomation.ts": {
+    "mtime": 1787949540.1201327,
+    "ast_hash": "0fed242fdaf3c82badc6cd66c08b9766",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useHaptic.ts": {
+    "mtime": 1787949540.1201327,
+    "ast_hash": "aca28fc75baa6b69bdf1da6f1457f177",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useSupabaseSync.ts": {
+    "mtime": 1787949540.1201327,
+    "ast_hash": "362d950efe3007e81a54ed542f1f4169",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useTheme.ts": {
+    "mtime": 1787949540.1211326,
+    "ast_hash": "76073dbf3d29ef9192187a71c2c9f054",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useVoice.ts": {
+    "mtime": 1787949540.1211326,
+    "ast_hash": "2b5f1188532d71602fa77940ac735c77",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/hooks/useVoice.web.ts": {
+    "mtime": 1787949540.1221318,
+    "ast_hash": "ab6385e875ce29dfe974af13dfdbc25e",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/metro.config.js": {
+    "mtime": 1787949540.1221318,
+    "ast_hash": "c90a2e49a9ca42c9d6d27122d0e97d08",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/nativewind-env.d.ts": {
+    "mtime": 1787949540.1221318,
+    "ast_hash": "0074169ae7f73e00780027d9fb78fc29",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/package.json": {
+    "mtime": 1787949540.125135,
+    "ast_hash": "5523bc4b6d18b27cc939f8ef77f4aa15",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/public/manifest.json": {
+    "mtime": 1787949540.1261346,
+    "ast_hash": "7675a3ddc78c09181907080eb87defbf",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/public/sw.js": {
+    "mtime": 1787949540.127132,
+    "ast_hash": "bf5d00c6841ed0a11c5d80c0148489fc",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/scripts/inject-pwa.mjs": {
+    "mtime": 1787949540.127132,
+    "ast_hash": "e56b11fe1a14f852d751978cac450d0f",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/anthropic.ts": {
+    "mtime": 1787949540.1281316,
+    "ast_hash": "7d8663104f274a6db7bf2356a4d7c100",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/anthropicProxy.ts": {
+    "mtime": 1787949540.1281316,
+    "ast_hash": "c26604b114c61aa686085862cfb6f035",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/automationBuilder.ts": {
+    "mtime": 1787949540.1291323,
+    "ast_hash": "a8d053d0dc12a71d4c66044c808de8ff",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/chatMessages.ts": {
+    "mtime": 1787949540.1291323,
+    "ast_hash": "0f070797ae5850c33d6a72ffbb4a3c94",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/config.ts": {
+    "mtime": 1787949540.130132,
+    "ast_hash": "8f4d8691b9bc70cb3b440a4cf2ddf82a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/intentParser.ts": {
+    "mtime": 1787949540.130132,
+    "ast_hash": "872174fe40b98a51838dffa707b60c15",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/ai/systemPrompt.ts": {
+    "mtime": 1787949540.1308546,
+    "ast_hash": "2343b282ff1968eaafb08e90f91481b7",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/auth/config.ts": {
+    "mtime": 1787949540.1308546,
+    "ast_hash": "45a4c34f58332b2b8b221cf0e61dab7c",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/auth/session.ts": {
+    "mtime": 1787949540.1318622,
+    "ast_hash": "e5addd01a10d363cc55b85e83705a0c0",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/auth/supabase.ts": {
+    "mtime": 1787949540.1318622,
+    "ast_hash": "830924b88810649451f1b219f7f414be",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/automation/automationEngine.ts": {
+    "mtime": 1787949540.1328635,
+    "ast_hash": "b309117e3f0e897b63b481c763980463",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/automation/triggerEvaluator.ts": {
+    "mtime": 1787949540.1328635,
+    "ast_hash": "124b7102cf81ded2dd6329f22a203419",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/browser/appLinks.ts": {
+    "mtime": 1787949540.1339917,
+    "ast_hash": "6e5cb9c64d362b373cf156453f75dc23",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/browser/browserActions.ts": {
+    "mtime": 1787949540.1339917,
+    "ast_hash": "13cecb91255b01131f78d04f96034fea",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/browser/weatherService.ts": {
+    "mtime": 1787949540.1349974,
+    "ast_hash": "48eb776d6de3cd3f96de5ae4c53ba5b7",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/devices/ewelinkService.ts": {
+    "mtime": 1787949540.135997,
+    "ast_hash": "3b73f06e013e3fa5e6480057bf57cba5",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/storage/migrations.ts": {
+    "mtime": 1787949540.135997,
+    "ast_hash": "4a069ea8da5e9d79acb9d6c89ad58b0a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/storage/mmkvStorage.ts": {
+    "mtime": 1787949540.135997,
+    "ast_hash": "982469fc6c0c57cb69027548da7cdb05",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/speechText.ts": {
+    "mtime": 1787949540.137003,
+    "ast_hash": "7eca40868c03be8ea23141b1e680c682",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/speechToText.ts": {
+    "mtime": 1787949540.137003,
+    "ast_hash": "51b20a2f1e80a553563dd8d90450dc6f",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/speechUnlock.ts": {
+    "mtime": 1787949540.1380033,
+    "ast_hash": "5b1b791e9214cc44132f6bbec09c563f",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/speechUnlock.web.ts": {
+    "mtime": 1787949540.1380033,
+    "ast_hash": "1b8229414a31a19911f0a534d4d4cf72",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/textToSpeech.ts": {
+    "mtime": 1787949540.1380033,
+    "ast_hash": "663190cb57b8a5b150a177f0b94d9737",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/textToSpeech.web.ts": {
+    "mtime": 1787949540.139003,
+    "ast_hash": "b05674cfb3b90fd0de73bb2a36df777a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/voicePicker.ts": {
+    "mtime": 1787949540.1400716,
+    "ast_hash": "2afaefc5c25f7b8bbe8e79af64aaed73",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/services/voice/voiceSession.ts": {
+    "mtime": 1787949540.1400716,
+    "ast_hash": "e3a0eb070225b1c545ba2774373b0f9b",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useAIStore.ts": {
+    "mtime": 1787949540.1410787,
+    "ast_hash": "c730a042f3b9e4614439f274cbbae033",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useAuthStore.ts": {
+    "mtime": 1787949540.1410787,
+    "ast_hash": "d0288c3b1eb486c8583614a6f30f5f74",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useAutomationStore.ts": {
+    "mtime": 1787949540.1410787,
+    "ast_hash": "a40ed449b3cb1e6a8bba943b519b8aae",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useDeviceStore.ts": {
+    "mtime": 1787949540.1420777,
+    "ast_hash": "eec97e0edec8c670a514242140742e39",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useMemoryStore.ts": {
+    "mtime": 1787949540.1420777,
+    "ast_hash": "3e0fefccf7763d92be959d7f91bcfc2f",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useSettingsStore.ts": {
+    "mtime": 1787949540.143095,
+    "ast_hash": "2156de70bfa399f253a415a4af979107",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/stores/useVoiceStore.ts": {
+    "mtime": 1787949540.143095,
+    "ast_hash": "eb1ef7b7828bab60c8b2c022039270df",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/tailwind.config.js": {
+    "mtime": 1787949540.143095,
+    "ast_hash": "3ab92ebaea8681e910bc98ef4f52f713",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/tsconfig.json": {
+    "mtime": 1787949540.144101,
+    "ast_hash": "404a13f6970e30128e04eed766bc369d",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/types/ai.types.ts": {
+    "mtime": 1787949540.144101,
+    "ast_hash": "b781cc46d9f77b197dde05908e7f74a4",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/types/automation.types.ts": {
+    "mtime": 1787949540.1451013,
+    "ast_hash": "694442e5374bad90028c4c337351f6d6",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/types/device.types.ts": {
+    "mtime": 1787949540.1451013,
+    "ast_hash": "f74a81a82e186234a3d8f81bd2dc319a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/types/memory.types.ts": {
+    "mtime": 1787949540.1451013,
+    "ast_hash": "8058435322463375e8b6785d678a2fcd",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/types/settings.types.ts": {
+    "mtime": 1787949540.1461017,
+    "ast_hash": "d4bd9e539b2b907d35dea99c64378448",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/utils/formatters.ts": {
+    "mtime": 1787949540.1461017,
+    "ast_hash": "d2cb085227f1e828418cac67c38c2fb2",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/utils/helpers.ts": {
+    "mtime": 1787949540.1471014,
+    "ast_hash": "6ce803c9a3c71c7f4ccd115a0748f3c6",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/vercel.json": {
+    "mtime": 1787949540.1471014,
+    "ast_hash": "65c60d7b49716ac3d18bf94ace841c88",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/AGENTS.md": {
+    "mtime": 1787949540.0796647,
+    "ast_hash": "2194d08b8536ae03fbfd25cfb6e3af2a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/CLAUDE.md": {
+    "mtime": 1787949540.0796647,
+    "ast_hash": "16d1fbb11bf5c1b05bb8483b08b9a7a2",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/connect.html": {
+    "mtime": 1787949540.1141315,
+    "ast_hash": "39e623515afed0db9f420766337018d8",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/docs/ai/CONTEXT.md": {
+    "mtime": 1787949540.117135,
+    "ast_hash": "4c0500d1ac699a8be778622b4a35da14",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/docs/ai/PROJECT_MAP.md": {
+    "mtime": 1787949540.117135,
+    "ast_hash": "f420f3471ec53a589992198fd16b633a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/docs/ai/WORK_PROTOCOL.md": {
+    "mtime": 1787949540.1181328,
+    "ast_hash": "84f122357d12563e2d75140cc72d0348",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/public/offline.html": {
+    "mtime": 1787949540.1261346,
+    "ast_hash": "834e28bca99f20adcf358f53b7443942",
+    "semantic_hash": ""
+  },
+  "docs/ai/DAILY_GUIDE.md": {
+    "mtime": 1787949595.5976188,
+    "ast_hash": "bbb4eb1635c5fce165f77b027392cf7a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/assets/adaptive-icon.png": {
+    "mtime": 1787949540.0956676,
+    "ast_hash": "97dae5a0e62ad8551d8a31897b425e63",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/assets/favicon.png": {
+    "mtime": 1787949540.0969355,
+    "ast_hash": "4f1cb2cac2370cd5050681232e8575a8",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/assets/icon.png": {
+    "mtime": 1787949540.0985737,
+    "ast_hash": "4e3f888fc8475f69fd5fa32f1ad5216a",
+    "semantic_hash": ""
+  },
+  "argos-codex-builder/assets/splash-icon.png": {
+    "mtime": 1787949540.0985737,
+    "ast_hash": "97dae5a0e62ad8551d8a31897b425e63",
+    "semantic_hash": ""
+  },
+  "services/router/fastPath.ts": {
+    "mtime": 1787949632.554146,
+    "ast_hash": "b5fac3a0611696dda3e86990cee27a52",
+    "semantic_hash": ""
+  },
+  "types/router.types.ts": {
+    "mtime": 1787949617.1203485,
+    "ast_hash": "095bffd352102c7959c7ab3b61cefb6f",
+    "semantic_hash": ""
+  },
+  "SETUP_COMPLETE.md": {
+    "mtime": 1787949634.104456,
+    "ast_hash": "a445587e4177b20c20c2375649225c24",
+    "semantic_hash": ""
+  }
+}

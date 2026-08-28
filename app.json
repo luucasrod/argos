@@ -3,6 +3,7 @@
     "name": "Argos",
     "slug": "argos-assistant",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -29,7 +30,14 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050810"
       },
-      "permissions": ["RECORD_AUDIO", "INTERNET"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.masya.apps.argosassistant"
     },
     "web": {
       "bundler": "metro",
