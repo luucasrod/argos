@@ -1,0 +1,327 @@
+<title>Setup Completo — Claude Code + Codex Protocol</title>
+<style>
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --text-primary: #24292f;
+  --text-secondary: #57606a;
+  --border: #d0d7de;
+  --success: #1a7f37;
+  --warning: #9e6a03;
+  --error: #d1242f;
+  --info: #0969da;
+  --accent: #7ee787;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --border: #30363d;
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f85149;
+    --info: #58a6ff;
+    --accent: #79c0ff;
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 {
+  border-bottom: 3px solid var(--info);
+  padding-bottom: 10px;
+  margin-bottom: 30px;
+  color: var(--info);
+}
+
+h2 {
+  margin-top: 40px;
+  margin-bottom: 15px;
+  color: var(--text-primary);
+  border-left: 4px solid var(--info);
+  padding-left: 12px;
+}
+
+h3 {
+  color: var(--text-secondary);
+  margin-top: 20px;
+}
+
+.status-box {
+  background: var(--bg-secondary);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.status-done {
+  border-left: 5px solid var(--success);
+}
+
+.status-todo {
+  border-left: 5px solid var(--warning);
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.badge-done {
+  background: var(--success);
+  color: white;
+}
+
+.badge-todo {
+  background: var(--warning);
+  color: white;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+}
+
+th, td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+
+code {
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: "Monaco", "Menlo", monospace;
+  font-size: 0.9em;
+}
+
+.code-block {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 15px;
+  overflow-x: auto;
+  margin: 15px 0;
+  font-family: "Monaco", "Menlo", monospace;
+  font-size: 0.9em;
+}
+
+.highlight {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid var(--warning);
+  margin: 20px 0;
+}
+
+.success-highlight {
+  background: #d4edda;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid var(--success);
+  margin: 20px 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.grid-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+ul, ol {
+  line-height: 1.8;
+}
+
+li {
+  margin-bottom: 8px;
+}
+</style>
+
+<div class="container">
+
+<h1>✅ SETUP COMPLETO — CLAUDE CODE + CODEX PROTOCOL</h1>
+
+<div class="success-highlight">
+  <strong>Status</strong>: Todos os sistemas operacionais estão prontos. Começar a trabalhar requer apenas 4 ações manuais rápidas.
+</div>
+
+<h2>🎯 Objetivo Alcançado</h2>
+<p>Configurou-se um ambiente de desenvolvimento onde <strong>Claude Code e Codex trabalham em paralelo</strong> no mesmo repositório com <strong>isolamento seguro via Git worktrees</strong>, <strong>claim atômico de tarefas</strong> via GitHub Issues, <strong>review cruzada</strong> obrigatória, e <strong>uma única fonte de verdade</strong> por domínio.</p>
+
+<h2>✅ O Que Foi Implementado</h2>
+
+<div class="status-box status-done">
+  <h3>1. Documentação Estruturada</h3>
+  <span class="badge badge-done">PRONTO</span>
+  <table>
+    <tr>
+      <th>Arquivo</th>
+      <th>Propósito</th>
+    </tr>
+    <tr>
+      <td><code>docs/ai/CONTEXT.md</code></td>
+      <td>Verdade técnica: produto, arquitetura, decisões, restrições</td>
+    </tr>
+    <tr>
+      <td><code>docs/ai/PROJECT_MAP.md</code></td>
+      <td>Visão macro: módulos, status, blocadores críticos</td>
+    </tr>
+    <tr>
+      <td><code>docs/ai/WORK_PROTOCOL.md</code></td>
+      <td>Protocolo: 4 papéis, claim seguro, branch policy</td>
+    </tr>
+    <tr>
+      <td><code>docs/ai/DAILY_GUIDE.md</code></td>
+      <td>Quick ref (2 min): builders e reviewers começarem</td>
+    </tr>
+  </table>
+</div>
+
+<div class="status-box status-done">
+  <h3>2. Git Worktrees Isoladas (Testadas ✅)</h3>
+  <span class="badge badge-done">PRONTO</span>
+  <div class="grid">
+    <div class="grid-item">
+      <h3>Claude Builder</h3>
+      <code>A:\Argos\argos-claude-builder</code><br>
+      Branch: <code>claude-builder-main</code>
+    </div>
+    <div class="grid-item">
+      <h3>Codex Builder</h3>
+      <code>A:\Argos\argos\argos-codex-builder</code><br>
+      Branch: <code>codex-builder-main</code>
+    </div>
+  </div>
+  <p><strong>Teste realizado</strong>: Ambas criaram commits paralelo. Master não foi afetado. ✅</p>
+</div>
+
+<div class="status-box status-done">
+  <h3>3. Configuração de Sessões</h3>
+  <span class="badge badge-done">PRONTO</span>
+  <ul>
+    <li><strong>CLAUDE.md</strong>: Identifica sessão, lê CONTEXT, PROTOCOL, Issue atual</li>
+    <li><strong>AGENTS.md</strong>: Identifica sessão Codex, reminder Expo v54</li>
+  </ul>
+</div>
+
+<h2>⚠️ Ações Manuais Necessárias (4 rápidas)</h2>
+
+<div class="status-box status-todo">
+  <h3>1️⃣ Configurar Remote GitHub</h3>
+  <span class="badge badge-todo">CRÍTICO</span>
+  <div class="code-block">cd A:\Argos\argos
+git remote set-url origin https://github.com/seu_usuario/seu_repo.git
+git push origin master</div>
+</div>
+
+<div class="status-box status-todo">
+  <h3>2️⃣ Criar GitHub Projects Kanban</h3>
+  <span class="badge badge-todo">IMPORTANTE</span>
+  <p>GitHub → Projects → "New" → Columns: BACKLOG, READY, IN PROGRESS, IN REVIEW, BLOCKED, DONE</p>
+</div>
+
+<div class="status-box status-todo">
+  <h3>3️⃣ Criar 2-3 Issues de Teste</h3>
+  <span class="badge badge-todo">IMPORTANTE</span>
+  <p>Para teste end-to-end. Exemplo: "fix: replace localStorage with AsyncStorage on native"</p>
+</div>
+
+<div class="status-box status-todo">
+  <h3>4️⃣ Proteger Master (Recomendado)</h3>
+  <span class="badge badge-todo">RECOMENDADO</span>
+  <p>GitHub → Settings → Branches → Require PR reviews, status checks</p>
+</div>
+
+<h2>🚀 Como Começar</h2>
+
+<ol>
+  <li>Fazer as 4 ações acima</li>
+  <li>Teste end-to-end: Issue → Branch → PR → Review → Merge (15 min)</li>
+  <li>Quebrar objetivo em Issues</li>
+  <li>Claude Builder + Codex Builder trabalham paralelo ✅</li>
+</ol>
+
+<h2>📖 Documentação de Referência</h2>
+
+<table>
+  <tr>
+    <th>Ler quando</th>
+    <th>Arquivo</th>
+    <th>Tempo</th>
+  </tr>
+  <tr>
+    <td>Começando trabalho</td>
+    <td><code>docs/ai/DAILY_GUIDE.md</code></td>
+    <td>2 min</td>
+  </tr>
+  <tr>
+    <td>Dúvida sobre contexto</td>
+    <td><code>docs/ai/CONTEXT.md</code></td>
+    <td>5 min</td>
+  </tr>
+  <tr>
+    <td>Dúvida sobre protocolo</td>
+    <td><code>docs/ai/WORK_PROTOCOL.md</code></td>
+    <td>10 min</td>
+  </tr>
+</table>
+
+<div class="success-highlight">
+  <strong>🎉 Quando concluir as 4 ações, o sistema está 100% operacional.</strong>
+</div>
+
+<div class="footer">
+  <p><strong>Criado em</strong>: 2026-08-28 | <strong>Status</strong>: COMPLETO — Pronto para produção</p>
+</div>
+
+</div>
