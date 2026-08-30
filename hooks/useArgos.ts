@@ -207,13 +207,13 @@ export function useArgos() {
 
             try {
               if (action.action === 'toggle') {
-                toggleDevice(action.deviceId);
+                await toggleDevice(action.deviceId, true);
               } else if (action.action === 'setOn') {
-                updateDeviceState(action.deviceId, 'isOn', true);
+                await updateDeviceState(action.deviceId, 'isOn', true, true);
               } else if (action.action === 'setOff') {
-                updateDeviceState(action.deviceId, 'isOn', false);
+                await updateDeviceState(action.deviceId, 'isOn', false, true);
               } else if (action.action === 'setValue') {
-                updateDeviceState(action.deviceId, action.property, action.value);
+                await updateDeviceState(action.deviceId, action.property, action.value, true);
               }
               updateExecutionStep(i, 'success');
               stepResults.push('success');

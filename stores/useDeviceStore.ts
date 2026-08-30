@@ -50,8 +50,8 @@ interface DeviceStore {
   setDeviceOrder: (orderedIds: string[]) => void;
   renameDevice: (id: string, name: string) => void;
   updateDevice: (id: string, partial: Partial<Device>) => void;
-  toggleDevice: (id: string) => void;
-  updateDeviceState: (id: string, stateKey: string, value: unknown) => void;
+  toggleDevice: (id: string, waitForTransport?: boolean) => Promise<void>;
+  updateDeviceState: (id: string, stateKey: string, value: unknown, waitForTransport?: boolean) => Promise<void>;
   syncEwelinkDevices: () => Promise<void>;
   syncTuyaDevices: () => Promise<{ count: number }>;
   syncAlexaDevices: () => Promise<{ count: number }>;
@@ -189,7 +189,7 @@ export const useDeviceStore = create<DeviceStore>()(
       devices: state.devices.map((d) => (d.id === id ? { ...d, ...partial } : d)),
     })),
 
-  toggleDevice: (id) => {
+  toggleDevice: async (id, waitForTransport = false) => {
     const device = get().devices.find((d) => d.id === id);
     set((state) => ({
       devices: state.devices.map((d) => (d.id === id ? { ...d, isOn: !d.isOn } : d)),
@@ -202,11 +202,14 @@ export const useDeviceStore = create<DeviceStore>()(
         .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
     }
     if (device?.source === 'tuya' && device.tuyaDeviceId) {
-      controlTuyaDevice(device.tuyaDeviceId, 'isOn', !device.isOn)
-        .catch((err) => {
+      const request = controlTuyaDevice(device.tuyaDeviceId, 'isOn', !device.isOn);
+      if (waitForTransport) {
+        await request;
+        void delay(1200).then(() => get().syncTuyaDevices());
+      }
+      else request.catch((err) => {
           if (__DEV__) console.error('[Tuya] Falha ao controlar dispositivo:', err);
-        })
-        .finally(() => delay(1200).then(() => get().syncTuyaDevices()));
+        }).finally(() => delay(1200).then(() => get().syncTuyaDevices()));
     }
     if (device?.source === 'alexa' && device.alexaEntityId && device.alexaEntityType) {
       controlAlexaDevice(device.alexaEntityId, device.alexaEntityType, 'isOn', !device.isOn)
@@ -263,7 +266,7 @@ export const useDeviceStore = create<DeviceStore>()(
     }
   },
 
-  updateDeviceState: (id, stateKey, value) => {
+  updateDeviceState: async (id, stateKey, value, waitForTransport = false) => {
     const device = get().devices.find((d) => d.id === id);
     set((state) => ({
       devices: state.devices.map((d) =>
@@ -283,11 +286,14 @@ export const useDeviceStore = create<DeviceStore>()(
       const currentColor = stateKey === 'brightness' && typeof device.state?.color === 'string'
         ? device.state.color
         : undefined;
-      controlTuyaDevice(device.tuyaDeviceId, stateKey, value, currentColor)
-        .catch((err) => {
+      const request = controlTuyaDevice(device.tuyaDeviceId, stateKey, value, currentColor);
+      if (waitForTransport) {
+        await request;
+        void delay(1200).then(() => get().syncTuyaDevices());
+      }
+      else request.catch((err) => {
           if (__DEV__) console.error('[Tuya] Falha ao controlar dispositivo:', err);
-        })
-        .finally(() => delay(1200).then(() => get().syncTuyaDevices()));
+        }).finally(() => delay(1200).then(() => get().syncTuyaDevices()));
     }
     if (device?.source === 'alexa' && device.alexaEntityId && device.alexaEntityType) {
       controlAlexaDevice(device.alexaEntityId, device.alexaEntityType, stateKey, value)
