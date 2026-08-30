@@ -5,7 +5,9 @@
 1. **[docs/ai/CONTEXT.md](docs/ai/CONTEXT.md)** — verdade técnica: arquitetura
    da voz, armadilhas de build/OTA, o que já foi tentado e falhou, bugs de causa
    raiz já resolvidos, pendências. **Leia antes de escrever código.**
-2. **[docs/ai/WORK_PROTOCOL.md](docs/ai/WORK_PROTOCOL.md)** — como trabalhar:
+2. **[docs/ai/TAREFAS.md](docs/ai/TAREFAS.md)** — a fila de agora, em ordem de
+   dependência. Temporária: vale enquanto as Issues do GitHub não existem.
+3. **[docs/ai/WORK_PROTOCOL.md](docs/ai/WORK_PROTOCOL.md)** — como trabalhar:
    papéis, claim de tarefa, worktree, PR, revisão cruzada, encadeamento de
    tarefas.
 
