@@ -177,7 +177,7 @@ export default function PerfilScreen() {
           <GlassCard style={styles.card}>
             <Pressable
               style={styles.row}
-              onPress={() => { light(); router.push('/(modals)/integracoes'); }}
+              onPress={() => { light(); router.push('/integracoes'); }}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowLabel}>Gerenciar integrações</Text>
