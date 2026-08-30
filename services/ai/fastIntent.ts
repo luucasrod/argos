@@ -17,6 +17,19 @@ const BRIGHT_HIGH = ['alto', 'alta', 'mais', 'aumenta', 'aumentar', 'sobe', 'sub
 const BRIGHT_LOW = ['baixo', 'baixa', 'menos', 'diminui', 'diminuir', 'desce', 'descer', 'fraca'];
 const BRIGHT_MIN = ['minimo', 'quase', 'pouco'];
 
+/*
+ * Palavras de cor. O atalho rápido só sabe ligar/desligar/brilho — se a frase
+ * também pedir cor, ele reconhecia só o "liga" e IGNORAVA o resto em silêncio,
+ * porque devolve o intent assim que acha um verbo on/off e nunca mais olha pra
+ * frase. "Liga a luz do escritório e deixa vermelho" virava só "liga a luz do
+ * escritório". Aqui a frase é rejeitada cedo para cair na IA, que processa
+ * várias ações (ligar + cor) na mesma resposta.
+ */
+const COLOR_WORDS = [
+  'cor', 'vermelha', 'vermelho', 'verde', 'azul', 'amarela', 'amarelo',
+  'laranja', 'roxa', 'roxo', 'rosa', 'ciano', 'quente', 'fria', 'neutra',
+];
+
 function extractPercentage(text: string): number | null {
   const m = text.match(/(\d{1,3})\s*%/);
   if (m) return Math.max(1, Math.min(100, parseInt(m[1], 10)));
@@ -88,6 +101,9 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
 
   // Frases longas tendem a ter contexto/condições — deixa a IA interpretar.
   if (words.length > 10) return null;
+
+  // Pedido de cor: o atalho não sabe processar, deixa a IA cuidar da frase inteira.
+  if (COLOR_WORDS.some((w) => words.includes(w))) return null;
 
   // Tenta brilho antes de on/off
   const brightnessMatch = matchBrightnessCommand(text, devices);

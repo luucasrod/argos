@@ -60,6 +60,14 @@ const COMMAND_PHRASES = [
   'a luz', 'a lampada', 'o brilho', 'a tomada', 'o ventilador',
   'do escritorio', 'da sala', 'do quarto', 'da cozinha', 'do banheiro',
   'da varanda', 'da garagem', 'do corredor',
+  // Cor. O backend já processa nome de cor -> hex (systemPrompt.ts), mas sem
+  // estas palavras na gramática o Vosk nunca ouvia "cor" — forçava a fala
+  // para a entrada mais próxima da lista, então o pedido nunca chegava certo.
+  'muda a cor', 'troca a cor', 'muda a cor da luz', 'troca a cor da luz',
+  'cor da luz', 'coloca a luz', 'deixa a luz',
+  'vermelha', 'vermelho', 'verde', 'azul', 'amarela', 'amarelo',
+  'laranja', 'roxa', 'roxo', 'rosa', 'ciano', 'branca', 'branco',
+  'luz quente', 'luz fria', 'luz neutra',
   // Música. Nome de faixa é vocabulário ABERTO e não cabe numa gramática fechada,
   // então por voz só funcionam estes pedidos genéricos; para pedir uma música
   // específica é preciso digitar (ou trocar o reconhecimento para texto livre).
@@ -82,8 +90,15 @@ function normalize(s: string): string {
  * segundo token ("argos") é que carrega a distinção.
  */
 const FIRST_ALT = '(?:ei|e|eh|he|hei|ai|a|o)';
-/** Variantes do nome, incluindo o que o modelo pequeno costuma devolver. */
-const NAME_ALT = '(?:argos|argus|argo|arcos|airbus|argox|hargos)';
+/*
+ * Variantes do nome. Mantidas só as foneticamente bem próximas de "argos"
+ * (argus/argo). "arcos", "airbus", "argox", "hargos" saíram da lista —
+ * são palavras/sons comuns na fala normal e viraram a maior fonte de falso
+ * positivo (o Argos respondendo sozinho, sem ninguém chamar). O usuário
+ * preferiu explicitamente mais rigor aqui, mesmo perdendo chamadas reais
+ * ocasionais: "mesmo se ele não me ouvir não tem problema".
+ */
+const NAME_ALT = '(?:argos|argus|argo)';
 
 /**
  * Frases aceitas para acordar, além da configurada nas preferências.
@@ -107,9 +122,13 @@ const WAKE_PREFIX_WORDS = ['ei', 'ola', 'ok', 'e', 'a', 'oi'];
  *
  *   A) <prefixo> + nome            "ei argos / olá argos / ok argos, desliga..."
  *   B) nome + <sufixo>             "argos escuta / argos acorda, desliga..."
- *   C) nome sozinho NO INÍCIO      "argos, desliga..."
- * O caso C exige início de frase de propósito: aceitar o nome solto no meio de
- * qualquer frase é justamente o que gerava falso positivo.
+ *
+ * Existia um terceiro padrão (nome sozinho no início da frase, tipo "argos,
+ * desliga...") — removido a pedido explícito do usuário: era o gatilho mais
+ * fácil de disparar à toa (bastava a frase começar com algo parecido com
+ * "argos"), e ele preferiu perder algumas chamadas reais a continuar com o
+ * Argos respondendo sozinho o dia inteiro sem ninguém chamar. Agora SEMPRE
+ * precisa de prefixo ("ei argos") ou sufixo ("argos escuta").
  */
 function buildWakePatterns(wakeWord: string): RegExp[] {
   const full = normalize(wakeWord);
@@ -124,7 +143,6 @@ function buildWakePatterns(wakeWord: string): RegExp[] {
     // B primeiro: é a mais específica, e consome também o sufixo.
     new RegExp('(?:^|[^a-z])' + nameAlt + '\\s+' + suffixAlt + '(?![a-z])', 'i'),
     new RegExp('(?:^|[^a-z])' + prefixAlt + '\\s+' + nameAlt + '(?![a-z])', 'i'),
-    new RegExp('^' + nameAlt + '(?![a-z])', 'i'),
   ];
 }
 

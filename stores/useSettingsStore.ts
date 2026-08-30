@@ -14,7 +14,7 @@ const defaultPersonality: AIPersonality = {
   verbosity: 'normal',
   language: 'pt-BR',
   voiceSpeed: 1.0,
-  voiceGender: 'female',
+  voiceGender: 'male',
 };
 
 const defaultSettings: Settings = {
@@ -73,7 +73,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'argos-settings',
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const data = persisted as { settings?: Settings & { apiKey?: string } };
@@ -96,6 +96,11 @@ export const useSettingsStore = create<SettingsStore>()(
           // falso positivo, então o app abrindo já ouvindo só incomodava. Volta a
           // ligar quando o detector nativo de wake word estiver no lugar.
           const upgradingPastV6 = version < 7;
+          // v8: troca a voz padrão para masculina. A voz neural em nuvem só entrou
+          // nesta versão; quem já tinha o app instalado ficou preso no padrão
+          // antigo ('female') mesmo depois de pedir voz masculina, porque o toggle
+          // de Configurações nunca tinha sido tocado por eles.
+          const upgradingPastV7 = version < 8;
           data.settings = {
             ...defaultSettings,
             ...rest,
@@ -107,7 +112,7 @@ export const useSettingsStore = create<SettingsStore>()(
                 : rest.autoListen ?? defaultSettings.autoListen,
             autonomyLevel: rest.autonomyLevel ?? 'autonomous',
             userProfile: rest.userProfile ?? {},
-            personality,
+            personality: upgradingPastV7 ? { ...personality, voiceGender: 'male' } : personality,
           };
         }
         return data;

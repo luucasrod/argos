@@ -336,11 +336,12 @@ export default function SettingsScreen() {
   };
 
   const handleScanWizLocal = async () => {
-    if (!wizBridgeUrl) return;
+    // No nativo o scan fala UDP direto (módulo Kotlin próprio) — não depende
+    // do texto da ponte. Só grava se tiver algo digitado (reserva pra web).
     medium();
     setWizLocalError(null);
     setScanningWizLocal(true);
-    setWizLocalBridgeUrl(wizBridgeUrl);
+    if (wizBridgeUrl) setWizLocalBridgeUrl(wizBridgeUrl);
     try {
       const result = await syncWizLocalDevices();
       if (result.count === 0) {
@@ -705,42 +706,42 @@ export default function SettingsScreen() {
                 </Pressable>
               )}
 
-              {/* ── WiFi Local (ponte Supabase) ── */}
+              {/* ── WiFi Local (UDP direto no nativo; ponte Supabase de reserva na web) ── */}
               <View style={styles.divider} />
               <View style={styles.formArea}>
                 <Text style={[styles.settingLabel, { marginBottom: 4 }]}>WiFi Local (sem conta)</Text>
                 <Text style={styles.settingDesc}>
-                  Controla lâmpadas WiZ na mesma rede Wi-Fi sem precisar de conta.{'\n'}
-                  1. No computador, corre:{'\n'}
-                  <Text style={{ fontFamily: 'monospace', color: Colors.text.primary }}>
-                    node tools/wiz-bridge.js
-                  </Text>
-                  {'\n'}2. Copia o ID de 8 letras que aparecer.{'\n'}
-                  3. Cola aqui e clica "Descobrir".
+                  {Platform.OS !== 'web'
+                    ? 'Controla lâmpadas WiZ direto pela rede Wi-Fi — sem conta, sem Google, sem computador ligado. Fica na mesma rede do celular e toca "Descobrir".'
+                    : 'Controla lâmpadas WiZ na mesma rede Wi-Fi sem precisar de conta.\n1. No computador, corre:\nnode tools/wiz-bridge.js\n2. Copia o ID de 8 letras que aparecer.\n3. Cola aqui e clica "Descobrir".'}
                 </Text>
-                <TextInput
-                  style={[styles.formInput, { marginTop: 8 }]}
-                  value={wizBridgeUrl}
-                  onChangeText={(v) => setWizBridgeUrlLocal(v.toLowerCase().trim())}
-                  placeholder="ex: a1b2c3d4"
-                  placeholderTextColor={Colors.text.muted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={8}
-                  editable={!scanningWizLocal}
-                />
+                {Platform.OS === 'web' && (
+                  <TextInput
+                    style={[styles.formInput, { marginTop: 8 }]}
+                    value={wizBridgeUrl}
+                    onChangeText={(v) => setWizBridgeUrlLocal(v.toLowerCase().trim())}
+                    placeholder="ex: a1b2c3d4"
+                    placeholderTextColor={Colors.text.muted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={8}
+                    editable={!scanningWizLocal}
+                  />
+                )}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  <Pressable
-                    style={[styles.primaryBtn, { flex: 1 }]}
-                    onPress={handleTestWizBridge}
-                    disabled={!wizBridgeUrl || testingWizBridge}
-                  >
-                    <Text style={styles.primaryBtnText}>{testingWizBridge ? '...' : 'Testar'}</Text>
-                  </Pressable>
+                  {Platform.OS === 'web' && (
+                    <Pressable
+                      style={[styles.primaryBtn, { flex: 1 }]}
+                      onPress={handleTestWizBridge}
+                      disabled={!wizBridgeUrl || testingWizBridge}
+                    >
+                      <Text style={styles.primaryBtnText}>{testingWizBridge ? '...' : 'Testar'}</Text>
+                    </Pressable>
+                  )}
                   <Pressable
                     style={[styles.primaryBtn, { flex: 1 }]}
                     onPress={handleScanWizLocal}
-                    disabled={!wizBridgeUrl || scanningWizLocal}
+                    disabled={(Platform.OS === 'web' && !wizBridgeUrl) || scanningWizLocal}
                   >
                     <Text style={styles.primaryBtnText}>
                       {scanningWizLocal ? 'A procurar...' : 'Descobrir'}

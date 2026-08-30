@@ -35,17 +35,26 @@ import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 import { handleInsightPress } from '@/services/insights/handleInsightPress';
 import { BackgroundSetupModal } from '@/components/voice/BackgroundSetupModal';
-import { VoiceActivationButton } from '@/components/VoiceActivationButton';
 
 export default function HomeScreen() {
   const { sendMessage, status } = useArgos();
-  const { showExecutionOverlay, executionSteps } = useAIStore();
+  const { showExecutionOverlay, executionSteps, setLastInputMode } = useAIStore();
   const { getActiveInsights, dismissInsight } = useMemoryStore();
+  /*
+   * Marca a origem como voz ANTES de mandar a mensagem. useArgos.speak() silencia
+   * o TTS quando lastInputMode === 'text' (regra pra não falar em cima de quem
+   * digitou) — mas essa flag é global no useAIStore, e só a tela de chat
+   * (conversar.tsx) a setava. Aqui, na tela principal onde a wake word e o orb
+   * realmente rodam, nada marcava 'voice': bastava ter digitado uma vez em
+   * qualquer lugar do app para o Argos ficar mudo para sempre nesta tela — a
+   * resposta aparecia no chat, mas a voz nunca saía.
+   */
   const handleVoiceSend = useCallback(
     (text: string) => {
+      setLastInputMode('voice');
       sendMessage(text);
     },
-    [sendMessage]
+    [sendMessage, setLastInputMode]
   );
 
   const { isListening, transcript, error: voiceError, startListening, stopListening, isWakeListening, startWakeWordDetection, stopWakeWordDetection, isSupported } = useVoice({
@@ -162,13 +171,6 @@ export default function HomeScreen() {
                   <Text style={styles.memoryButtonText}>🧠</Text>
                 </Pressable>
               </Animated.View>
-
-              {/* Voice Activation Button - Android Background Service */}
-              {Platform.OS === 'android' && (
-                <Animated.View entering={enter.down(200)}>
-                  <VoiceActivationButton />
-                </Animated.View>
-              )}
             </View>
 
             <View style={styles.bottomStack}>

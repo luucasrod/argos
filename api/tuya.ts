@@ -21,6 +21,32 @@ import {
   type TuyaCredentials,
 } from './_lib/tuya';
 
+/*
+ * Nem toda lâmpada Tuya usa o código `switch_led` para ligar/desligar — alguns
+ * modelos usam `switch`. `mapTuyaDevices` (_lib/tuya.ts) já lê os dois ao
+ * interpretar o estado (`get('switch_led') ?? get('switch')`), mas o envio de
+ * comando só mandava `switch_led`, sempre. Num dispositivo que só tem `switch`,
+ * o comando é rejeitado pela nuvem Tuya e a lâmpada nunca recebe nada — sem
+ * erro visível no app, porque a falha é engolida no client (fire-and-forget).
+ * Aqui: tenta `switch_led` e, se a nuvem recusar, tenta de novo com `switch`.
+ */
+async function tuyaControlWithFallback(
+  deviceId: string,
+  commands: Array<{ code: string; value: unknown }>,
+  accessToken: string,
+  region: string
+): Promise<void> {
+  try {
+    await tuyaControl(deviceId, commands, accessToken, region);
+  } catch (err) {
+    if (!commands.some((c) => c.code === 'switch_led')) throw err;
+    const retryCommands = commands.map((c) =>
+      c.code === 'switch_led' ? { ...c, code: 'switch' } : c
+    );
+    await tuyaControl(deviceId, retryCommands, accessToken, region);
+  }
+}
+
 function cors(res: VercelResponse, methods: string) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', `${methods}, OPTIONS`);
@@ -187,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'unknown_property', message: `Propriedade desconhecida: ${property}` });
       }
 
-      await tuyaControl(deviceId, commands, accessToken, region);
+      await tuyaControlWithFallback(deviceId, commands, accessToken, region);
       return res.status(200).json({ ok: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao controlar dispositivo';

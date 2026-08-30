@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +9,18 @@ import { controlTuyaDevice, fetchTuyaDevices } from '@/services/devices/tuyaServ
 import { controlAlexaDevice, fetchAlexaDevices } from '@/services/devices/amazonService';
 import { controlWizDevice, fetchWizDevices } from '@/services/devices/wizService';
 import { controlWizLocal, scanWizLocal } from '@/services/devices/wizLocalBridgeService';
+import type { WizPilotState, WizDiscoveredDevice } from '@/services/devices/wizLocalDirect.native';
+
+/*
+ * Módulo nativo próprio (Kotlin, WizUdpModule) — carregado por import
+ * dinâmico com sufixo explícito, mesmo padrão do resto do código nativo
+ * (ver services/voice/backgroundWakeWord.native.ts). Bare import (sem
+ * sufixo) faria o tsc resolver o arquivo errado pra quem importa
+ * useDeviceStore.ts a partir de código web.
+ */
+async function loadWizLocalDirect() {
+  return import('@/services/devices/wizLocalDirect.native');
+}
 import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoService';
 import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
 import { controlChromeDevice, fetchChromeDevices } from '@/services/devices/chromeService';
@@ -56,21 +69,79 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Remove mocks nas categorias que já têm dispositivos reais de qualquer fonte. Preserva cômodos definidos pelo usuário. */
+function hexToRgbLocal(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return null;
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+
+/** Mesmo mapeamento do servidor (api/_lib/wiz.ts, buildWizParams) — precisa
+ * existir aqui também porque o controle local fala direto com a lâmpada,
+ * sem passar pelo servidor. */
+function buildWizLocalParams(
+  property: string,
+  value: unknown
+):
+  | { state: boolean }
+  | { dimming: number }
+  | { temp: number }
+  | { r: number; g: number; b: number; dimming: number }
+  | null {
+  if (property === 'isOn') return { state: Boolean(value) };
+  if (property === 'brightness' && typeof value === 'number') {
+    return { dimming: Math.max(10, Math.min(100, value)) };
+  }
+  if (property === 'colorTemperature' && typeof value === 'string') {
+    return { temp: value === 'warm' ? 2700 : value === 'neutral' ? 4000 : 6500 };
+  }
+  if (property === 'color' && typeof value === 'string') {
+    const rgb = hexToRgbLocal(value);
+    if (!rgb) return null;
+    return { ...rgb, dimming: 100 };
+  }
+  return null;
+}
+
+/**
+ * Remove mocks nas categorias que já têm dispositivos reais de qualquer fonte.
+ * Preserva cômodo e nome definidos pelo usuário, e a POSIÇÃO de cada
+ * dispositivo já existente — sem isso a lista pulava de lugar a cada sync,
+ * porque os dispositivos da fonte eram removidos e recolocados no fim do
+ * array a cada atualização (a cada poucos segundos). Agora só troca os campos
+ * ao vivo (status/isOn/state) na posição onde já estava; só dispositivo
+ * genuinamente novo entra no fim.
+ */
 function rebuildDeviceList(
   current: Device[],
   newFromSource: Device[],
   source: NonNullable<Device['source']>
 ): Device[] {
   const existingRooms = new Map(current.map((d) => [d.id, d.room]));
-  const withoutSource = current.filter((d) => d.source !== source);
-  const merged = [
-    ...withoutSource,
-    ...newFromSource.map((d) => ({
-      ...d,
-      room: existingRooms.get(d.id) ?? d.room,
-    })),
-  ];
+  const existingNames = new Map(current.map((d) => [d.id, d.name]));
+  const freshById = new Map(newFromSource.map((d) => [d.id, d]));
+
+  const merged: Device[] = [];
+  const placed = new Set<string>();
+
+  for (const d of current) {
+    if (d.source !== source) {
+      merged.push(d);
+      continue;
+    }
+    const fresh = freshById.get(d.id);
+    if (!fresh) continue; // não veio nesta sincronização — descarta
+    merged.push({
+      ...fresh,
+      room: existingRooms.get(d.id) ?? fresh.room,
+      name: existingNames.get(d.id) ?? fresh.name,
+    });
+    placed.add(d.id);
+  }
+
+  for (const d of newFromSource) {
+    if (!placed.has(d.id)) merged.push(d);
+  }
+
   const realCats = new Set(merged.filter((d) => d.source !== 'mock').map((d) => d.category));
   return merged.filter((d) => d.source !== 'mock' || !realCats.has(d.category));
 }
@@ -95,6 +166,10 @@ export const useDeviceStore = create<DeviceStore>()(
 
   renameDevice: (id, name) =>
     set((state) => ({
+      // Grava no dispositivo de verdade — não só num mapa de exibição. Sem
+      // isso o Argos (IA, comando de voz, fastIntent) nunca via o nome novo,
+      // só a tela de dispositivos mostrava ele.
+      devices: state.devices.map((d) => (d.id === id ? { ...d, name: name.trim() } : d)),
       customNames: { ...state.customNames, [id]: name.trim() },
     })),
 
@@ -154,11 +229,22 @@ export const useDeviceStore = create<DeviceStore>()(
         })
         .finally(() => delay(1200).then(() => get().syncTapoDevices()));
     }
-    if (device?.source === 'wiz-local' && device.wizLocalIp && device.wizBridgeUrl) {
-      controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, { state: !device.isOn })
-        .catch((err) => {
-          if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
-        });
+    if (device?.source === 'wiz-local' && device.wizLocalIp) {
+      // No nativo: UDP direto do celular pra lâmpada, via módulo Kotlin
+      // próprio (WizUdpModule) — sem conta, sem nuvem, sem PC-ponte. Na web,
+      // sem UDP no browser, cai pra ponte antiga se tiver uma configurada.
+      if (Platform.OS !== 'web') {
+        loadWizLocalDirect()
+          .then((m) => m.setWizLocalPilot(device.wizLocalIp as string, { state: !device.isOn }))
+          .catch((err) => {
+            if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
+          });
+      } else if (device.wizBridgeUrl) {
+        controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, { state: !device.isOn })
+          .catch((err) => {
+            if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada (ponte):', err);
+          });
+      }
     }
     if (device?.source === 'xiaomi' && device.xiaomiDid && device.xiaomiControl?.power) {
       const { siid, piid } = device.xiaomiControl.power;
@@ -224,23 +310,21 @@ export const useDeviceStore = create<DeviceStore>()(
         })
         .finally(() => delay(1200).then(() => get().syncTapoDevices()));
     }
-    if (device?.source === 'wiz-local' && device.wizLocalIp && device.wizBridgeUrl) {
-      let params: Record<string, unknown> = {};
-      if (stateKey === 'isOn') {
-        params = { state: Boolean(value) };
-      } else if (stateKey === 'brightness' && typeof value === 'number') {
-        params = { dimming: Math.max(10, Math.min(100, value)) };
-      } else if (stateKey === 'colorTemperature' && typeof value === 'string') {
-        params = { temp: value === 'warm' ? 2700 : value === 'neutral' ? 4000 : 6500 };
-      } else if (stateKey === 'color' && typeof value === 'string') {
-        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(value);
-        if (m) params = { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16), dimming: 100 };
-      }
-      if (Object.keys(params).length > 0) {
-        controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, params)
-          .catch((err) => {
-            if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
-          });
+    if (device?.source === 'wiz-local' && device.wizLocalIp) {
+      const params = buildWizLocalParams(stateKey, value);
+      if (params) {
+        if (Platform.OS !== 'web') {
+          loadWizLocalDirect()
+            .then((m) => m.setWizLocalPilot(device.wizLocalIp as string, params))
+            .catch((err) => {
+              if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada:', err);
+            });
+        } else if (device.wizBridgeUrl) {
+          controlWizLocal(device.wizBridgeUrl, device.wizLocalIp, params)
+            .catch((err) => {
+              if (__DEV__) console.error('[WiZ Local] Falha ao controlar lâmpada (ponte):', err);
+            });
+        }
       }
     }
     if (device?.source === 'xiaomi' && device.xiaomiDid && device.xiaomiControl) {
@@ -820,8 +904,36 @@ export const useDeviceStore = create<DeviceStore>()(
     const { wizLocalBridgeUrl, wizLocalSavedDevices } = get();
 
     let deviceInfos: WizLocalSavedDevice[] = wizLocalSavedDevices;
+    let usedDirectUdp = false;
 
-    if (wizLocalBridgeUrl) {
+    // No nativo, tenta primeiro o UDP direto (módulo Kotlin próprio, sem
+    // conta, sem PC-ponte). Só cai pra ponte antiga se isso não achar nada —
+    // ela ainda serve pra web, onde não existe socket UDP no browser.
+    let wizLocalModule: Awaited<ReturnType<typeof loadWizLocalDirect>> | null = null;
+    if (Platform.OS !== 'web') {
+      try {
+        wizLocalModule = await loadWizLocalDirect();
+        const found: WizDiscoveredDevice[] = await wizLocalModule.discoverWizLocal();
+        if (found.length > 0) {
+          deviceInfos = found.map((f) => {
+            const existing = wizLocalSavedDevices.find(
+              (s) => s.mac === f.mac || s.ip === f.ip
+            );
+            return {
+              ip: f.ip,
+              mac: f.mac,
+              name: existing?.name ?? `WiZ ${f.ip.split('.').pop() ?? f.ip}`,
+            };
+          });
+          set({ wizLocalSavedDevices: deviceInfos });
+          usedDirectUdp = true;
+        }
+      } catch {
+        // sem resposta na LAN — tenta a ponte abaixo, se configurada
+      }
+    }
+
+    if (!usedDirectUdp && wizLocalBridgeUrl) {
       try {
         const found = await scanWizLocal(wizLocalBridgeUrl);
         if (found.length > 0) {
@@ -847,32 +959,47 @@ export const useDeviceStore = create<DeviceStore>()(
       return { count: 0 };
     }
 
+    // Lê o estado real de cada lâmpada em vez de assumir desligada — mesma
+    // regra de honestidade já aplicada ao resto do app (useArgos.ts: nunca
+    // confirmar o que não foi verificado).
+    const pilots: (WizPilotState | null)[] =
+      usedDirectUdp && wizLocalModule
+        ? await Promise.all(
+            deviceInfos.map((d) => (wizLocalModule as NonNullable<typeof wizLocalModule>).getWizLocalPilot(d.ip).catch(() => null))
+          )
+        : deviceInfos.map(() => null);
+
     const bridgeUrl = wizLocalBridgeUrl;
-    const mapped: Device[] = deviceInfos.map((d) => ({
-      id: `wiz-local:${d.mac || d.ip}`,
-      name: d.name,
-      category: 'lights' as const,
-      icon: '💡',
-      status: 'online' as const,
-      isOn: false,
-      capabilities: [
-        { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
-        { type: 'range' as const, property: 'brightness', label: 'Brilho', min: 10, max: 100, unit: '%' },
-        { type: 'color' as const, property: 'color', label: 'Cor' },
-        {
-          type: 'select' as const,
-          property: 'colorTemperature',
-          label: 'Temperatura',
-          options: ['warm', 'neutral', 'cool'],
-        },
-      ],
-      state: { isOn: false, brightness: 100 },
-      room: 'Casa',
-      brand: 'WiZ Local',
-      source: 'wiz-local' as const,
-      wizLocalIp: d.ip,
-      wizBridgeUrl: bridgeUrl,
-    }));
+    const mapped: Device[] = deviceInfos.map((d, i) => {
+      const pilot = pilots[i];
+      const isOn = pilot?.state ?? false;
+      const brightness = pilot?.dimming ?? 100;
+      return {
+        id: `wiz-local:${d.mac || d.ip}`,
+        name: d.name,
+        category: 'lights' as const,
+        icon: '💡',
+        status: 'online' as const,
+        isOn,
+        capabilities: [
+          { type: 'toggle' as const, property: 'isOn', label: 'Ligado' },
+          { type: 'range' as const, property: 'brightness', label: 'Brilho', min: 10, max: 100, unit: '%' },
+          { type: 'color' as const, property: 'color', label: 'Cor' },
+          {
+            type: 'select' as const,
+            property: 'colorTemperature',
+            label: 'Temperatura',
+            options: ['warm', 'neutral', 'cool'],
+          },
+        ],
+        state: { isOn, brightness },
+        room: 'Casa',
+        brand: 'WiZ Local',
+        source: 'wiz-local' as const,
+        wizLocalIp: d.ip,
+        wizBridgeUrl: bridgeUrl,
+      };
+    });
 
     set((state) => ({
       devices: rebuildDeviceList(state.devices, mapped, 'wiz-local'),

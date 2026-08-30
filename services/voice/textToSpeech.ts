@@ -31,6 +31,22 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
 
   Speech.stop();
 
+  /*
+   * Tenta a voz neural do servidor primeiro. Se não houver provedor
+   * configurado, se a cota acabar ou se a rede falhar, cai para a voz do
+   * sistema — o usuário no máximo ouve a voz antiga, nunca silêncio.
+   */
+  try {
+    const { speakWithCloud } = await import('@/services/voice/cloudTts');
+    const falou = await speakWithCloud(spoken, {
+      rate: Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0)),
+      gender: personality.voiceGender,
+    });
+    if (falou) return;
+  } catch {
+    // segue para a voz do sistema
+  }
+
   const voices = await getVoices();
   const selected = pickVoiceForPersonality(voices, personality);
   const rate = Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
