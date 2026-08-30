@@ -131,6 +131,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const devices = await tuyaListDevices(uid, accessToken, region);
       return res.status(200).json({ connected: true, devices });
     } catch (err) {
+      // Sem este log o 502 chega mudo: a mensagem só ia no corpo da resposta,
+      // que exige request autenticado para ser lida. Com ele a causa real da
+      // Tuya (token de projeto, conta desvinculada, subscrição) fica nos logs.
+      console.error('[tuya] devices error:', err);
       const message = err instanceof Error ? err.message : 'Erro ao buscar dispositivos';
       return res.status(502).json({ error: 'tuya_error', message });
     }
