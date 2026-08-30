@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       try {
-        const account = await getXiaomiAccount(auth.user.id);
+        const account = await getXiaomiAccount(auth.user.id, auth.token);
         if (!account) {
           return res.status(200).json({ connected: false, devices: [] });
         }
@@ -96,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       try {
-        const account = await getXiaomiAccount(auth.user.id);
+        const account = await getXiaomiAccount(auth.user.id, auth.token);
         if (!account) {
           return res.status(401).json({ error: 'Xiaomi não conectado' });
         }
