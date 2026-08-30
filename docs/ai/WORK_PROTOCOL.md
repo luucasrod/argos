@@ -20,7 +20,10 @@ Codex, Codex revisa Claude.
 - **GitHub Issues** = fila, dono, status, bloqueio. É aqui que se descobre o
   que fazer. **Não** em arquivo `.md`, **não** no histórico da conversa.
 - **Git / PR** = o que mudou.
-- **`main` + `docs/ai/CONTEXT.md`** = decisão técnica oficial. Mudança de
+- **`experimento-grande` + `docs/ai/CONTEXT.md`** = decisão técnica oficial.
+  ⚠️ A branch base é **`experimento-grande`**, NÃO `master`. A `master` parou
+  no app de junho/2026 (4 abas em inglês, sem voz, só eWeLink) e não é o
+  produto. Todos os deploys de produção saem da `experimento-grande`. Mudança de
   CONTEXT dentro de uma branch **não vale** antes do merge.
 
 Estado da tarefa vive em **labels**:
@@ -63,7 +66,7 @@ escolher outra tarefa em vez de editar por cima.
 ### 3.2 Isolar
 
 ```bash
-git worktree add ../argos-<agente>-builder -b <agente>/issue-<N>-<slug> origin/master
+git worktree add ../argos-<agente>-builder -b <agente>/issue-<N>-<slug> origin/experimento-grande
 ```
 
 Uma branch por tarefa. Nunca dois builders na mesma branch. Nunca duas sessões
@@ -82,7 +85,7 @@ npx tsc --noEmit     # limpo = só os 2 erros pré-existentes (perfil.tsx, xiaom
 
 ```bash
 git push -u origin <branch>
-gh pr create --draft --base master --title "..." --body "..."
+gh pr create --draft --base experimento-grande --title "..." --body "..."
 gh issue edit <N> --add-label status:in-review --remove-label status:in-progress
 ```
 
