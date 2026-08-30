@@ -17,6 +17,11 @@ Pacote Android: `com.masya.argos`. Canal de OTA: `preview`.
 controle de Tuya, eWeLink, WiZ, Tapo, Xiaomi, Alexa, Chrome/Google Home;
 OTA aplicando em uma única abertura; build local sem cota EAS.
 
+Home Assistant é uma integração **unidirecional HA → Argos**: o HA envia texto
+para `/api/ha` usando a chave gerada no app, e o Argos executa nas integrações
+que ele próprio conhece. O app não lê nem controla entidades cadastradas somente
+no Home Assistant, portanto elas não aparecem na aba Casa.
+
 ---
 
 ## Voz — arquitetura. Não mexa sem ler esta seção inteira
