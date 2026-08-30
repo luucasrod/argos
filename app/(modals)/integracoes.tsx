@@ -26,6 +26,7 @@ import { pingBridge } from '@/services/devices/wizLocalBridgeService';
 import { supabase } from '@/services/auth/supabase';
 import { loginTapo, disconnectTapo } from '@/services/devices/tapoService';
 import { loginXiaomi, disconnectXiaomi, XiaomiVerificationRequiredError } from '@/services/devices/xiaomiService';
+import { loginChrome, disconnectChrome } from '@/services/devices/chromeService';
 import { generateHAKey, getHAKey, deleteHAKey } from '@/services/ha/haService';
 
 function IntegrationCard({
@@ -84,6 +85,7 @@ export default function IntegracoesScreen() {
     wizConnected,
     tapoConnected,
     xiaomiConnected,
+    chromeConnected,
     wizLocalConnected,
     wizLocalBridgeUrl: storedBridgeUrl,
     syncEwelinkDevices,
@@ -92,6 +94,7 @@ export default function IntegracoesScreen() {
     syncWizDevices,
     syncTapoDevices,
     syncXiaomiDevices,
+    syncChromeDevices,
     setWizLocalBridgeUrl,
     syncWizLocalDevices,
     clearWizLocalDevices,
@@ -142,6 +145,10 @@ export default function IntegracoesScreen() {
   const [connectingAlexa, setConnectingAlexa] = React.useState(false);
   const [alexaError, setAlexaError] = React.useState<string | null>(null);
 
+  // Google Home / Chrome
+  const [connectingChrome, setConnectingChrome] = React.useState(false);
+  const [chromeError, setChromeError] = React.useState<string | null>(null);
+
   // Home Assistant
   const [haKey, setHaKey] = React.useState<string | null>(null);
   const [haKeyLoading, setHaKeyLoading] = React.useState(false);
@@ -156,6 +163,7 @@ export default function IntegracoesScreen() {
   const wizCount = devices.filter((d) => d.source === 'wiz').length;
   const tapoCount = devices.filter((d) => d.source === 'tapo').length;
   const xiaomiCount = devices.filter((d) => d.source === 'xiaomi').length;
+  const chromeCount = devices.filter((d) => d.source === 'chrome').length;
   const wizLocalCount = devices.filter((d) => d.source === 'wiz-local').length;
 
   const handleLoginEwelink = async () => {
@@ -301,6 +309,30 @@ export default function IntegracoesScreen() {
   const handleDisconnectAlexa = async () => {
     medium();
     try { await disconnectAmazon(); } catch { /* silent */ }
+  };
+
+  const handleConnectChrome = async () => {
+    medium(); setChromeError(null); setConnectingChrome(true);
+    try {
+      const url = await loginChrome();
+      await Linking.openURL(url);
+    } catch (err) {
+      setChromeError(err instanceof Error ? err.message : 'Falha ao conectar Google Home.');
+    } finally {
+      setConnectingChrome(false);
+    }
+  };
+
+  const handleDisconnectChrome = async () => {
+    medium(); setChromeError(null); setConnectingChrome(true);
+    try {
+      await disconnectChrome();
+      await syncChromeDevices();
+    } catch (err) {
+      setChromeError(err instanceof Error ? err.message : 'Falha ao desconectar Google Home.');
+    } finally {
+      setConnectingChrome(false);
+    }
   };
 
   const handleLoadHAKey = React.useCallback(async () => {
@@ -591,6 +623,39 @@ export default function IntegracoesScreen() {
               <Pressable style={styles.dangerRow} onPress={handleDisconnectAlexa}>
                 <Text style={styles.dangerText}>Desconectar Alexa</Text>
               </Pressable>
+            )}
+          </IntegrationCard>
+
+          {/* Google Home / Chrome */}
+          <IntegrationCard
+            title="Google Home"
+            description={chromeConnected
+              ? `✓ ${chromeCount} dispositivo${chromeCount !== 1 ? 's' : ''} conectado${chromeCount !== 1 ? 's' : ''}`
+              : 'Dispositivos ligados à sua casa do Google'}
+            connected={chromeConnected}
+            expanded={!!expanded.chrome}
+            onToggle={() => toggle('chrome')}
+            onRefresh={() => { void syncChromeDevices(); }}
+            refreshing={connectingChrome}
+          >
+            {!chromeConnected ? (
+              <View style={styles.form}>
+                {chromeError ? <Text style={styles.error}>{chromeError}</Text> : null}
+                <Text style={styles.cardDesc}>
+                  Abre o Google para autorizar o acesso aos dispositivos da sua casa.
+                  Depois de concluir, volte ao Argos e toque em atualizar.
+                </Text>
+                <Pressable style={styles.googleBtn} onPress={handleConnectChrome} disabled={connectingChrome}>
+                  <Text style={styles.googleBtnText}>{connectingChrome ? 'A redirecionar...' : 'Entrar com Google'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                {chromeError ? <Text style={[styles.error, { marginHorizontal: 16, marginTop: 12 }]}>{chromeError}</Text> : null}
+                <Pressable style={styles.dangerRow} onPress={handleDisconnectChrome} disabled={connectingChrome}>
+                  <Text style={styles.dangerText}>{connectingChrome ? 'A desconectar...' : 'Desconectar Google Home'}</Text>
+                </Pressable>
+              </View>
             )}
           </IntegrationCard>
 

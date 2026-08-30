@@ -823,7 +823,10 @@ export const useDeviceStore = create<DeviceStore>()(
     try {
       const { connected, devices } = await fetchChromeDevices();
       if (!connected) {
-        set({ chromeConnected: false });
+        set((state) => ({
+          chromeConnected: false,
+          devices: state.devices.filter((device) => device.source !== 'chrome'),
+        }));
         return { count: 0 };
       }
       const mapped: Device[] = devices.map((d) => {

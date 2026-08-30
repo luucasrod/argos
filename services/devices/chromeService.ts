@@ -31,17 +31,16 @@ export interface GoogleDeviceInfo {
   traits: string[];
 }
 
-export async function loginChrome(): Promise<void> {
+export async function loginChrome(): Promise<string> {
   const res = await fetch(`${BASE}?action=login`, {
     headers: await authHeaders(),
   });
+  const data = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string };
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string };
-    if (err.authUrl) {
-      throw new Error(`AUTH_URL:${err.authUrl}`);
-    }
-    throw new Error(err.error ?? 'Falha ao fazer login no Google Home.');
+    throw new Error(data.error ?? 'Falha ao fazer login no Google Home.');
   }
+  if (!data.authUrl) throw new Error('URL de autorização do Google não recebida.');
+  return data.authUrl;
 }
 
 export async function fetchChromeDevices(): Promise<{
