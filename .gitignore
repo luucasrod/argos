@@ -43,3 +43,6 @@ yarn-error.*
 
 .vercel
 graphify-out/
+
+# PDFs de prompt/planejamento pessoais — nao versionar (repo publico)
+/prompts/
