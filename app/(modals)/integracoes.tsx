@@ -596,8 +596,10 @@ export default function IntegracoesScreen() {
 
           {/* Home Assistant */}
           <IntegrationCard
-            title="Home Assistant"
-            description={haKey ? '✓ Chave API gerada — conecte o HA ao Argos' : 'Controla o Argos por voz via Home Assistant'}
+            title="Home Assistant → Argos"
+            description={haKey
+              ? '✓ Chave gerada — o HA pode enviar comandos ao Argos'
+              : 'Expõe o Argos ao HA; não importa aparelhos do Home Assistant'}
             connected={!!haKey}
             expanded={!!expanded.ha}
             onToggle={() => {
@@ -607,7 +609,9 @@ export default function IntegracoesScreen() {
           >
             <View style={styles.form}>
               <Text style={styles.cardTitle}>Endpoint</Text>
-              <Text style={styles.cardDesc}>Configura este URL no Home Assistant como destino da integração.</Text>
+              <Text style={styles.cardDesc}>
+                Configure este URL no Home Assistant para enviar frases ao Argos. Os aparelhos controlados são os já conectados ao Argos; aparelhos cadastrados somente no HA não aparecem na aba Casa.
+              </Text>
               <View style={styles.haRow}>
                 <Text style={[styles.haCode, { flex: 1 }]} numberOfLines={1} ellipsizeMode="middle">{HA_ENDPOINT}</Text>
                 <Pressable style={styles.copyBtn} onPress={() => void copy(HA_ENDPOINT, setHaUrlCopied)}>
