@@ -30,6 +30,19 @@ const COLOR_WORDS = [
   'laranja', 'roxa', 'roxo', 'rosa', 'ciano', 'quente', 'fria', 'neutra',
 ];
 
+/*
+ * Conectores que não distinguem aparelho nenhum. Sem tirá-los, o "do" de
+ * "Luz do escritório" casaria com qualquer frase que tivesse "do".
+ */
+const NAME_STOP_WORDS = ['do', 'da', 'de', 'dos', 'das', 'a', 'o', 'as', 'os', 'e'];
+
+/** Palavras significativas do nome de um aparelho, para casar por nome parcial. */
+function nameTokens(name: string): string[] {
+  return normalize(name)
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !NAME_STOP_WORDS.includes(token));
+}
+
 function extractPercentage(text: string): number | null {
   const m = text.match(/(\d{1,3})\s*%/);
   if (m) return Math.max(1, Math.min(100, parseInt(m[1], 10)));
@@ -118,7 +131,26 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
   const verb = action === 'setOff' ? 'Desligando' : action === 'setOn' ? 'Ligando' : 'Alternando';
   const online = devices.filter((d) => d.status === 'online');
 
-  const matches = online.filter((d) => text.includes(normalize(d.name)));
+  let matches = online.filter((d) => text.includes(normalize(d.name)));
+
+  /*
+   * Nome parcial. A fala natural quase nunca traz o nome completo do aparelho, e
+   * o Vosk ainda corta o que não está na gramática: "desliga a luz do escritório"
+   * chegou aqui como "desliga luz". Como o teste acima exige a frase inteira
+   * ("luz do escritorio"), o atalho não casava e o comando ia para a IA — uma ida
+   * à nuvem inteira, medida em ~3s, para um liga/desliga trivial.
+   *
+   * Aceita casar por palavra significativa do nome, mas só quando UM único
+   * aparelho casa: com duas luzes, "desliga luz" é ambíguo e escolher no chute
+   * apagaria a lâmpada errada. Ambíguo continua indo para a IA, que tem contexto
+   * para desempatar.
+   */
+  if (matches.length === 0) {
+    const partial = online.filter((d) =>
+      nameTokens(d.name).some((token) => words.includes(token))
+    );
+    if (partial.length === 1) matches = partial;
+  }
 
   let targets = matches;
   if (matches.length === 0 && /\btudo\b/.test(text)) {
