@@ -38,27 +38,27 @@ const DIACRITICS_RE = /[̀-ͯ]/g;
  * a fala comum casa com elas e a wake word deixa de ser o único destino.
  */
 const DECOYS = [
-  'a', 'o', 'e', 'de', 'da', 'do', 'em', 'um', 'uma', 'para', 'com', 'nao', 'sim',
-  'que', 'por', 'mais', 'como', 'mas', 'ja', 'isso', 'esse', 'essa', 'aqui', 'ali',
-  'agora', 'depois', 'hoje', 'amanha', 'ontem', 'muito', 'pouco', 'bom', 'boa',
-  'bem', 'entao', 'porque', 'quando', 'onde', 'quem', 'qual', 'tudo', 'nada',
-  'gente', 'coisa', 'vez', 'tempo', 'dia', 'noite', 'casa', 'erros', 'aguas',
-  'angulos', 'empregos', 'eventos', 'arcos', 'marcos', 'barcos', 'obrigado',
+  'a', 'o', 'e', 'de', 'da', 'do', 'em', 'um', 'uma', 'para', 'com', 'não', 'sim',
+  'que', 'por', 'mais', 'como', 'mas', 'já', 'isso', 'esse', 'essa', 'aqui', 'ali',
+  'agora', 'depois', 'hoje', 'amanhã', 'ontem', 'muito', 'pouco', 'bom', 'boa',
+  'bem', 'então', 'porque', 'quando', 'onde', 'quem', 'qual', 'tudo', 'nada',
+  'gente', 'coisa', 'vez', 'tempo', 'dia', 'noite', 'casa', 'erros', 'águas',
+  'ângulos', 'empregos', 'eventos', 'arcos', 'marcos', 'barcos', 'obrigado',
   'certo', 'errado', 'espera', 'olha', 'fala', 'sabe', 'acho', 'vamos', 'quero',
-  'preciso', 'pode', 'vai', 'esta', 'fica', 'faz', 'ver', 'sei', 'deixa',
+  'preciso', 'pode', 'vai', 'está', 'fica', 'faz', 'ver', 'sei', 'deixa',
 ];
 
 /** Frases de comando que o app entende — ficam na gramática para serem ouvidas. */
 const COMMAND_PHRASES = [
   'liga', 'desliga', 'acende', 'apaga', 'aumenta', 'diminui',
   'liga a luz', 'desliga a luz', 'acende a luz', 'apaga a luz',
-  'liga a lampada', 'desliga a lampada',
+  'liga a lâmpada', 'desliga a lâmpada',
   'aumenta o brilho', 'diminui o brilho',
   'liga a tomada', 'desliga a tomada',
   'liga o ventilador', 'desliga o ventilador',
   'liga tudo', 'desliga tudo',
-  'a luz', 'a lampada', 'o brilho', 'a tomada', 'o ventilador',
-  'do escritorio', 'da sala', 'do quarto', 'da cozinha', 'do banheiro',
+  'a luz', 'a lâmpada', 'o brilho', 'a tomada', 'o ventilador',
+  'do escritório', 'da sala', 'do quarto', 'da cozinha', 'do banheiro',
   'da varanda', 'da garagem', 'do corredor',
   // Cor. O backend já processa nome de cor -> hex (systemPrompt.ts), mas sem
   // estas palavras na gramática o Vosk nunca ouvia "cor" — forçava a fala
@@ -71,8 +71,8 @@ const COMMAND_PHRASES = [
   // Música. Nome de faixa é vocabulário ABERTO e não cabe numa gramática fechada,
   // então por voz só funcionam estes pedidos genéricos; para pedir uma música
   // específica é preciso digitar (ou trocar o reconhecimento para texto livre).
-  'toca', 'coloca', 'poe', 'musica', 'uma musica', 'toca musica',
-  'coloca uma musica', 'toca uma musica', 'pausa', 'continua', 'proxima',
+  'toca', 'coloca', 'põe', 'música', 'uma música', 'toca música',
+  'coloca uma música', 'toca uma música', 'pausa', 'continua', 'próxima',
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */
@@ -82,6 +82,17 @@ const AWAIT_COMMAND_MS = 4000;
 
 function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(DIACRITICS_RE, '').trim();
+}
+
+/**
+ * Forma que vai para a GRAMÁTICA do Vosk — minúscula, sem espaço sobrando, mas
+ * COM acento. O vocabulário do modelo pt tem 99.101 palavras e todas as
+ * acentuadas estão lá na forma acentuada; "escritorio"/"lampada" simplesmente
+ * não existem. Usar normalize() aqui era o motivo de o Argos nunca entender
+ * "escritório".
+ */
+function toGrammar(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -114,7 +125,12 @@ const NAME_ALT = '(?:argos|argus|argo)';
  * escuta=62, acorda=70, ola=presente. "atencao" deu 0 e ficou de fora.
  */
 const WAKE_SUFFIX_WORDS = ['escuta', 'acorda'];
-const WAKE_PREFIX_WORDS = ['ei', 'ola', 'ok', 'e', 'a', 'oi'];
+// 'e' e 'a' foram REMOVIDOS (30/08): são vogais soltas, as palavras mais
+// comuns da fala normal. Como a gramática do Vosk é fechada, qualquer
+// ruído perto de "...e argo..." era forçado para a entrada "e argos" e
+// acordava o Argos sozinho — a maior fonte de falso positivo relatada.
+// Mantidos só prefixos com consoante/sílaba distintiva.
+const WAKE_PREFIX_WORDS = ['ei', 'ola', 'ok', 'oi'];
 
 /**
  * Monta os padrões de detecção. Todos consomem a frase INTEIRA, para que o que
@@ -193,7 +209,12 @@ function buildGrammar(wakeWord: string, extra: string[]): string[] {
   // "ei argos desliga a luz" ser reconhecida como sequência.
   COMMAND_PHRASES.forEach((p) => set.add(p));
   extra.forEach((p) => {
-    const n = normalize(p);
+    // toGrammar, NÃO normalize: o vocabulário do modelo pt guarda as palavras
+    // ACENTUADAS ("escritório", "lâmpada"). Mandar a forma sem acento faz o Vosk
+    // descartar a entrada inteira ("Ignoring word missing in vocabulary") e o
+    // aparelho fica impossível de chamar pelo nome. Só o texto OUVIDO é
+    // normalizado (findWakeEnd/heard), e isso continua igual.
+    const n = toGrammar(p);
     if (n.length >= 3) set.add(n);
   });
   DECOYS.forEach((d) => set.add(d));

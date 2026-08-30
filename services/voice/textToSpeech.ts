@@ -9,6 +9,7 @@ type VoiceList = Awaited<ReturnType<typeof Speech.getAvailableVoicesAsync>>;
 
 let voicesCache: VoiceList | null = null;
 let voicesPromise: Promise<VoiceList> | null = null;
+let voicesLogged = false;
 
 async function getVoices(): Promise<VoiceList> {
   if (voicesCache) return voicesCache;
@@ -51,6 +52,24 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
   const selected = pickVoiceForPersonality(voices, personality);
   const rate = Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0));
   const pitch = pitchForUtterance(selected ?? null, personality.voiceGender);
+
+  // Diagnóstico (uma vez por sessão): sem a lista real de vozes do aparelho não
+  // dá para saber por que a escolha masculina falha — os identificadores do
+  // Google TTS no Android não trazem o gênero no nome, então os regexes de
+  // voicePicker.ts podem simplesmente não ter em que casar. Ler no logcat com
+  // a tag ReactNativeJS, prefixo [argos-voz].
+  if (!voicesLogged) {
+    voicesLogged = true;
+    const pt = voices.filter((v) =>
+      (v.language ?? '').toLowerCase().startsWith('pt')
+    );
+    console.log(
+      `[argos-voz] genero=${personality.voiceGender} escolhida=${
+        selected?.identifier ?? 'NENHUMA(voz padrao do sistema)'
+      } pitch=${pitch} | ${pt.length} vozes pt: ` +
+        pt.map((v) => `${v.identifier}[${v.language}]`).join(', ')
+    );
+  }
 
   return new Promise((resolve) => {
     // O expo-speech no Android não garante onDone/onError: se o motor de TTS não
