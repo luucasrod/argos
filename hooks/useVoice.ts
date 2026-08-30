@@ -36,6 +36,10 @@ import {
 } from '@/services/voice/backgroundWakeWord.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
+import {
+  getSpeakableDeviceAlias,
+  resolveDeviceVoiceAlias,
+} from '@/services/voice/deviceVoiceAliases';
 
 export type { UseVoiceOptions };
 
@@ -77,8 +81,12 @@ export function useVoice(options?: UseVoiceOptions) {
     // Nomes reais dos dispositivos e cômodos entram na gramática, senão o
     // reconhecedor não tem como devolver "escritorio" ou "lampada da sala".
     const devices = useDeviceStore.getState().devices;
+    const voiceAliases = devices
+      .map((device) => getSpeakableDeviceAlias(device.name))
+      .filter((alias): alias is string => Boolean(alias));
     const extraPhrases = [
       ...devices.map((d) => d.name),
+      ...voiceAliases,
       ...devices.map((d) => d.room).filter(Boolean),
     ] as string[];
 
@@ -97,7 +105,7 @@ export function useVoice(options?: UseVoiceOptions) {
       onPartial: (t) => setTranscript(t),
       onCommand: (text) => {
         setIsListening(false);
-        const clean = text.trim();
+        const clean = resolveDeviceVoiceAlias(text, devices);
         if (!clean) {
           setStatus('idle');
           return;
