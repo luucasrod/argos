@@ -21,6 +21,9 @@ import type { WizPilotState, WizDiscoveredDevice } from '@/services/devices/wizL
 async function loadWizLocalDirect() {
   return import('@/services/devices/wizLocalDirect.native');
 }
+async function loadTuyaLocal() {
+  return import('@/services/devices/tuyaLocal.native');
+}
 import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoService';
 import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
 import { controlChromeDevice, fetchChromeDevices } from '@/services/devices/chromeService';
@@ -73,6 +76,83 @@ function hexToRgbLocal(hex: string): { r: number; g: number; b: number } | null 
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!m) return null;
   return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+
+function hexToTuyaHsvLocal(hex: string): { h: number; s: number; v: number } | null {
+  const rgb = hexToRgbLocal(hex);
+  if (!rgb) return null;
+  const r = rgb.r / 255; const g = rgb.g / 255; const b = rgb.b / 255;
+  const max = Math.max(r, g, b); const min = Math.min(r, g, b); const delta = max - min;
+  let h = 0;
+  if (delta) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  if (h < 0) h += 360;
+  return { h: Math.round(h), s: Math.round((max ? delta / max : 0) * 1000), v: Math.round(max * 1000) };
+}
+
+function buildTuyaLocalDps(
+  property: string,
+  value: unknown,
+  currentColor?: string
+): Record<string, unknown> | null {
+  if (property === 'isOn') return { switch_led: Boolean(value) };
+  if (property === 'brightness') {
+    const pct = Math.max(1, Math.min(100, Number(value)));
+    const hsv = currentColor ? hexToTuyaHsvLocal(currentColor) : null;
+    return hsv
+      ? { switch_led: true, work_mode: 'colour', colour_data_v2: { ...hsv, v: Math.round(10 + (pct / 100) * 990) } }
+      : { switch_led: true, work_mode: 'white', bright_value_v2: Math.round(10 + (pct / 100) * 990) };
+  }
+  if (property === 'color') {
+    const hsv = hexToTuyaHsvLocal(String(value));
+    return hsv ? { switch_led: true, work_mode: 'colour', colour_data_v2: hsv } : null;
+  }
+  if (property === 'colorTemperature') {
+    const pct = value === 'warm' ? 0 : value === 'neutral' ? 500 : value === 'cool' ? 1000 : Number(value);
+    if (!Number.isFinite(pct)) return null;
+    return { switch_led: true, work_mode: 'white', temp_value_v2: Math.max(0, Math.min(1000, pct)) };
+  }
+  return null;
+}
+
+async function controlTuyaLocalFirst(
+  device: Device,
+  property: string,
+  value: unknown,
+  currentColor?: string
+): Promise<void> {
+  const deviceId = device.tuyaDeviceId;
+  if (!deviceId) return;
+  const version = device.tuyaProtocolVersion;
+  const dps = buildTuyaLocalDps(property, value, currentColor);
+  const canUseLan = Platform.OS !== 'web' && !!device.tuyaLocalKey && !!device.tuyaIp
+    && (version === '3.1' || version === '3.3') && !!dps;
+
+  if (canUseLan) {
+    const startedAt = Date.now();
+    try {
+      const { tuyaLocalSet } = await loadTuyaLocal();
+      const ok = await tuyaLocalSet({
+        deviceId,
+        localKey: device.tuyaLocalKey as string,
+        ip: device.tuyaIp as string,
+        protocolVersion: version,
+      }, dps as Record<string, unknown>);
+      if (ok) {
+        console.log(`[argos-tuya] controle LAN em ${Date.now() - startedAt}ms`);
+        return;
+      }
+    } catch {
+      // Timeout, aparelho fora da LAN ou erro nativo: cai silenciosamente na nuvem.
+    }
+  }
+
+  const cloudStartedAt = Date.now();
+  await controlTuyaDevice(deviceId, property, value, currentColor);
+  console.log(`[argos-tuya] controle nuvem em ${Date.now() - cloudStartedAt}ms`);
 }
 
 /** Mesmo mapeamento do servidor (api/_lib/wiz.ts, buildWizParams) — precisa
@@ -202,7 +282,10 @@ export const useDeviceStore = create<DeviceStore>()(
         .finally(() => delay(1200).then(() => get().syncEwelinkDevices()));
     }
     if (device?.source === 'tuya' && device.tuyaDeviceId) {
-      const request = controlTuyaDevice(device.tuyaDeviceId, 'isOn', !device.isOn);
+      // LAN primeiro (PR #30) + espera opcional pelo transporte (PR #31): sem o
+      // await o erro voltava a ser engolido no fire-and-forget, que e a causa
+      // raiz documentada de "mandei o comando e nada aconteceu".
+      const request = controlTuyaLocalFirst(device, 'isOn', !device.isOn);
       if (waitForTransport) {
         await request;
         void delay(1200).then(() => get().syncTuyaDevices());
@@ -286,7 +369,7 @@ export const useDeviceStore = create<DeviceStore>()(
       const currentColor = stateKey === 'brightness' && typeof device.state?.color === 'string'
         ? device.state.color
         : undefined;
-      const request = controlTuyaDevice(device.tuyaDeviceId, stateKey, value, currentColor);
+      const request = controlTuyaLocalFirst(device, stateKey, value, currentColor);
       if (waitForTransport) {
         await request;
         void delay(1200).then(() => get().syncTuyaDevices());
@@ -491,6 +574,9 @@ export const useDeviceStore = create<DeviceStore>()(
         brand: 'Smart Life',
         source: 'tuya' as const,
         tuyaDeviceId: d.id,
+        tuyaLocalKey: d.localKey ?? undefined,
+        tuyaIp: d.ip ?? undefined,
+        tuyaProtocolVersion: d.protocolVersion ?? undefined,
       }));
       set((state) => ({
         devices: rebuildDeviceList(state.devices, mapped, 'tuya'),

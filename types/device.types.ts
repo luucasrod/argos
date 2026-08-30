@@ -37,6 +37,9 @@ export interface Device {
   source?: 'mock' | 'ewelink' | 'tuya' | 'alexa' | 'wiz' | 'wiz-local' | 'tapo' | 'xiaomi' | 'xiaomi-pet' | 'chrome';
   ewelinkDeviceId?: string;
   tuyaDeviceId?: string;
+  tuyaLocalKey?: string;
+  tuyaIp?: string;
+  tuyaProtocolVersion?: string;
   alexaEntityId?: string;
   alexaEntityType?: string;
   wizMac?: string;
