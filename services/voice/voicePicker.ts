@@ -42,7 +42,11 @@ const FEMALE_HINT_IN_NAME =
  * melhor que as `-local`.
  */
 const GOOGLE_PTBR_FEMALE = /pt-br-x-afs/i;
-const GOOGLE_PTBR_ALT = /pt-br-x-(pte|ptd)/i;
+// Ordem importa: o primeiro que casar vence o desempate por pontuação.
+// 31/08: `pte` foi testado no aparelho e o usuário disse que ainda soava
+// feminino, então `ptd` passou a ser a primeira opção masculina.
+const GOOGLE_PTBR_MALE_FIRST = /pt-br-x-ptd/i;
+const GOOGLE_PTBR_ALT = /pt-br-x-(ptd|pte)/i;
 const NETWORK_VOICE = /-network/i;
 
 function voiceLang(voice: VoiceLike): string {
@@ -135,6 +139,7 @@ function maleBrazilScore(voice: VoiceLike): number {
   if (/brasil|brazil|pt-br|portugu[eê]s do brasil/i.test(key)) score += 35;
   if (MALE_BR_RE.test(key)) score += 60;
   if (GOOGLE_PTBR_ALT.test(key)) score += 50;
+  if (GOOGLE_PTBR_MALE_FIRST.test(key)) score += 20;
   // -network e sintetizada na nuvem do Google: bem menos robotica que -local.
   if (NETWORK_VOICE.test(key)) score += 25;
   if (isClearlyFemaleVoice(voice)) score -= 100;
