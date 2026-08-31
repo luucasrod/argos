@@ -2,6 +2,7 @@ import * as Speech from 'expo-speech';
 import { AIPersonality } from '@/types/ai.types';
 import { pickVoiceForPersonality, pitchForUtterance } from '@/services/voice/voicePicker';
 import { stripForSpeech } from '@/services/voice/speechText';
+import { perfMark, perfEnd } from '@/services/voice/perfLog';
 
 // getAvailableVoicesAsync() no Android leva segundos e a lista não muda durante a
 // sessão. Sem este cache, cada fala pagava esse custo antes de começar a falar.
@@ -44,7 +45,9 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
       gender: personality.voiceGender,
     });
     if (falou) return;
+    perfMark('tts_cloud_falhou_caindo_para_sistema');
   } catch {
+    perfMark('tts_cloud_falhou_caindo_para_sistema');
     // segue para a voz do sistema
   }
 
@@ -83,6 +86,7 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
       if (settled) return;
       settled = true;
       clearTimeout(guard);
+      perfEnd('tts_sistema_terminado');
       resolve();
     };
 

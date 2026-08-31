@@ -15,6 +15,7 @@ import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 import { resolveIntentSpeech } from '@/services/voice/speechText';
+import { perfMark } from '@/services/voice/perfLog';
 import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
@@ -121,6 +122,7 @@ export function useArgos() {
       const { unlockSpeech } = await import('@/services/voice/speechUnlock');
       unlockSpeech();
       setStatus('speaking');
+      perfMark('tts_iniciado');
       await textToSpeech(text, personality);
     },
     [setStatus, settings.personality]
@@ -561,6 +563,7 @@ export function useArgos() {
       // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
       const fastIntent = matchFastDeviceCommand(trimmed, useDeviceStore.getState().devices);
       if (fastIntent) {
+        perfMark('fast_intent (sem chamar a IA)');
         heavy();
         try {
           if (settings.autonomyLevel === 'assisted' && needsConfirmation(fastIntent)) {
@@ -652,6 +655,7 @@ export function useArgos() {
         const { messages } = useAIStore.getState();
         const historyMessages = buildApiMessageHistory(messages);
 
+        perfMark('llm_requisicao_enviada');
         const response = await withTimeout(
           createMessage({
             model,
@@ -662,10 +666,12 @@ export function useArgos() {
           60000,
           'A requisição demorou demais. Tente de novo.'
         );
+        perfMark('llm_resposta_recebida');
 
         const rawText =
           response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
         const intent = parseAIResponse(rawText);
+        perfMark('intent_parseado');
 
         if (intent.newMemory && settings.memoryEnabled) {
           addMemory({

@@ -14,6 +14,7 @@
 import { Audio } from 'expo-av';
 import { getAccessToken } from '@/services/auth/session';
 import { API_BASE } from '@/constants/api';
+import { perfMark, perfEnd } from '@/services/voice/perfLog';
 
 const TIMEOUT_MS = 8000;
 
@@ -55,6 +56,7 @@ export async function speakWithCloud(
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     let res: Response;
+    perfMark('tts_requisicao_enviada');
     try {
       res = await fetch(`${API_BASE}/api/tts`, {
         method: 'POST',
@@ -84,6 +86,7 @@ export async function speakWithCloud(
     const json = (await res.json()) as { audio?: string };
     if (!json.audio) return false;
     base64 = json.audio;
+    perfMark('tts_audio_recebido');
   } catch {
     return false;
   }
@@ -103,6 +106,7 @@ export async function speakWithCloud(
       { shouldPlay: true, volume: 1 }
     );
     current = sound;
+    perfMark('tts_playback_iniciado');
 
     // Só resolve quando o áudio termina, para quem chamou saber quando o Argos
     // parou de falar (é o que libera o microfone de volta para a wake word).
@@ -119,6 +123,7 @@ export async function speakWithCloud(
       // Rede de segurança: nenhuma reprodução deve prender o fluxo.
       setTimeout(finish, 60000);
     });
+    perfEnd('tts_playback_terminado');
 
     await stopCloudSpeech();
     return true;
