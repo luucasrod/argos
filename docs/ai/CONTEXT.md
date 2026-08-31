@@ -22,6 +22,15 @@ para `/api/ha` usando a chave gerada no app, e o Argos executa nas integrações
 que ele próprio conhece. O app não lê nem controla entidades cadastradas somente
 no Home Assistant, portanto elas não aparecem na aba Casa.
 
+### Device Registry
+
+`services/devices/deviceRegistry.ts` é a camada canônica entre discovery e o
+store. Todo dispositivo registrado tem `provider`, `nativeId`, `roomId`,
+`capabilities`, `online`, `metadata` e `aliases`; renomear ou reimportar preserva
+`nativeId`. O store migra automaticamente os registros persistidos antigos.
+Snapshots destinados à cloud usam `toCloudDeviceSnapshot()` e não incluem
+`state` nem `metadata`, que podem conter dados voláteis ou sensíveis.
+
 ---
 
 ## Voz — arquitetura. Não mexa sem ler esta seção inteira

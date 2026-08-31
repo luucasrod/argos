@@ -28,6 +28,12 @@ import { controlTapoDevice, fetchTapoDevices } from '@/services/devices/tapoServ
 import { controlXiaomiDevice, fetchXiaomiDevices } from '@/services/devices/xiaomiService';
 import { controlChromeDevice, fetchChromeDevices } from '@/services/devices/chromeService';
 import { controlXiaomiPetDevice, fetchXiaomiPetDevices } from '@/services/devices/xiaomiPetService';
+import {
+  registerDevice,
+  replaceProviderDevices,
+  type DiscoveredDevice,
+  type RegisteredDevice,
+} from '@/services/devices/deviceRegistry';
 
 export interface WizLocalSavedDevice {
   ip: string;
@@ -36,7 +42,7 @@ export interface WizLocalSavedDevice {
 }
 
 interface DeviceStore {
-  devices: Device[];
+  devices: RegisteredDevice[];
   ewelinkConnected: boolean;
   tuyaConnected: boolean;
   alexaConnected: boolean;
@@ -192,44 +198,17 @@ function buildWizLocalParams(
  * genuinamente novo entra no fim.
  */
 function rebuildDeviceList(
-  current: Device[],
-  newFromSource: Device[],
+  current: RegisteredDevice[],
+  newFromSource: DiscoveredDevice[],
   source: NonNullable<Device['source']>
-): Device[] {
-  const existingRooms = new Map(current.map((d) => [d.id, d.room]));
-  const existingNames = new Map(current.map((d) => [d.id, d.name]));
-  const freshById = new Map(newFromSource.map((d) => [d.id, d]));
-
-  const merged: Device[] = [];
-  const placed = new Set<string>();
-
-  for (const d of current) {
-    if (d.source !== source) {
-      merged.push(d);
-      continue;
-    }
-    const fresh = freshById.get(d.id);
-    if (!fresh) continue; // não veio nesta sincronização — descarta
-    merged.push({
-      ...fresh,
-      room: existingRooms.get(d.id) ?? fresh.room,
-      name: existingNames.get(d.id) ?? fresh.name,
-    });
-    placed.add(d.id);
-  }
-
-  for (const d of newFromSource) {
-    if (!placed.has(d.id)) merged.push(d);
-  }
-
-  const realCats = new Set(merged.filter((d) => d.source !== 'mock').map((d) => d.category));
-  return merged.filter((d) => d.source !== 'mock' || !realCats.has(d.category));
+): RegisteredDevice[] {
+  return replaceProviderDevices(current, newFromSource, source);
 }
 
 export const useDeviceStore = create<DeviceStore>()(
   persist(
     (set, get) => ({
-  devices: MOCK_DEVICES,
+  devices: MOCK_DEVICES.map(registerDevice),
   customNames: {},
   customOrder: {},
   ewelinkConnected: false,
@@ -249,7 +228,15 @@ export const useDeviceStore = create<DeviceStore>()(
       // Grava no dispositivo de verdade — não só num mapa de exibição. Sem
       // isso o Argos (IA, comando de voz, fastIntent) nunca via o nome novo,
       // só a tela de dispositivos mostrava ele.
-      devices: state.devices.map((d) => (d.id === id ? { ...d, name: name.trim() } : d)),
+      devices: state.devices.map((d) => {
+        if (d.id !== id) return d;
+        const nextName = name.trim();
+        return {
+          ...d,
+          name: nextName,
+          aliases: Array.from(new Set([...d.aliases, nextName].filter(Boolean))),
+        };
+      }),
       customNames: { ...state.customNames, [id]: name.trim() },
     })),
 
@@ -1156,6 +1143,15 @@ export const useDeviceStore = create<DeviceStore>()(
       // No web o AsyncStorage é implementado sobre window.localStorage com a
       // mesma chave, então um caminho único serve para as duas plataformas.
       storage: createJSONStorage(() => AsyncStorage),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<DeviceStore>;
+        return {
+          ...currentState,
+          ...persisted,
+          // Migra registros salvos antes do modelo canônico sem trocar seus ids.
+          devices: (persisted.devices ?? currentState.devices).map(registerDevice),
+        };
+      },
       partialize: (state) => ({
         devices: state.devices,
         ewelinkConnected: state.ewelinkConnected,
