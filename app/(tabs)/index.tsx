@@ -163,7 +163,8 @@ export default function HomeScreen() {
           <View style={styles.main}>
             <View style={styles.topSection}>
               <Animated.View entering={enter.down(100)} style={styles.header}>
-                <Text style={styles.greeting}>Argos</Text>
+                {/* O \u00A0 final NAO e enfeite: ver o comentario em styles.greeting. */}
+                <Text style={styles.greeting}>{'Argos\u00A0'}</Text>
                 <Pressable
                   onPress={() => router.push('/(modals)/memory')}
                   style={styles.memoryButton}
@@ -376,17 +377,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
   },
-  // paddingRight + flexShrink:0 por causa do Android: com letterSpacing, a
-  // largura medida do Text NAO inclui o espaco que vem depois da ultima letra,
-  // entao o glifo final cai fora da caixa e e cortado — "Argos" aparecia como
-  // "Argo". O padding da a folga que falta; o flexShrink impede o container em
-  // row de espremer o titulo.
+  /*
+   * "Argos" aparecia como "Argo" no Android: o ultimo glifo era cortado.
+   *
+   * Primeira tentativa (paddingRight) NAO funcionou, e o motivo importa: o
+   * Android subestima a largura do RUN DE TEXTO e corta na borda do conteudo —
+   * o padding fica por fora dessa borda e nao entra na conta. Para curar e
+   * preciso aumentar o proprio texto, nao a caixa.
+   *
+   * Por isso duas medidas juntas:
+   *   1. `letterSpacing` removido — e ele que faz a largura ser subestimada,
+   *      porque o espaco depois da ultima letra nao entra na medicao.
+   *   2. um ` ` (espaco fixo) no fim da string, no JSX — ele tem largura
+   *      real e e medido, entao o que sobrar para cortar e ele, nunca o "s".
+   *      Invisivel: o titulo e alinhado a esquerda.
+   *
+   * Se mexer aqui, conferir no aparelho — o efeito nao aparece no typecheck
+   * nem no web.
+   */
   greeting: {
     fontSize: 26,
     fontWeight: '700',
     color: '#C4B5FD',
-    letterSpacing: 0.5,
-    paddingRight: 4,
+    paddingRight: 8,
     flexShrink: 0,
   },
   memoryButton: {
