@@ -40,6 +40,10 @@ import {
   type Room,
   type Zone,
 } from '@/services/devices/roomRegistry';
+import {
+  executeCapability,
+  type CapabilityCommand,
+} from '@/services/devices/capabilityModel';
 
 export interface WizLocalSavedDevice {
   ip: string;
@@ -74,6 +78,7 @@ interface DeviceStore {
   setCurrentRoomId: (roomId: string | null) => void;
   toggleDevice: (id: string, waitForTransport?: boolean) => Promise<void>;
   updateDeviceState: (id: string, stateKey: string, value: unknown, waitForTransport?: boolean) => Promise<void>;
+  executeDeviceCapability: (id: string, command: CapabilityCommand) => Promise<void>;
   syncEwelinkDevices: () => Promise<void>;
   syncTuyaDevices: () => Promise<{ count: number }>;
   syncAlexaDevices: () => Promise<{ count: number }>;
@@ -567,6 +572,14 @@ export const useDeviceStore = create<DeviceStore>()(
           .finally(() => delay(1500).then(() => get().syncChromeDevices()));
       }
     }
+  },
+
+  executeDeviceCapability: async (id, command) => {
+    const device = get().devices.find((candidate) => candidate.id === id);
+    if (!device) throw new Error(`Device nao encontrado: ${id}`);
+    await executeCapability(device, command, async (_target, property, value) => {
+      await get().updateDeviceState(id, property, value, true);
+    });
   },
 
   syncEwelinkDevices: async () => {
