@@ -155,14 +155,44 @@ fazer agora e não espera instrução**. Ele executa, nesta ordem:
    - **Tem** → volta ao passo 3.1 com ela. Sem pedir confirmação.
 3. Repete.
 
-### Quando parar, obrigatoriamente
+### 🔁 Bloqueou? PULA — não para
 
-- Fila vazia (acima).
+Esta é a regra mais importante da fila. **Encontrar um impedimento numa tarefa
+NÃO é motivo para encerrar o expediente.** É motivo para pular aquela tarefa e
+seguir para a próxima que não dependa dela.
+
+Pule a tarefa (sem encerrar a fila) quando:
+
+- falta autorização do usuário (conta, chave, pagamento, decisão de produto);
+- ela exige mexer em área que pertence a outro agente ou a uma issue SOLO;
+- uma dependência declarada ainda não foi integrada;
+- ela precisa de aparelho físico, serviço externo ou credencial que você não tem;
+- você tentou e travou por motivo que não está no seu alcance resolver.
+
+**O que fazer ao pular, sempre nesta ordem:**
+
+1. Comente na própria issue explicando **o que faltou**, em uma frase objetiva.
+2. Marque a issue como `status:blocked` e **remova o assignee** — ela volta para
+   a fila de outra pessoa.
+3. Registre a linha no **relatório de bloqueios** (a issue fixada
+   `📋 Relatório de bloqueios`), no formato:
+   `#<n> — <o que falta> — <quem resolve: usuário / agente X / issue Y>`
+4. **Vá para a próxima tarefa elegível.** Não pare, não peça confirmação.
+
+O objetivo é **entregar o máximo possível numa passada**, deixando por escrito o
+que sobrou e de quem depende. Uma fila com dez impedimentos deve terminar com
+dez linhas de relatório e todo o resto feito — nunca com nove tarefas paradas
+atrás da primeira.
+
+### Quando parar de verdade (só nestes casos)
+
+- **Não há mais nenhuma tarefa elegível** — todas feitas, bloqueadas ou puladas.
 - `docs/ai/STOP` existe.
-- Duas tarefas seguidas falharam nos checks — algo está errado no ambiente,
-  não na tarefa.
-- Precisa de algo que só o usuário tem: aparelho físico, login, chave, decisão
-  de produto ambígua, custo externo.
+- **Duas tarefas seguidas falharam nos checks** — isso indica ambiente quebrado,
+  não tarefa difícil. Continuar só produz lixo.
+
+Ao parar, entregue o relatório final: o que foi feito, quais PRs ficaram
+abertos, o que foi pulado e por quê, e o que depende do usuário.
 
 ### O que NUNCA fazer para continuar ocupado
 
@@ -176,6 +206,24 @@ Fila aprovada acabou = trabalho acabou. Propor tarefa nova é permitido
 **executá-la sem aprovação, não.**
 
 ---
+
+## 4.1 Zonas de propriedade (plano de implementação)
+
+O backlog grande divide o sistema em superfícies. **Cada agente só edita a sua**:
+
+| Agente | Superfície | Diretórios |
+|---|---|---|
+| **CLAUDE** (Agente A do plano) | Argos F: app, áudio, wake word, UX, personalização no cliente, diagnóstico mobile | `app/`, `components/`, `hooks/`, `services/voice/` |
+| **CODEX** (Agente B do plano) | Argos Home, Argos Cloud, device layer, integrações, rotinas, memória, telemetria | `api/`, `services/devices/`, `services/ai/`, `stores/` |
+| **RODAR SOLO** | contratos compartilhados, schemas, segurança, release gates, testes ponta a ponta | `contracts/`, `docs/`, workflows |
+
+**Issue marcada `rodar-solo` roda sozinha**: enquanto ela estiver
+`status:in-progress`, o outro agente não começa tarefa nova que toque nas
+mesmas áreas. Ela define contrato — mudar contrato no meio quebra os dois lados.
+
+Se uma tarefa exigir editar fora da sua zona: **não edite**. Pule pela regra
+acima e registre no relatório qual arquivo você precisaria ter tocado. Quem
+decide é o usuário, ou vira uma issue `rodar-solo` nova.
 
 ## 5. Precisa da minha aprovação, sempre
 
