@@ -1,0 +1,19 @@
+# Repository ownership is intentionally centralized while Argos is maintained
+# by one account. The Ownership Zones check enforces the finer Claude/Codex/SOLO
+# path boundaries declared in docs/ai/WORK_PROTOCOL.md.
+* @luucasrod
+
+# Shared contracts, process and enforcement require explicit owner review.
+/contracts/ @luucasrod
+/docs/ @luucasrod
+/.github/ @luucasrod
+
+# Existing app surfaces (logical ownership; the app remains one Expo project).
+/app/ @luucasrod
+/components/ @luucasrod
+/hooks/ @luucasrod
+/services/voice/ @luucasrod
+/api/ @luucasrod
+/services/devices/ @luucasrod
+/services/ai/ @luucasrod
+/stores/ @luucasrod
