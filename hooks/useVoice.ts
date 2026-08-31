@@ -24,16 +24,7 @@ import {
   type MicWindow,
 } from '@/services/voice/nativeMic';
 import { transcribeRecording } from '@/services/voice/transcribeNative';
-import {
-  startBackgroundWakeWord,
-  stopBackgroundWakeWord,
-  isBackgroundWakeWordRunning,
-  suspendBackgroundWakeWord,
-  resumeBackgroundWakeWord,
-  cancelVoskUtterance,
-  isVoskArmed,
-  armVoskUtterance,
-} from '@/services/voice/backgroundWakeWord.native';
+import { wakeWordEngine } from '@/services/voice/wakeWordEngine.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
 import { perfAbort } from '@/services/voice/perfLog';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
@@ -73,8 +64,8 @@ export function useVoice(options?: UseVoiceOptions) {
 
   /** Sobe (ou religa) a escuta contínua da wake word em background. */
   const startWakeWordDetection = useCallback(async () => {
-    if (isBackgroundWakeWordRunning()) {
-      resumeBackgroundWakeWord();
+    if (wakeWordEngine.isRunning()) {
+      wakeWordEngine.resume();
       setIsWakeListening(true);
       return;
     }
@@ -91,10 +82,10 @@ export function useVoice(options?: UseVoiceOptions) {
       ...devices.map((d) => d.room).filter(Boolean),
     ] as string[];
 
-    const ok = await startBackgroundWakeWord({
+    const ok = await wakeWordEngine.start({
       wakeWord: wakeWordRef.current,
       extraPhrases,
-      onWakeWordDetected: () => {
+      onWakeDetected: () => {
         // Só retorno visual. O comando vem na mesma fala, pelo onCommand abaixo —
         // não há mais um segundo passo de "começar a escutar".
         setWakeWordDetected(true);
@@ -129,7 +120,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const stopWakeWordDetection = useCallback(async () => {
     setIsWakeListening(false);
-    await stopBackgroundWakeWord();
+    await wakeWordEngine.stop();
   }, []);
 
   const startListening = useCallback(async (opts?: { skipChime?: boolean }) => {
@@ -152,9 +143,9 @@ export function useVoice(options?: UseVoiceOptions) {
        * startWakeWordDetection, igual a quando a wake word dispara. Nada de
        * fechar e reabrir áudio, que é justamente o que não sobrevive em background.
        */
-      if (isBackgroundWakeWordRunning()) {
+      if (wakeWordEngine.isRunning()) {
         if (!opts?.skipChime) playListenChime();
-        if (armVoskUtterance()) {
+        if (wakeWordEngine.armUtterance()) {
           setTranscript('');
           setIsListening(true);
           setStatus('listening');
@@ -165,7 +156,7 @@ export function useVoice(options?: UseVoiceOptions) {
       }
 
       // Sem escuta contínua: grava com o expo-av e transcreve via Whisper.
-      suspendBackgroundWakeWord();
+      wakeWordEngine.suspend();
       await releaseMic();
       if (!opts?.skipChime) {
         playListenChime();
@@ -183,7 +174,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
       if (!window) {
         setError('Não consegui acessar o microfone. Feche outros apps que usam áudio.');
-        resumeBackgroundWakeWord();
+        wakeWordEngine.resume();
         return;
       }
 
@@ -240,7 +231,7 @@ export function useVoice(options?: UseVoiceOptions) {
       startingRef.current = false;
       // Deixa a escuta contínua ligada a partir do primeiro toque no orb —
       // é o comportamento principal do Argos.
-      if (!isBackgroundWakeWordRunning()) {
+      if (!wakeWordEngine.isRunning()) {
         void startWakeWordDetection();
       }
     }
@@ -251,8 +242,8 @@ export function useVoice(options?: UseVoiceOptions) {
   const stopListening = useCallback(
     (submit = false) => {
       // Fala em curso no Vosk: cancelar volta a vigiar a wake word sem soltar o mic.
-      if (isVoskArmed()) {
-        cancelVoskUtterance();
+      if (wakeWordEngine.isArmed()) {
+        wakeWordEngine.cancelUtterance();
         setIsListening(false);
         setStatus('idle');
         return;
@@ -276,7 +267,7 @@ export function useVoice(options?: UseVoiceOptions) {
    */
   useEffect(() => {
     registerVoicePause(() => {
-      suspendBackgroundWakeWord();
+      wakeWordEngine.suspend();
       activeWindow?.cancel();
       activeWindow = null;
       setIsListening(false);
@@ -288,7 +279,7 @@ export function useVoice(options?: UseVoiceOptions) {
   /* Religa a wake word quando o Argos volta a ficar ocioso (depois de falar/executar). */
   useEffect(() => {
     const unsubscribe = useAIStore.subscribe((state) => {
-      if (!isBackgroundWakeWordRunning()) return;
+      if (!wakeWordEngine.isRunning()) return;
       /*
        * Suspende SÓ enquanto o Argos fala (TTS), para ele não se ouvir.
        *
@@ -300,9 +291,9 @@ export function useVoice(options?: UseVoiceOptions) {
        * microfone separado e o Vosk tinha de soltar o dele. Hoje o Vosk É a escuta.
        */
       if (state.status === 'speaking') {
-        suspendBackgroundWakeWord();
+        wakeWordEngine.suspend();
       } else if (state.status === 'idle') {
-        if (!activeWindow) resumeBackgroundWakeWord();
+        if (!activeWindow) wakeWordEngine.resume();
       }
     });
     return unsubscribe;
@@ -316,7 +307,7 @@ export function useVoice(options?: UseVoiceOptions) {
   /* Mantém o rótulo de escuta contínua em sincronia com o serviço. */
   useEffect(() => {
     const id = setInterval(() => {
-      setIsWakeListening(isBackgroundWakeWordRunning());
+      setIsWakeListening(wakeWordEngine.isRunning());
     }, 2000);
     return () => clearInterval(id);
   }, []);
