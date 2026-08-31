@@ -35,6 +35,7 @@ import {
   armVoskUtterance,
 } from '@/services/voice/backgroundWakeWord.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
+import { perfAbort } from '@/services/voice/perfLog';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
 import {
   getSpeakableDeviceAlias,
@@ -107,6 +108,10 @@ export function useVoice(options?: UseVoiceOptions) {
         setIsListening(false);
         const clean = resolveDeviceVoiceAlias(text, devices);
         if (!clean) {
+          // Wake word disparou mas não veio comando (silêncio total depois
+          // dela) — o turno de medição foi aberto em submit() e nunca vai
+          // ser fechado por speak(), então fecha aqui sem imprimir resumo.
+          perfAbort();
           setStatus('idle');
           return;
         }
