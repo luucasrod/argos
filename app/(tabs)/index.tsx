@@ -376,7 +376,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
   },
-  greeting: { fontSize: 26, fontWeight: '700', color: '#C4B5FD', letterSpacing: 0.5 },
+  // paddingRight + flexShrink:0 por causa do Android: com letterSpacing, a
+  // largura medida do Text NAO inclui o espaco que vem depois da ultima letra,
+  // entao o glifo final cai fora da caixa e e cortado — "Argos" aparecia como
+  // "Argo". O padding da a folga que falta; o flexShrink impede o container em
+  // row de espremer o titulo.
+  greeting: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#C4B5FD',
+    letterSpacing: 0.5,
+    paddingRight: 4,
+    flexShrink: 0,
+  },
   memoryButton: {
     width: 40,
     height: 40,
