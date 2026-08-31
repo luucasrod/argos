@@ -109,6 +109,32 @@ severidade. **Não aprova só porque compila.**
 **Merge não é automático.** O PR aprovado fica pronto e o usuário decide. Em
 rodada desassistida (madrugada / usuário fora), o agente **nunca** faz merge.
 
+### 🚫 Publicar OTA é PROIBIDO para agente
+
+```
+npx eas update        ← NUNCA, em nenhuma circunstância
+```
+
+Um OTA entrega o JavaScript **direto no celular do usuário, na próxima abertura
+do app**. Não passa por PR, não passa por revisão, não passa por merge — pula o
+protocolo inteiro e altera o aparelho que ele usa de verdade. É mais grave que
+um merge indevido, porque não há diff para alguém olhar depois.
+
+O mesmo vale para qualquer ação que atinja o mundo real sem revisão:
+
+- `npx eas update` / `eas build` / `eas submit`
+- `adb install`, `adb uninstall`, `adb shell pm clear`
+- `vercel deploy` / `vercel alias`
+- migração de banco, mudança de RLS, alteração de variável de ambiente
+- `git push` na branch base (só na branch da própria tarefa)
+
+Se a tarefa **só puder** ser concluída publicando ou instalando algo: **pare**,
+abra o PR em draft com o código pronto, e escreva no PR exatamente qual comando
+precisa ser rodado e por quê. **Quem roda é o usuário.**
+
+Ler no aparelho é permitido e encorajado: `adb logcat`, `adb shell dumpsys`,
+`adb devices`, `pm list packages`. A linha é **ler pode, escrever não.**
+
 ### 3.6 Fechar
 
 Worktree removida (`git worktree remove`), issue fechada com link do PR,
