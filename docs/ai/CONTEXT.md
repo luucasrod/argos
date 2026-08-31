@@ -226,7 +226,7 @@ build + instalação real + logcat provam.
 | Item | Situação |
 |---|---|
 | Voz neural | Cota grátis estourada. Decidir: plano pago, Azure (o código já prevê o caminho) ou esperar o reset |
-| Latência de resposta | Relatada pelo usuário, **ainda não medida** |
+| Latência de resposta | `COMMAND_SILENCE_MS` já baixou de 1200 para 800ms (issue #14). Instrumentação por etapa pronta em `services/voice/perfLog.ts` (fim da fala → intent/LLM → TTS → áudio), log com prefixo `[argos-perf]` no logcat (tag `ReactNativeJS`). **Falta**: rodar no aparelho numa interação real e escrever o relatório de qual etapa domina — pendente de acesso físico ao celular |
 | Módulos nativos perdidos | Reescrever como config plugin (ver acima) |
 | Deps mortas do Picovoice | Remover do `package.json` |
 | Aparelhos fora do vocabulário | `tv`, `4k`, `speaker`, `standing`, `ar-condicionado`, `2` — precisam de apelido falável |
