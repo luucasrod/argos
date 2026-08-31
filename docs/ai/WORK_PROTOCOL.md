@@ -221,6 +221,17 @@ O backlog grande divide o sistema em superfícies. **Cada agente só edita a sua
 `status:in-progress`, o outro agente não começa tarefa nova que toque nas
 mesmas áreas. Ela define contrato — mudar contrato no meio quebra os dois lados.
 
+### Enforcement automático
+
+- Branches de agente começam com `claude/` ou `codex/`.
+- Todo PR referencia a issue reivindicada no corpo (`#<número>`).
+- `.github/CODEOWNERS` exige revisão do mantenedor; o check **Ownership Zones**
+  compara os arquivos alterados com o prefixo da branch e com o label da issue.
+- `contracts/`, `docs/` e `.github/` só passam nesse check quando uma das issues
+  referenciadas tem o label `rodar-solo`.
+- A separação é lógica dentro do app Expo atual. Criar ou mover código para
+  `/argos-f`, `/argos-home` ou `/argos-cloud` exige decisão e issue próprias.
+
 Se uma tarefa exigir editar fora da sua zona: **não edite**. Pule pela regra
 acima e registre no relatório qual arquivo você precisaria ter tocado. Quem
 decide é o usuário, ou vira uma issue `rodar-solo` nova.
