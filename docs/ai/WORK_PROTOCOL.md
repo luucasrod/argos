@@ -184,6 +184,40 @@ que sobrou e de quem depende. Uma fila com dez impedimentos deve terminar com
 dez linhas de relatório e todo o resto feito — nunca com nove tarefas paradas
 atrás da primeira.
 
+### 🔗 Fila intercalada por cadeia — como a fila é montada
+
+**Problema que isto resolve.** Numa fila em ordem numérica, as issues costumam
+formar uma cadeia linear: a segunda depende da primeira, a terceira da segunda.
+O agente entrega a primeira, abre PR, e descobre que todo o resto depende dela
+estar **integrada**. Como a revisão é assíncrona, ele bloqueia a cadeia inteira
+e para. Medido em 31/08: **uma tarefa entregue por rodada**, mesmo com oito
+disponíveis.
+
+**A regra.** A fila NÃO é montada por número nem pela ordem do documento de
+planejamento. É montada a partir do **grafo de dependências**: agrupam-se as
+issues por cadeia e **intercala-se** — primeira da cadeia A, primeira da B,
+primeira da C, depois a segunda da A, e assim por diante.
+
+Assim, quando o agente termina uma tarefa e o PR fica esperando revisão, a
+próxima da fila é de **outra cadeia** — independente do que acabou de entregar.
+
+```
+python scripts/montar-fila.py <plano.json> <claude|codex>
+```
+
+O script já respeita o estado real do GitHub: só entram issues abertas, do
+agente certo, sem `aguarda-argos-home` e sem `requires-human`, e considera uma
+dependência satisfeita apenas quando a issue dela está **fechada**.
+
+**O que isto não resolve.** Quando as cadeias independentes se esgotam, ainda é
+preciso mergear para destravar. A regra troca *"entrega 1 e para"* por
+*"entrega N e para"*, onde N é o número de cadeias independentes — não elimina
+a revisão do caminho crítico.
+
+**Vale para qualquer projeto.** Sempre que houver plano com dependências
+declaradas e revisão assíncrona, montar a fila assim. Ordenar por número é o
+caminho mais curto para o agente parar na primeira tarefa.
+
 ### Quando parar de verdade (só nestes casos)
 
 - **Não há mais nenhuma tarefa elegível** — todas feitas, bloqueadas ou puladas.
