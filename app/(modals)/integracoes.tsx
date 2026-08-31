@@ -85,6 +85,7 @@ export default function IntegracoesScreen() {
     wizConnected,
     tapoConnected,
     xiaomiConnected,
+    xiaomiPetConnected,
     chromeConnected,
     wizLocalConnected,
     wizLocalBridgeUrl: storedBridgeUrl,
@@ -94,6 +95,7 @@ export default function IntegracoesScreen() {
     syncWizDevices,
     syncTapoDevices,
     syncXiaomiDevices,
+    syncXiaomiPetDevices,
     syncChromeDevices,
     setWizLocalBridgeUrl,
     syncWizLocalDevices,
@@ -163,6 +165,7 @@ export default function IntegracoesScreen() {
   const wizCount = devices.filter((d) => d.source === 'wiz').length;
   const tapoCount = devices.filter((d) => d.source === 'tapo').length;
   const xiaomiCount = devices.filter((d) => d.source === 'xiaomi').length;
+  const xiaomiPetCount = devices.filter((d) => d.source === 'xiaomi-pet').length;
   const chromeCount = devices.filter((d) => d.source === 'chrome').length;
   const wizLocalCount = devices.filter((d) => d.source === 'wiz-local').length;
 
@@ -278,6 +281,7 @@ export default function IntegracoesScreen() {
       await loginXiaomi(xiaomiEmail.trim(), xiaomiPassword);
       setXiaomiPassword('');
       await syncXiaomiDevices();
+      await syncXiaomiPetDevices();
     } catch (err) {
       if (err instanceof XiaomiVerificationRequiredError) {
         setXiaomiError(err.message);
@@ -293,6 +297,7 @@ export default function IntegracoesScreen() {
     medium();
     try { await disconnectXiaomi(); } catch { /* silent */ }
     await syncXiaomiDevices();
+    await syncXiaomiPetDevices();
   };
 
   const handleConnectAlexa = async () => {
@@ -597,6 +602,32 @@ export default function IntegracoesScreen() {
                 <Text style={styles.dangerText}>Desconectar Xiaomi</Text>
               </Pressable>
             )}
+          </IntegrationCard>
+
+          {/* Xiaomi Pet — reutiliza a conta Mi Home */}
+          <IntegrationCard
+            title="Xiaomi Pet"
+            description={xiaomiPetConnected
+              ? `✓ ${xiaomiPetCount} aparelho${xiaomiPetCount !== 1 ? 's' : ''} Pet encontrado${xiaomiPetCount !== 1 ? 's' : ''}`
+              : xiaomiConnected
+                ? 'Nenhum alimentador, bebedouro ou caixa de areia encontrado'
+                : 'Alimentadores, bebedouros e caixas de areia da conta Mi Home'}
+            connected={xiaomiPetConnected}
+            expanded={!!expanded.xiaomiPet}
+            onToggle={() => toggle('xiaomiPet')}
+            onRefresh={() => { void syncXiaomiPetDevices(); }}
+            refreshing={connectingXiaomi}
+          >
+            <View style={styles.form}>
+              <Text style={styles.cardDesc}>
+                Usa a mesma conta Xiaomi Mi Home. Conecte ou atualize a integração acima para carregar os aparelhos Pet.
+              </Text>
+              {xiaomiConnected ? (
+                <Pressable style={styles.primaryBtn} onPress={() => { void syncXiaomiPetDevices(); }}>
+                  <Text style={styles.primaryBtnText}>Buscar aparelhos Pet</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </IntegrationCard>
 
           {/* Amazon Alexa */}

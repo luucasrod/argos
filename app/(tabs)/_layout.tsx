@@ -24,7 +24,7 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabsLayout() {
   useSupabaseSync();
-  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices } = useDeviceStore();
+  const { syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncXiaomiPetDevices, syncWizLocalDevices } = useDeviceStore();
 
   useEffect(() => {
     const syncAll = () => {
@@ -34,12 +34,13 @@ export default function TabsLayout() {
       syncTuyaDevices();
       syncTapoDevices();
       syncXiaomiDevices();
+      syncXiaomiPetDevices();
       syncWizLocalDevices();
     };
     syncAll();
     const interval = setInterval(syncAll, 10_000);
     return () => clearInterval(interval);
-  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncWizLocalDevices]);
+  }, [syncEwelinkDevices, syncAlexaDevices, syncWizDevices, syncTuyaDevices, syncTapoDevices, syncXiaomiDevices, syncXiaomiPetDevices, syncWizLocalDevices]);
 
   return (
     <Tabs
