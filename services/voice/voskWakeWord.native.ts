@@ -76,7 +76,12 @@ const COMMAND_PHRASES = [
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */
-const COMMAND_SILENCE_MS = 1200;
+// 800 ms, nao 1200: o usuario mediu ~4 s entre comecar a falar e o Argos
+// responder, e identificou que a espera esta justamente aqui — o tempo que
+// ele leva pra decidir que a frase acabou. Cada ms daqui sai direto da
+// latencia percebida. 800 ms ainda cobre pausa entre palavras; se comecar a
+// cortar gente no meio da frase, subir de volta.
+const COMMAND_SILENCE_MS = 800;
 /** Espera por um comando quando só a wake word foi dita. */
 const AWAIT_COMMAND_MS = 4000;
 
