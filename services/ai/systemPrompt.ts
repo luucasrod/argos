@@ -4,15 +4,23 @@ import { Device } from '@/types/device.types';
 import { AIPersonality } from '@/types/ai.types';
 import { UserProfile } from '@/types/settings.types';
 import { getSupportedAppNames } from '@/services/browser/appLinks';
+import { selectMemoryContext } from '@/services/ai/memorySelection';
 
 export function buildSystemPrompt(
   personality: AIPersonality,
   memories: Memory[],
   automations: Automation[],
   devices: Device[],
-  userProfile?: UserProfile
+  userProfile?: UserProfile,
+  currentMessage = ''
 ): string {
-  const activeMemories = memories.filter((m) => m.isActive);
+  const memoryContext = selectMemoryContext(memories, currentMessage);
+  if (__DEV__ && memoryContext.beforeChars !== memoryContext.afterChars) {
+    console.log(
+      `[argos-memory] prompt: ${memoryContext.activeCount} memórias/${memoryContext.beforeChars} chars → ` +
+      `${memoryContext.selectedCount}/${memoryContext.afterChars} chars`
+    );
+  }
   const activeAutomations = automations.filter((a) => a.isActive);
   const onlineDevices = devices.filter((d) => d.status === 'online');
   // Os offline precisam aparecer no prompt. Antes eram omitidos, então a IA não
@@ -102,7 +110,7 @@ Nunca invente um deviceId que não esteja em nenhuma das duas listas acima.
 ${activeAutomations.map((a) => `- "${a.name}": ${a.description}`).join('\n')}
 
 ## Memórias e contexto pessoal
-${activeMemories.map((m) => `- [${m.category}] ${m.title}: ${m.content}`).join('\n')}
+${memoryContext.text || '- Nenhuma memória relevante registrada.'}
 
 ## Formato de resposta para AÇÕES
 Quando o usuário pedir para fazer algo com dispositivos ou criar automações, SEMPRE responda em JSON estruturado assim:
