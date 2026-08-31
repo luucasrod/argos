@@ -340,6 +340,14 @@ export const useDeviceStore = create<DeviceStore>()(
         })
         .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
     }
+    if (device?.source === 'xiaomi-pet' && device.xiaomiPetDid && device.xiaomiPetControl?.power) {
+      const { siid, piid } = device.xiaomiPetControl.power;
+      controlXiaomiPetDevice(device.xiaomiPetDid, siid, piid, !device.isOn)
+        .catch((err) => {
+          if (__DEV__) console.error('[Xiaomi Pet] Falha ao controlar aparelho:', err);
+        })
+        .finally(() => delay(1500).then(() => get().syncXiaomiPetDevices()));
+    }
     if (device?.source === 'chrome' && device.chromeDeviceId) {
       controlChromeDevice(device.chromeDeviceId, 'OnOff', { on: !device.isOn })
         .catch((err) => {
@@ -455,6 +463,28 @@ export const useDeviceStore = create<DeviceStore>()(
             })
             .finally(() => delay(1500).then(() => get().syncXiaomiDevices()));
         }
+      }
+    }
+    if (device?.source === 'xiaomi-pet' && device.xiaomiPetDid && device.xiaomiPetControl) {
+      const ctrl = device.xiaomiPetControl;
+      let property: { siid: number; piid: number } | undefined;
+      let nextValue = value;
+
+      if (stateKey === 'isOn') property = ctrl.power;
+      else if (stateKey === 'feedAmount' && ctrl.feedAmount) {
+        property = ctrl.feedAmount;
+        nextValue = Math.max(ctrl.feedAmount.min, Math.min(ctrl.feedAmount.max, Math.round(Number(value))));
+      } else if (stateKey === 'cleaningMode' && ctrl.cleaningMode) {
+        property = ctrl.cleaningMode;
+        nextValue = ctrl.cleaningMode.options.find((option) => option.label === value)?.value;
+      } else if (stateKey === 'lightControl') property = ctrl.lightControl;
+
+      if (property && nextValue != null) {
+        controlXiaomiPetDevice(device.xiaomiPetDid, property.siid, property.piid, nextValue)
+          .catch((err) => {
+            if (__DEV__) console.error('[Xiaomi Pet] Falha ao atualizar aparelho:', err);
+          })
+          .finally(() => delay(1500).then(() => get().syncXiaomiPetDevices()));
       }
     }
     if (device?.source === 'chrome' && device.chromeDeviceId) {
@@ -782,6 +812,7 @@ export const useDeviceStore = create<DeviceStore>()(
             type: 'readonly' as const,
             property: 'waterLevel',
             label: 'Nível de Água',
+            unit: '%',
           });
         }
         if (d.wasteLevel) {
@@ -789,6 +820,7 @@ export const useDeviceStore = create<DeviceStore>()(
             type: 'readonly' as const,
             property: 'wasteLevel',
             label: 'Nível de Resíduos',
+            unit: '%',
           });
         }
         if (d.cleaningMode) {
@@ -807,6 +839,7 @@ export const useDeviceStore = create<DeviceStore>()(
             type: 'readonly' as const,
             property: 'temperature',
             label: 'Temperatura',
+            unit: '°C',
           });
         }
 

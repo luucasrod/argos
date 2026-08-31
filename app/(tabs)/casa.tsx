@@ -119,6 +119,16 @@ function CapabilityControl({
     );
   }
 
+  if (cap.type === 'readonly') {
+    const display = value == null ? 'Sem dados' : `${String(value)}${cap.unit ?? ''}`;
+    return (
+      <View style={styles.capRow}>
+        <Text style={styles.capLabel}>{cap.label}</Text>
+        <Text style={styles.rangeValue}>{display}</Text>
+      </View>
+    );
+  }
+
   return null;
 }
 
@@ -192,6 +202,22 @@ function DeviceCard({
       {expanded && (
         <View style={styles.deviceControls}>
           <View style={styles.controlsDivider} />
+          {isOnline && device.xiaomiPetType === 'feeder' && device.xiaomiPetControl?.feedAmount ? (
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => {
+                light();
+                const amount = typeof device.state.feedAmount === 'number'
+                  ? device.state.feedAmount
+                  : device.xiaomiPetControl?.feedAmount?.min;
+                if (amount != null) void updateDeviceState(device.id, 'feedAmount', amount);
+              }}
+            >
+              <Text style={styles.actionBtnText}>
+                🐾 Servir ração{typeof device.state.feedAmount === 'number' ? ` (${device.state.feedAmount}g)` : ''}
+              </Text>
+            </Pressable>
+          ) : null}
           {isOnline && (device.capabilities?.length ?? 0) > 0
             ? (device.capabilities ?? []).map((cap) => (
                 <CapabilityControl
