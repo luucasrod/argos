@@ -22,6 +22,7 @@
  */
 import * as Vosk from 'react-native-vosk';
 import type { EventSubscription } from 'react-native';
+import { perfStart } from '@/services/voice/perfLog';
 
 const MODEL_PATH = 'model-pt';
 const DIACRITICS_RE = /[̀-ͯ]/g;
@@ -267,6 +268,7 @@ function resetUtterance(): void {
 function submit(): void {
   const text = currentCommand();
   vlog('ENVIANDO comando: "' + text + '"');
+  perfStart('fim_da_fala (silencio detectado)');
   resetUtterance();
   onCommandText?.(text);
 }
