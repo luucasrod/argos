@@ -27,6 +27,24 @@ const MALE_BR_RE =
 const FEMALE_HINT_IN_NAME =
   /female|femin|mulher|maria|lucia|luciana|francisca|fernanda|vit[oó]ria|amanda|gabriela|camila|leticia|raquel|m[oô]nica|siri.*female/i;
 
+/*
+ * Vozes pt-BR do Google TTS no Android. Os identificadores sao codigos opacos
+ * (`pt-br-x-afs-network`) e NAO trazem o genero no nome — por isso os regexes
+ * por nome ("felipe", "tiago") nunca casavam e pickVoiceForPersonality devolvia
+ * null, deixando o app usar a voz padrao (feminina) com pitch 0.72 forcado.
+ * Era isso que soava robotico.
+ *
+ * Confirmado no aparelho do usuario (log [argos-voz], 31/08): existem 7 vozes
+ * pt-BR instaladas — afs, pte e ptd, cada uma em -local e -network.
+ *
+ * `afs` e a voz feminina padrao do sistema. As demais sao as alternativas.
+ * As variantes `-network` sao sintetizadas na nuvem do Google e soam bem
+ * melhor que as `-local`.
+ */
+const GOOGLE_PTBR_FEMALE = /pt-br-x-afs/i;
+const GOOGLE_PTBR_ALT = /pt-br-x-(pte|ptd)/i;
+const NETWORK_VOICE = /-network/i;
+
 function voiceLang(voice: VoiceLike): string {
   return (voice.lang ?? voice.language ?? '').toLowerCase().replace('_', '-');
 }
@@ -41,11 +59,14 @@ function sameVoice(a: VoiceLike | null, b: VoiceLike | null): boolean {
 }
 
 export function isClearlyFemaleVoice(voice: VoiceLike): boolean {
+  if (GOOGLE_PTBR_FEMALE.test(voiceKey(voice))) return true;
   return FEMALE_HINT_IN_NAME.test(voiceKey(voice));
 }
 
 export function isMaleBrazilianVoice(voice: VoiceLike): boolean {
   if (isClearlyFemaleVoice(voice)) return false;
+  // Codigo opaco do Google conta como alternativa a voz feminina padrao.
+  if (GOOGLE_PTBR_ALT.test(voiceKey(voice))) return true;
   return MALE_BR_RE.test(voiceKey(voice));
 }
 
@@ -113,6 +134,9 @@ function maleBrazilScore(voice: VoiceLike): number {
   if (voiceLang(voice) === 'pt-br') score += 55;
   if (/brasil|brazil|pt-br|portugu[eê]s do brasil/i.test(key)) score += 35;
   if (MALE_BR_RE.test(key)) score += 60;
+  if (GOOGLE_PTBR_ALT.test(key)) score += 50;
+  // -network e sintetizada na nuvem do Google: bem menos robotica que -local.
+  if (NETWORK_VOICE.test(key)) score += 25;
   if (isClearlyFemaleVoice(voice)) score -= 100;
   return score;
 }
