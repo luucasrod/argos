@@ -10,7 +10,6 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { DraggableDeviceList } from '@/components/devices/DraggableDeviceList';
 import { Colors } from '@/constants/colors';
 import { Device, DeviceCategory } from '@/types/device.types';
-import { getSpeakableDeviceAlias } from '@/services/voice/deviceVoiceAliases';
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
   lights: '💡 Luzes',
@@ -82,7 +81,6 @@ function DeviceCard({
   const swingOn = Boolean(device.state.swing);
   const angleValue = device.state.angle;
   const modeValue = device.state.mode;
-  const voiceAlias = getSpeakableDeviceAlias(device.name);
 
   const commitRename = () => {
     const trimmed = editValue.trim();
@@ -121,7 +119,6 @@ function DeviceCard({
               </View>
             )}
             <Text style={styles.room}>{device.room} · {device.brand}</Text>
-            {voiceAlias && <Text style={styles.room}>Por voz: {voiceAlias}</Text>}
           </View>
         </View>
 

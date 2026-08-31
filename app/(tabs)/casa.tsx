@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useDeviceStore } from '@/stores/useDeviceStore';
+import { getSpeakableDeviceAlias } from '@/services/voice/deviceVoiceAliases';
 import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useArgos } from '@/hooks/useArgos';
 import { useHaptic } from '@/hooks/useHaptic';
@@ -140,6 +141,10 @@ function DeviceCard({
   const [showMoveRoom, setShowMoveRoom] = useState(false);
 
   const isOnline = device.status === 'online';
+  // Apelido falável: só existe quando o nome tem palavra fora do vocabulário
+  // do modelo (tv, 4k, speaker...). Mostrado aqui, na tela que o usuário vê —
+  // devices.tsx tem href:null no _layout e não aparece para ninguém.
+  const voiceAlias = getSpeakableDeviceAlias(device.name);
 
   const handleRename = () => {
     if (nameInput.trim() && nameInput !== device.name) renameDevice(device.id, nameInput.trim());
@@ -169,6 +174,7 @@ function DeviceCard({
             <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.status.success : Colors.status.offline }]} />
             <Text style={styles.deviceStatus}>{isOnline ? 'Online' : 'Offline'}</Text>
             {showRoom && device.room ? <Text style={styles.deviceRoom}>· {device.room}</Text> : null}
+            {voiceAlias ? <Text style={styles.deviceRoom}>· diga "{voiceAlias}"</Text> : null}
           </View>
         </View>
         <View style={styles.deviceRight}>
