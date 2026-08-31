@@ -1,3 +1,4 @@
+import { speakToggle, speakToggleMany, speakBrightness } from '@/services/ai/fastIntentSpeech';
 import { Device } from '@/types/device.types';
 import { ParsedIntent } from './intentParser';
 
@@ -98,8 +99,8 @@ function matchBrightnessCommand(text: string, devices: Device[]): ParsedIntent |
 
   const speech =
     targets.length === 1
-      ? `Ajustando brilho de ${targets[0].name} para ${label}.`
-      : `Ajustando brilho de ${targets.length} lampadas para ${label}.`;
+      ? speakBrightness(targets[0].name, label)
+      : speakBrightness(`${targets.length} lâmpadas`, label);
 
   return { type: 'device_control', speech, text: speech, actions };
 }
@@ -167,8 +168,14 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
     label: `${verb} ${d.name}`,
   }));
 
+  // A personalidade (tom Jarvis, "senhor", humor) vive no systemPrompt e NUNCA
+  // chega aqui: este caminho existe justamente para não chamar o modelo. Por
+  // isso a frase precisa trazer o tom por conta própria — sem isso o Argos fica
+  // seco exatamente nos comandos que o usuário mais usa.
   const speech =
-    actions.length > 1 ? `${verb} ${actions.length} dispositivos.` : `${actions[0].label}.`;
+    actions.length > 1
+      ? speakToggleMany(actions.length, verb)
+      : speakToggle(targets[0].name, action !== 'setOff');
 
   return {
     type: 'device_control',
