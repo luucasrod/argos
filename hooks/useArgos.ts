@@ -645,7 +645,8 @@ export function useArgos() {
           memories,
           automations,
           useDeviceStore.getState().devices,
-          settings.userProfile
+          settings.userProfile,
+          trimmed
         );
 
         const { messages } = useAIStore.getState();

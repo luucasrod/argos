@@ -34,6 +34,7 @@ import { wizListDevices, wizControl, buildWizParams, type WizDevice } from './_l
 import { getValidAccessToken as getValidEwelinkToken, ewelinkRequest } from './_lib/ewelink';
 import { xiaomiListFans, xiaomiSetProperty, type XiaomiSession, type XiaomiDeviceDto } from './_lib/xiaomi';
 import { getProjectCredentials, tuyaListDevices, tuyaControl, hexToTuyaHsv, tempNameToTuya, type TuyaCredentials } from './_lib/tuya';
+import { selectMemoryContext } from '../services/ai/memorySelection';
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://qzoknfwfvdqcnbsirwlf.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6b2tuZndmdmRxY25ic2lyd2xmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NTYwOTUsImV4cCI6MjA5NjQzMjA5NX0.hanMyLtz-1kBLUoaqz9v9bzQ6Tr0PkXU6FYqQrsyXEY';
@@ -827,7 +828,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const [memoriesRes, profileRes, devicesResult] = await Promise.all([
     supabaseAdmin
       .from('memories')
-      .select('content, category')
+      .select('content, category, title, confidence, source, tags, status, created_at, last_confirmed')
       .eq('user_id', userId)
       .eq('is_active', true)
       .order('created_at', { ascending: false })
@@ -880,9 +881,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ── Claude com histórico de sessão ───────────────────────────────────────
-  const memoriesBlock = memories.length > 0
-    ? memories.map((m) => `- ${(m as { content: string }).content}`).join('\n')
-    : 'Nenhuma memória registrada.';
+  const memoryContext = selectMemoryContext(
+    memories.map((memory) => ({
+      content: String(memory.content ?? ''),
+      category: memory.category,
+      title: memory.title,
+      confidence: memory.confidence,
+      source: memory.source,
+      tags: memory.tags,
+      status: memory.status,
+      createdAt: memory.created_at ? new Date(memory.created_at) : undefined,
+      lastConfirmed: memory.last_confirmed ? new Date(memory.last_confirmed) : undefined,
+      isActive: true,
+    })),
+    trimmedMessage
+  );
+  if (memoryContext.beforeChars !== memoryContext.afterChars) {
+    console.log(
+      `[ha-memory] prompt: ${memoryContext.activeCount}/${memoryContext.beforeChars} chars -> ` +
+      `${memoryContext.selectedCount}/${memoryContext.afterChars} chars`
+    );
+  }
+  const memoriesBlock = memoryContext.text || 'Nenhuma memória relevante registrada.';
 
   const history = getSessionHistory(session_id);
   const hasHistory = history.length > 0;
