@@ -45,24 +45,37 @@ jobs:
 
             const isSolo = issueLabels.has('rodar-solo');
             const branch = pr.head.ref;
+            // `hotfix/` e a valvula de escape: correcao de revisao e emergencia, que
+            // por natureza atravessam zona. Nao dispensa PR nem revisao — so nao
+            // e barrada por prefixo.
             const agent = branch.startsWith('claude/')
               ? 'claude'
               : branch.startsWith('codex/')
                 ? 'codex'
-                : null;
+                : branch.startsWith('hotfix/')
+                  ? 'hotfix'
+                  : null;
 
             const inPath = (file, roots) => roots.some(root =>
               root.endsWith('/') ? file.startsWith(root) : file === root
             );
             const claudeRoots = ['app/', 'components/', 'hooks/', 'services/voice/'];
             const codexRoots = ['api/', 'services/devices/', 'services/ai/', 'stores/'];
-            const soloRoots = ['contracts/', 'docs/', '.github/'];
+            // `docs/` NAO entra aqui: o WORK_PROTOCOL secao 3.6 manda o builder
+            // "atualizar docs necessarias" ao fechar a tarefa, e o CONTEXT.md existe
+            // para receber decisao nova a cada entrega. Tratar docs/ como SOLO fazia
+            // as duas regras brigarem: o agente atualizava o CONTEXT como mandado, o
+            // check falhava, e pela regra "bloqueou, PULA" ele abandonava trabalho
+            // pronto. So o proprio protocolo fica protegido.
+            const soloRoots = ['contracts/', '.github/', 'docs/ai/WORK_PROTOCOL.md'];
 
             const violations = [];
             for (const file of changed) {
               if (isSolo) continue;
               if (inPath(file, soloRoots)) {
                 violations.push(`${file}: shared surface requires an issue labeled rodar-solo`);
+              } else if (agent === 'hotfix') {
+                continue;
               } else if (agent === 'claude' && inPath(file, codexRoots)) {
                 violations.push(`${file}: reserved for CODEX`);
               } else if (agent === 'codex' && inPath(file, claudeRoots)) {

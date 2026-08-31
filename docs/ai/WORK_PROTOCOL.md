@@ -215,7 +215,7 @@ O backlog grande divide o sistema em superfícies. **Cada agente só edita a sua
 |---|---|---|
 | **CLAUDE** (Agente A do plano) | Argos F: app, áudio, wake word, UX, personalização no cliente, diagnóstico mobile | `app/`, `components/`, `hooks/`, `services/voice/` |
 | **CODEX** (Agente B do plano) | Argos Home, Argos Cloud, device layer, integrações, rotinas, memória, telemetria | `api/`, `services/devices/`, `services/ai/`, `stores/` |
-| **RODAR SOLO** | contratos compartilhados, schemas, segurança, release gates, testes ponta a ponta | `contracts/`, `docs/`, workflows |
+| **RODAR SOLO** | contratos compartilhados, schemas, segurança, release gates, testes ponta a ponta | `contracts/`, `.github/`, `docs/ai/WORK_PROTOCOL.md` |
 
 **Issue marcada `rodar-solo` roda sozinha**: enquanto ela estiver
 `status:in-progress`, o outro agente não começa tarefa nova que toque nas
@@ -227,10 +227,16 @@ mesmas áreas. Ela define contrato — mudar contrato no meio quebra os dois lad
 - Todo PR referencia a issue reivindicada no corpo (`#<número>`).
 - `.github/CODEOWNERS` exige revisão do mantenedor; o check **Ownership Zones**
   compara os arquivos alterados com o prefixo da branch e com o label da issue.
-- `contracts/`, `docs/` e `.github/` só passam nesse check quando uma das issues
+- `contracts/`, `.github/` e o próprio `docs/ai/WORK_PROTOCOL.md` só passam nesse
+  check quando uma das issues
   referenciadas tem o label `rodar-solo`.
 - A separação é lógica dentro do app Expo atual. Criar ou mover código para
   `/argos-f`, `/argos-home` ou `/argos-cloud` exige decisão e issue próprias.
+
+**`docs/` é livre para os dois.** A seção 3.6 manda atualizar a documentação ao
+fechar a tarefa, e o `docs/ai/CONTEXT.md` existe para receber decisão nova a cada
+entrega. Só o `WORK_PROTOCOL.md` (este arquivo) é protegido, porque mudar a regra
+no meio do jogo afeta os dois agentes.
 
 Se uma tarefa exigir editar fora da sua zona: **não edite**. Pule pela regra
 acima e registre no relatório qual arquivo você precisaria ter tocado. Quem
