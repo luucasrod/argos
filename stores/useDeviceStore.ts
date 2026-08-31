@@ -34,6 +34,12 @@ import {
   type DiscoveredDevice,
   type RegisteredDevice,
 } from '@/services/devices/deviceRegistry';
+import {
+  createRoom,
+  createZone,
+  type Room,
+  type Zone,
+} from '@/services/devices/roomRegistry';
 
 export interface WizLocalSavedDevice {
   ip: string;
@@ -43,6 +49,9 @@ export interface WizLocalSavedDevice {
 
 interface DeviceStore {
   devices: RegisteredDevice[];
+  rooms: Room[];
+  zones: Zone[];
+  currentRoomId: string | null;
   ewelinkConnected: boolean;
   tuyaConnected: boolean;
   alexaConnected: boolean;
@@ -59,6 +68,10 @@ interface DeviceStore {
   setDeviceOrder: (orderedIds: string[]) => void;
   renameDevice: (id: string, name: string) => void;
   updateDevice: (id: string, partial: Partial<Device>) => void;
+  upsertRoom: (room: Room) => void;
+  upsertZone: (zone: Zone) => void;
+  assignDeviceToRoom: (deviceId: string, roomId: string | null) => void;
+  setCurrentRoomId: (roomId: string | null) => void;
   toggleDevice: (id: string, waitForTransport?: boolean) => Promise<void>;
   updateDeviceState: (id: string, stateKey: string, value: unknown, waitForTransport?: boolean) => Promise<void>;
   syncEwelinkDevices: () => Promise<void>;
@@ -209,6 +222,9 @@ export const useDeviceStore = create<DeviceStore>()(
   persist(
     (set, get) => ({
   devices: MOCK_DEVICES.map(registerDevice),
+  rooms: [],
+  zones: [],
+  currentRoomId: null,
   customNames: {},
   customOrder: {},
   ewelinkConnected: false,
@@ -254,6 +270,49 @@ export const useDeviceStore = create<DeviceStore>()(
   updateDevice: (id, partial) =>
     set((state) => ({
       devices: state.devices.map((d) => (d.id === id ? { ...d, ...partial } : d)),
+    })),
+
+  upsertRoom: (room) =>
+    set((state) => {
+      const next = createRoom(room);
+      const index = state.rooms.findIndex((existing) => existing.id === next.id);
+      return {
+        rooms: index < 0
+          ? [...state.rooms, next]
+          : state.rooms.map((existing) => existing.id === next.id ? next : existing),
+      };
+    }),
+
+  upsertZone: (zone) =>
+    set((state) => {
+      const next = createZone(zone, state.rooms);
+      const index = state.zones.findIndex((existing) => existing.id === next.id);
+      return {
+        zones: index < 0
+          ? [...state.zones, next]
+          : state.zones.map((existing) => existing.id === next.id ? next : existing),
+      };
+    }),
+
+  assignDeviceToRoom: (deviceId, roomId) =>
+    set((state) => {
+      if (roomId !== null && !state.rooms.some((room) => room.id === roomId)) {
+        throw new Error(`Room desconhecido: ${roomId}`);
+      }
+      return {
+        // `room` continua sendo o nome humano legado usado pela gramática de
+        // voz. O vínculo canônico vive ao lado, em `roomId`.
+        devices: state.devices.map((device) =>
+          device.id === deviceId ? { ...device, roomId } : device
+        ),
+      };
+    }),
+
+  setCurrentRoomId: (roomId) =>
+    set((state) => ({
+      currentRoomId: roomId !== null && state.rooms.some((room) => room.id === roomId)
+        ? roomId
+        : null,
     })),
 
   toggleDevice: async (id, waitForTransport = false) => {
@@ -1154,6 +1213,9 @@ export const useDeviceStore = create<DeviceStore>()(
       },
       partialize: (state) => ({
         devices: state.devices,
+        rooms: state.rooms,
+        zones: state.zones,
+        currentRoomId: state.currentRoomId,
         ewelinkConnected: state.ewelinkConnected,
         tuyaConnected: state.tuyaConnected,
         alexaConnected: state.alexaConnected,
