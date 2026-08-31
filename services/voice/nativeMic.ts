@@ -1,5 +1,5 @@
 /**
- * nativeMic.ts — primitiva de captura de microfone no nativo (expo-av).
+ * nativeMic.ts — primitiva de captura de microfone no nativo (expo-audio).
  *
  * Abre uma "janela" de gravação com metering ligado e a fecha sozinha quando
  * detecta que a pessoa parou de falar (silêncio sustentado), quando estoura a
@@ -7,38 +7,41 @@
  * gastar transcrição).
  *
  * É a mesma ideia do customCapture.web.ts (MediaRecorder + AnalyserNode), só
- * que usando o metering do expo-av como VAD — ver nativeVad.ts para o porquê
+ * que usando o metering do expo-audio como VAD — ver nativeVad.ts para o porquê
  * dos limites.
  *
- * O expo-av só permite UM Recording preparado por vez, então há um lock de
+ * O expo-audio só permite UM AudioRecorder preparado por vez, então há um lock de
  * módulo: qualquer nova janela força a liberação da anterior antes de abrir.
  */
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import {
+  AudioModule,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  type AudioRecorder,
+  type RecordingOptions,
+} from 'expo-audio';
 import { createVad } from './nativeVad';
 
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
+const RECORDING_OPTIONS: RecordingOptions = {
+  extension: '.m4a',
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 64000,
+  isMeteringEnabled: true,
   android: {
     extension: '.m4a',
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 64000,
+    outputFormat: 'mpeg4',
+    audioEncoder: 'aac',
   },
   ios: {
     extension: '.m4a',
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 64000,
+    outputFormat: 'aac ',
+    audioQuality: 96,
     linearPCMBitDepth: 16,
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
   },
   web: {},
-  isMeteringEnabled: true,
-  keepAudioActiveHint: true,
 };
 
 const STATUS_INTERVAL_MS = 100;
@@ -82,33 +85,19 @@ export interface MicWindow {
   cancel: () => void;
 }
 
-/** Recording atualmente preparado — o expo-av aceita só um por vez. */
-let current: Audio.Recording | null = null;
+/** AudioRecorder atualmente preparado — o expo-audio aceita só um por vez. */
+let current: AudioRecorder | null = null;
 
-/**
- * Desfaz o estado interno do expo-av quando stopAndUnloadAsync falha.
- *
- * Recording.stopAndUnloadAsync chama `unloadAudioRecorder()` SEM guarda, e o
- * nativo rejeita com E_AUDIO_NORECORDER quando o recorder já é null (acontece
- * quando a Activity é destruída enquanto o serviço em background segura uma
- * gravação). Se rejeitar, `_cleanupForUnloadedRecorder()` nunca roda e a flag
- * global `_recorderExists` fica presa em true — daí toda gravação futura falha
- * com "Only one Recording object can be prepared at a time" até reiniciar o app.
- * Só engolir a exceção não basta: é preciso forçar a limpeza.
- */
-async function forceRecorderCleanup(rec: Audio.Recording): Promise<void> {
-  const anyRec = rec as unknown as {
-    _canRecord?: boolean;
-    _isDoneRecording?: boolean;
-    _cleanupForUnloadedRecorder?: (status?: unknown) => Promise<void> | void;
-  };
+/** Tenta liberar um recorder mesmo se o nativo já encerrou a sessão. */
+async function forceRecorderCleanup(rec: AudioRecorder): Promise<void> {
   try {
-    anyRec._canRecord = false;
-    anyRec._isDoneRecording = true;
-    await anyRec._cleanupForUnloadedRecorder?.({ canRecord: false, isRecording: false });
+    await rec.stop();
   } catch {
     // Nada mais a fazer — melhor seguir do que travar o microfone pra sempre.
   }
+  try {
+    rec.release();
+  } catch {}
 }
 
 /** Libera o microfone se houver uma gravação pendente de qualquer origem. */
@@ -117,19 +106,19 @@ export async function releaseMic(): Promise<void> {
   current = null;
   if (!rec) return;
   try {
-    rec.setOnRecordingStatusUpdate(null);
-  } catch {}
-  try {
-    await rec.stopAndUnloadAsync();
+    await rec.stop();
   } catch {
     await forceRecorderCleanup(rec);
   }
+  try {
+    rec.release();
+  } catch {}
 }
 
 /** Permissão de microfone. Deve ser chamada com o app em primeiro plano. */
 export async function ensureMicPermission(): Promise<boolean> {
   try {
-    const { status } = await Audio.requestPermissionsAsync();
+    const { status } = await requestRecordingPermissionsAsync();
     return status === 'granted';
   } catch {
     return false;
@@ -142,14 +131,12 @@ export async function ensureMicPermission(): Promise<boolean> {
  */
 export async function configureAudioMode(background: boolean): Promise<void> {
   try {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: background,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: background,
+      shouldRouteThroughEarpiece: false,
+      interruptionMode: 'duckOthers',
     });
   } catch {
     // Modo de áudio é best-effort — a gravação ainda pode funcionar.
@@ -164,17 +151,10 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
   // Garante mic livre antes de preparar outra gravação.
   await releaseMic();
 
-  const recording = new Audio.Recording();
-
-  // setProgressUpdateInterval dispara um getStatusAsync() solto. Chamando ANTES
-  // de preparar, ele cai com _canRecord === false e sai por curto-circuito sem
-  // tocar no nativo — senão consumiria o pico de metering da primeira amostra.
-  try {
-    recording.setProgressUpdateInterval(STATUS_INTERVAL_MS);
-  } catch {}
+  const recording = new AudioModule.AudioRecorder(RECORDING_OPTIONS);
 
   try {
-    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
+    await recording.prepareToRecordAsync();
   } catch {
     await forceRecorderCleanup(recording);
     return null;
@@ -182,12 +162,12 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
 
   const vad = createVad();
   let finished = false;
-  let cancelled = false;
   let hadSpeech = false;
   let lastSpeechAt = 0;
   let startedAt = Date.now();
   /** Início real da janela — base para MIN_RECORDING_MS e idleRecycleMs. */
   let openedAt = Date.now();
+  let statusTimer: ReturnType<typeof setInterval> | null = null;
 
   let resolveDone: (r: MicWindowResult) => void;
   const done = new Promise<MicWindowResult>((res) => {
@@ -197,16 +177,13 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
   const finish = async (didCancel: boolean) => {
     if (finished) return;
     finished = true;
-    cancelled = didCancel;
-
-    try {
-      recording.setOnRecordingStatusUpdate(null);
-    } catch {}
+    if (statusTimer) clearInterval(statusTimer);
+    statusTimer = null;
 
     let uri: string | null = null;
     try {
-      await recording.stopAndUnloadAsync();
-      uri = recording.getURI() ?? null;
+      await recording.stop();
+      uri = recording.uri;
     } catch {
       // E_AUDIO_NODATA (gravação curta demais, sem áudio válido) cai aqui: o
       // arquivo é um MPEG-4 truncado sem moov atom, que o Whisper rejeita.
@@ -214,6 +191,9 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
       uri = null;
       await forceRecorderCleanup(recording);
     }
+    try {
+      recording.release();
+    } catch {}
     if (current === recording) current = null;
 
     resolveDone({
@@ -225,10 +205,11 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
 
   // O metering é peak-since-last-read: getMaxAmplitude() zera o pico a cada
   // leitura, e QUALQUER chamada de status o consome. Por isso o valor só é lido
-  // aqui, no callback, e nunca via getStatusAsync() manual.
+  // aqui, no timer, e nunca por outra leitura de status concorrente.
   let speechPolls = 0;
 
-  recording.setOnRecordingStatusUpdate((status) => {
+  const checkStatus = () => {
+    const status = recording.getStatus();
     if (finished || !status.isRecording) return;
 
     const speaking = vad.push(status.metering);
@@ -264,22 +245,19 @@ export async function openMicWindow(opts: MicWindowOptions = {}): Promise<MicWin
     if (elapsed >= idleRecycleMs) {
       void finish(true);
     }
-  });
+  };
 
   try {
-    await recording.startAsync();
+    recording.record();
   } catch {
-    try {
-      await recording.stopAndUnloadAsync();
-    } catch {
-      await forceRecorderCleanup(recording);
-    }
+    await forceRecorderCleanup(recording);
     return null;
   }
 
   current = recording;
   openedAt = Date.now();
   startedAt = openedAt;
+  statusTimer = setInterval(checkStatus, STATUS_INTERVAL_MS);
 
   return {
     done,

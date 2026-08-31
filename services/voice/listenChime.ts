@@ -9,13 +9,13 @@
  * CHIME_MS. Se o bipe toca com a gravação já aberta, o próprio VAD o escuta e
  * conta como fala, disparando a janela sozinho.
  */
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 
 /** Duração aproximada do bipe — espere isso antes de abrir o mic. */
 export const CHIME_MS = 260;
 
-let sound: Audio.Sound | null = null;
+let sound: AudioPlayer | null = null;
 let loading: Promise<void> | null = null;
 
 async function ensureLoaded(): Promise<void> {
@@ -23,10 +23,8 @@ async function ensureLoaded(): Promise<void> {
   if (loading) return loading;
   loading = (async () => {
     try {
-      const { sound: s } = await Audio.Sound.createAsync(
-        require('../../assets/chime.wav'),
-        { volume: 0.85 }
-      );
+      const s = createAudioPlayer(require('../../assets/chime.wav'));
+      s.volume = 0.85;
       sound = s;
     } catch {
       sound = null;
@@ -58,8 +56,8 @@ export async function playListenChimeAndWait(): Promise<void> {
   }
 
   try {
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    await sound.seekTo(0);
+    sound.play();
   } catch {
     // Áudio ocupado pela gravação — a vibração já serviu de confirmação.
   }

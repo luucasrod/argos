@@ -2,7 +2,7 @@
  * useVoice.ts — versão NATIVE (Android/iOS).
  *
  * Espelha o comportamento do useVoice.web.ts (que já funciona bem no PWA), mas
- * usando o metering do expo-av como VAD em vez do AnalyserNode da Web Audio:
+ * usando o metering do expo-audio como VAD em vez do AnalyserNode da Web Audio:
  *   - escuta ATIVA que se encerra sozinha quando a pessoa para de falar;
  *   - wake word contínua num foreground service, com portão de volume local
  *     para só transcrever quando há fala de verdade.
@@ -159,7 +159,7 @@ export function useVoice(options?: UseVoiceOptions) {
         return;
       }
 
-      // Sem escuta contínua: grava com o expo-av e transcreve via Whisper.
+      // Sem escuta contínua: grava com o expo-audio e transcreve via Whisper.
       suspendBackgroundWakeWord();
       await releaseMic();
       if (!opts?.skipChime) {

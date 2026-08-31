@@ -1,7 +1,7 @@
 /**
- * nativeVad.ts — detecção de fala (VAD) por volume, para o metering do expo-av.
+ * nativeVad.ts — detecção de fala (VAD) por volume, para o metering do expo-audio.
  *
- * Por que não dá pra usar um limite fixo: no Android o expo-av converte a
+ * Por que não dá pra usar um limite fixo: no Android o expo-audio converte a
  * amplitude com `20 * Math.log(amplitude / 32767)` (AVManager.java) — e
  * `Math.log` é logaritmo NATURAL, não log10. O valor reportado sai cerca de
  * 2,3x mais negativo que dBFS de verdade. Na prática, no Android:

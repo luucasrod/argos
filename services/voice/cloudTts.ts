@@ -11,7 +11,7 @@
  * estourar ou se a rede falhar, devolve false e quem chamou usa a voz do
  * sistema. O usuário no máximo ouve a voz antiga — nunca silêncio.
  */
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { getAccessToken } from '@/services/auth/session';
 import { API_BASE } from '@/constants/api';
 
@@ -21,7 +21,7 @@ const TIMEOUT_MS = 8000;
 let unavailableUntil = 0;
 const COOLDOWN_MS = 5 * 60 * 1000;
 
-let current: Audio.Sound | null = null;
+let current: AudioPlayer | null = null;
 
 /** Interrompe a fala em andamento. */
 export async function stopCloudSpeech(): Promise<void> {
@@ -29,10 +29,10 @@ export async function stopCloudSpeech(): Promise<void> {
   current = null;
   if (!s) return;
   try {
-    await s.stopAsync();
+    s.pause();
   } catch {}
   try {
-    await s.unloadAsync();
+    s.release();
   } catch {}
 }
 
@@ -90,34 +90,38 @@ export async function speakWithCloud(
 
   try {
     await stopCloudSpeech();
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'duckOthers',
+      shouldRouteThroughEarpiece: false,
     });
 
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: 'data:audio/mp3;base64,' + base64 },
-      { shouldPlay: true, volume: 1 }
-    );
-    current = sound;
+    const player = createAudioPlayer({ uri: 'data:audio/mp3;base64,' + base64 });
+    player.volume = 1;
+    current = player;
+    player.play();
 
     // Só resolve quando o áudio termina, para quem chamou saber quando o Argos
     // parou de falar (é o que libera o microfone de volta para a wake word).
     await new Promise<void>((resolve) => {
       let done = false;
+      let statusTimer: ReturnType<typeof setInterval> | null = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
       const finish = () => {
         if (done) return;
         done = true;
+        if (statusTimer) clearInterval(statusTimer);
+        if (timeout) clearTimeout(timeout);
         resolve();
       };
-      sound.setOnPlaybackStatusUpdate((st) => {
-        if (!st.isLoaded || st.didJustFinish) finish();
-      });
+      statusTimer = setInterval(() => {
+        const st = player.currentStatus;
+        if (st.didJustFinish) finish();
+      }, 100);
       // Rede de segurança: nenhuma reprodução deve prender o fluxo.
-      setTimeout(finish, 60000);
+      timeout = setTimeout(finish, 60000);
     });
 
     await stopCloudSpeech();
