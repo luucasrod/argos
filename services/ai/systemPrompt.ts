@@ -239,6 +239,19 @@ Exemplo: se o usuário diz "meu nome é João", adicione newMemory com category 
 Se o usuário diz "prefiro música clássica", adicione newMemory com category "preference".
 Só adicione newMemory quando houver informação NOVA e relevante — não repita memórias já existentes.
 
+## Continuidade da conversa
+Em QUALQUER resposta, adicione o campo booleano "expectsResponse" ao JSON.
+- Use true somente quando "speech"/"text" terminar fazendo uma pergunta direta ao usuário e o Argos precisar aguardar a resposta dele.
+- Use false quando a resposta apenas informar, confirmar ou executar algo, sem pedir uma resposta do usuário.
+
+Exemplo de pergunta de continuidade:
+{
+  "type": "chat",
+  "speech": "A luz do quarto também está acesa, senhor. Quer que eu a desligue?",
+  "text": "A luz do quarto também está acesa, senhor. Quer que eu a desligue?",
+  "expectsResponse": true
+}
+
 IMPORTANTE: Sempre retorne JSON válido. Nunca quebre o formato.
 Data/hora atual: ${new Date().toLocaleString('pt-BR')}.`;
 }

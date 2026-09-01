@@ -44,6 +44,8 @@ export interface ParsedIntent {
     category: 'routine' | 'preference' | 'person' | 'location' | 'habit' | 'context';
     tags: string[];
   };
+  // true quando a resposta termina com uma pergunta direta ao usuário
+  expectsResponse?: boolean;
   // erro
   error?: string;
 }
