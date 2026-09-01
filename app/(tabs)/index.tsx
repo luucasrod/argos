@@ -329,24 +329,35 @@ export default function HomeScreen() {
               style={inputCardStyle}
               borderColor={isInputFocused ? Colors.glass.borderAccent : Colors.glass.border}
             >
-              <TextInput
-                style={styles.input}
-                placeholder="Digite uma mensagem ou comando..."
-                placeholderTextColor={Colors.text.muted}
-                value={textInput}
-                onChangeText={setTextInput}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                onSubmitEditing={handleSend}
-                returnKeyType="send"
-                multiline={false}
-              />
-              <Pressable
-                onPress={handleSend}
-                style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
-              >
-                <Text style={styles.sendIcon}>↑</Text>
-              </Pressable>
+              {/*
+               * GlassCard aplica o `style` recebido (inputCardStyle, com
+               * flexDirection:'row') no View EXTERNO, mas quem envolve os
+               * children é o View INTERNO (styles.content), que não herda
+               * esse flexDirection e cai no padrão 'column' do RN — daí o
+               * botão de enviar empilhar embaixo do campo em vez de ao lado.
+               * conversar.tsx não tem esse bug porque já envolve os filhos
+               * manualmente num View row; replicando o mesmo padrão aqui.
+               */}
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Digite uma mensagem ou comando..."
+                  placeholderTextColor={Colors.text.muted}
+                  value={textInput}
+                  onChangeText={setTextInput}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  onSubmitEditing={handleSend}
+                  returnKeyType="send"
+                  multiline={false}
+                />
+                <Pressable
+                  onPress={handleSend}
+                  style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
+                >
+                  <Text style={styles.sendIcon}>↑</Text>
+                </Pressable>
+              </View>
             </GlassCard>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -544,6 +555,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {
     width: 36,
