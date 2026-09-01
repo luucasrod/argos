@@ -74,6 +74,35 @@ const COMMAND_PHRASES = [
   // específica é preciso digitar (ou trocar o reconhecimento para texto livre).
   'toca', 'coloca', 'põe', 'música', 'uma música', 'toca música',
   'coloca uma música', 'toca uma música', 'pausa', 'continua', 'próxima',
+  /*
+   * Perguntas abertas comuns (A-042/A-043). Antes desta lista, qualquer fala
+   * fora do domínio de comando de casa (clima, piada, hora) era forçada para
+   * a palavra mais próxima da gramática fechada — caso real de log: o
+   * usuário perguntou sobre o clima e saiu "por que". A IA já processa texto
+   * livre (services/ai/) uma vez que ouve certo; o problema era só OUVIR.
+   * Toda palavra abaixo foi conferida contra o vocabulário do modelo pt
+   * (assets/model-pt/Gr.fst) antes de entrar aqui — nenhuma gera
+   * "Ignoring word missing in vocabulary".
+   */
+  // Clima
+  'como está o tempo', 'vai chover', 'clima hoje', 'previsão do tempo',
+  'qual é a previsão', 'vai fazer sol', 'está frio', 'está calor', 'temperatura hoje',
+  // Piada
+  'conta uma piada', 'me conta uma piada', 'conta piada', 'me faz rir', 'sabe alguma piada',
+  // Hora e data
+  'que horas são', 'que dia é hoje', 'qual a data de hoje', 'qual o dia de hoje',
+  // Lembrete. Sem estas frases na gramática, "cria um lembrete" nunca era
+  // ouvido certo — mesma regra geral de vocabulário do bloco de cor acima.
+  'cria um lembrete', 'me lembra de', 'define um lembrete', 'adiciona um lembrete',
+  // Pergunta geral
+  'o que você acha', 'me explica', 'como funciona', 'o que é isso',
+  'pode me ajudar', 'me ajuda',
+  // Saudação e despedida
+  'bom dia', 'boa tarde', 'boa noite', 'tchau', 'até logo',
+  'obrigado', 'obrigada', 'valeu',
+  // Iniciadores livres de pergunta, soltos — dão à fala comum mais lugares
+  // para cair, iguais em espírito às iscas de DECOYS.
+  'por que', 'quando', 'onde', 'quem', 'de que forma',
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */
