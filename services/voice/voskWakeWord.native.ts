@@ -23,6 +23,7 @@
 import * as Vosk from 'react-native-vosk';
 import type { EventSubscription } from 'react-native';
 import { perfStart } from '@/services/voice/perfLog';
+import { recordSuspiciousAttempt } from '@/services/voice/suspiciousVoiceAttempts';
 
 const MODEL_PATH = 'model-pt';
 const DIACRITICS_RE = /[̀-ͯ]/g;
@@ -245,6 +246,28 @@ let committed = '';
 let partial = '';
 let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCommand = '';
+/** Quando a captura do comando começou (armed virou true), para medir duração. */
+let armedAt = 0;
+
+/*
+ * A-044: heurísticas para registrar tentativas de voz provavelmente mal
+ * entendidas, sem UI e sem áudio (ver suspiciousVoiceAttempts.ts). Não é
+ * detecção de erro real — é sinal aproximado para curar a gramática (A-043)
+ * com uso de verdade depois.
+ */
+// Falou por isto ou mais e o texto final ainda ficou curto: sinal de que a
+// gramática fechada descartou boa parte do que foi dito.
+const SUSPICIOUS_MIN_SPEECH_MS = 2500;
+// "curto" aqui é o comprimento do texto final, não contagem de palavras —
+// mais simples e já cobre o caso real (comando genuíno raramente cabe nisso
+// se levou SUSPICIOUS_MIN_SPEECH_MS inteiros para ser dito).
+const SUSPICIOUS_MAX_CHARS = 6;
+// Nova wake word + comando chegando rápido depois do anterior: sinal comum
+// de "ele não me entendeu, vou tentar de novo".
+const REFORMULATION_WINDOW_MS = 15000;
+
+let lastSubmitAt = 0;
+let lastSubmitText = '';
 
 function currentCommand(): string {
   return (committed + ' ' + partial).replace(/\s+/g, ' ').trim();
@@ -267,8 +290,24 @@ function resetUtterance(): void {
 
 function submit(): void {
   const text = currentCommand();
+  const now = Date.now();
+  const speechMs = armedAt ? now - armedAt : 0;
   vlog('ENVIANDO comando: "' + text + '"');
   perfStart('fim_da_fala (silencio detectado)');
+
+  if (speechMs >= SUSPICIOUS_MIN_SPEECH_MS && text.length <= SUSPICIOUS_MAX_CHARS) {
+    void recordSuspiciousAttempt({ text, speechMs, reason: 'curta_para_duracao' });
+  } else if (
+    text &&
+    lastSubmitAt &&
+    now - lastSubmitAt <= REFORMULATION_WINDOW_MS &&
+    text !== lastSubmitText
+  ) {
+    void recordSuspiciousAttempt({ text, speechMs, reason: 'reformulacao_rapida' });
+  }
+  lastSubmitAt = now;
+  lastSubmitText = text;
+
   resetUtterance();
   onCommandText?.(text);
 }
@@ -312,6 +351,7 @@ function handle(raw: string, isFinal: boolean): void {
     if (end < 0) return;
 
     armed = true;
+    armedAt = Date.now();
     committed = '';
     partial = heard.slice(end).trim();
     // Bipe imediato: a pessoa precisa saber que foi ouvida antes de continuar.
@@ -455,6 +495,7 @@ export function armVoskUtterance(): boolean {
   if (!listening || suspended) return false;
   resetUtterance();
   armed = true;
+  armedAt = Date.now();
   armSilence(AWAIT_COMMAND_MS);
   return true;
 }
