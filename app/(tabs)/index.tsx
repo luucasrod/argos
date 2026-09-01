@@ -271,13 +271,6 @@ export default function HomeScreen() {
                     </Text>
                   </Pressable>
                 ) : null}
-                {Platform.OS !== 'web' && isWakeListening && !isListening ? (
-                  <Pressable onPress={() => { light(); setShowBgSetup(true); }}>
-                    <Text style={styles.bgSetupLink}>
-                      Parou de ouvir ao sair do app? Toque aqui
-                    </Text>
-                  </Pressable>
-                ) : null}
                 {voiceError ? (
                   <Text style={styles.voiceError}>🎙 {voiceError}</Text>
                 ) : null}
@@ -496,13 +489,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   wakeHintOn: { color: '#86efac', fontSize: 12 },
-  bgSetupLink: {
-    marginTop: 8,
-    color: '#A78BFA',
-    fontSize: 11,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
   voiceError: {
     marginTop: 10,
     color: '#fca5a5',
