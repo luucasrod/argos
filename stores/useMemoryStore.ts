@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Memory, Insight } from '@/types/memory.types';
 import { supabase } from '@/services/auth/supabase';
 import { normalizeInsight } from '@/services/insights/handleInsightPress';
+import { buildMemorySuggestions } from '@/services/ai/memorySuggestions';
+import type { MemorySuggestion } from '@/services/ai/memorySuggestions';
 
 interface MemoryStore {
   memories: Memory[];
@@ -20,6 +22,7 @@ interface MemoryStore {
   clearDismissedInsights: () => void;
   getActiveInsights: () => Insight[];
   getMemoriesByCategory: (category: Memory['category']) => Memory[];
+  getSuggestions: () => MemorySuggestion[];
 }
 
 /**
@@ -227,6 +230,7 @@ export const useMemoryStore = create<MemoryStore>()(
           .map(normalizeInsight),
       getMemoriesByCategory: (category) =>
         get().memories.filter((m) => m.category === category && m.isActive),
+      getSuggestions: () => buildMemorySuggestions(get().memories),
     }),
     {
       name: 'argos-memory',
