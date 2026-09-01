@@ -5,6 +5,7 @@ import { AIPersonality } from '@/types/ai.types';
 import { UserProfile } from '@/types/settings.types';
 import { getSupportedAppNames } from '@/services/browser/appLinks';
 import { selectMemoryContext } from '@/services/ai/memorySelection';
+import { useGoalsStore } from '@/stores/useGoalsStore';
 
 export function buildSystemPrompt(
   personality: AIPersonality,
@@ -15,6 +16,7 @@ export function buildSystemPrompt(
   currentMessage = ''
 ): string {
   const memoryContext = selectMemoryContext(memories, currentMessage);
+  const activeGoals = useGoalsStore.getState().getActiveGoals();
   if (__DEV__ && memoryContext.beforeChars !== memoryContext.afterChars) {
     console.log(
       `[argos-memory] prompt: ${memoryContext.activeCount} memórias/${memoryContext.beforeChars} chars → ` +
@@ -111,6 +113,13 @@ ${activeAutomations.map((a) => `- "${a.name}": ${a.description}`).join('\n')}
 
 ## Memórias e contexto pessoal
 ${memoryContext.text || '- Nenhuma memória relevante registrada.'}
+
+## Objetivos ativos do usuário (${activeGoals.length})
+${activeGoals.length > 0
+  ? activeGoals.map((goal) => `- ${goal.title}${goal.description ? `: ${goal.description}` : ''}`).join('\n')
+  : '- Nenhum objetivo ativo cadastrado.'}
+
+Considere esses objetivos quando forem relevantes para o pedido atual, mas não os mencione de forma forçada nem em toda resposta.
 
 ## Formato de resposta para AÇÕES
 Quando o usuário pedir para fazer algo com dispositivos ou criar automações, SEMPRE responda em JSON estruturado assim:
@@ -238,6 +247,19 @@ Em QUALQUER resposta, se o usuário revelar informações relevantes sobre si me
 Exemplo: se o usuário diz "meu nome é João", adicione newMemory com category "person" e title "Nome do usuário".
 Se o usuário diz "prefiro música clássica", adicione newMemory com category "preference".
 Só adicione newMemory quando houver informação NOVA e relevante — não repita memórias já existentes.
+
+## Continuidade da conversa
+Em QUALQUER resposta, adicione o campo booleano "expectsResponse" ao JSON.
+- Use true somente quando "speech"/"text" terminar fazendo uma pergunta direta ao usuário e o Argos precisar aguardar a resposta dele.
+- Use false quando a resposta apenas informar, confirmar ou executar algo, sem pedir uma resposta do usuário.
+
+Exemplo de pergunta de continuidade:
+{
+  "type": "chat",
+  "speech": "A luz do quarto também está acesa, senhor. Quer que eu a desligue?",
+  "text": "A luz do quarto também está acesa, senhor. Quer que eu a desligue?",
+  "expectsResponse": true
+}
 
 IMPORTANTE: Sempre retorne JSON válido. Nunca quebre o formato.
 Data/hora atual: ${new Date().toLocaleString('pt-BR')}.`;
