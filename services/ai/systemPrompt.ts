@@ -5,6 +5,7 @@ import { AIPersonality } from '@/types/ai.types';
 import { UserProfile } from '@/types/settings.types';
 import { getSupportedAppNames } from '@/services/browser/appLinks';
 import { selectMemoryContext } from '@/services/ai/memorySelection';
+import { useGoalsStore } from '@/stores/useGoalsStore';
 
 export function buildSystemPrompt(
   personality: AIPersonality,
@@ -15,6 +16,7 @@ export function buildSystemPrompt(
   currentMessage = ''
 ): string {
   const memoryContext = selectMemoryContext(memories, currentMessage);
+  const activeGoals = useGoalsStore.getState().getActiveGoals();
   if (__DEV__ && memoryContext.beforeChars !== memoryContext.afterChars) {
     console.log(
       `[argos-memory] prompt: ${memoryContext.activeCount} memórias/${memoryContext.beforeChars} chars → ` +
@@ -111,6 +113,13 @@ ${activeAutomations.map((a) => `- "${a.name}": ${a.description}`).join('\n')}
 
 ## Memórias e contexto pessoal
 ${memoryContext.text || '- Nenhuma memória relevante registrada.'}
+
+## Objetivos ativos do usuário (${activeGoals.length})
+${activeGoals.length > 0
+  ? activeGoals.map((goal) => `- ${goal.title}${goal.description ? `: ${goal.description}` : ''}`).join('\n')
+  : '- Nenhum objetivo ativo cadastrado.'}
+
+Considere esses objetivos quando forem relevantes para o pedido atual, mas não os mencione de forma forçada nem em toda resposta.
 
 ## Formato de resposta para AÇÕES
 Quando o usuário pedir para fazer algo com dispositivos ou criar automações, SEMPRE responda em JSON estruturado assim:
