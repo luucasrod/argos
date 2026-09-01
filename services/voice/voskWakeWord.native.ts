@@ -177,6 +177,39 @@ function findWakeEnd(heard: string, patterns: RegExp[]): number {
   return -1;
 }
 
+/**
+ * Padrão do ramo JÁ ARMADO: reconhece só o RESÍDUO da wake word no início do
+ * texto, para quando o Vosk revisa a transcrição entre a parcial e a final.
+ *
+ * Log real (01/09): parcial "ei argos" arma a captura (wake=true); a passada
+ * FINAL revisa o mesmo trecho para "e argos". No ramo já armado, findWakeEnd
+ * (que só reconhece os prefixos de WAKE_PREFIX_WORDS: ei/ola/ok/oi) não bate
+ * em "e", então o texto inteiro "e argos" virava o comando enviado, perdendo
+ * o resto da fala ("ENVIANDO comando: \"e argos\"").
+ *
+ * Diferente de buildWakePatterns (ramo NÃO-armado, onde precisão alta evita
+ * acordar sozinho), aqui a wake word JÁ foi confirmada — dá para usar
+ * FIRST_ALT (generoso de propósito, ver comentário na constante) sem reabrir
+ * a porta do falso positivo de ACORDAR: essa regra não decide se acorda, só
+ * descarta lixo que sobrou da wake word depois de já ter acordado.
+ */
+function buildResiduePattern(wakeWord: string): RegExp {
+  const full = normalize(wakeWord);
+  const parts = full.split(/\s+/).filter(Boolean);
+  const name = parts.length > 1 ? parts[parts.length - 1] : full;
+  const nameAlt = name === 'argos' ? NAME_ALT : '(?:' + name + ')';
+  return new RegExp('^\\s*' + FIRST_ALT + '\\s+' + nameAlt + '(?![a-z])', 'i');
+}
+
+/**
+ * Índice onde termina um resíduo de wake word no início de `heard`, ou -1.
+ * Só deve ser consultado quando findWakeEnd já falhou (ramo já armado).
+ */
+function findResidueEnd(heard: string, pattern: RegExp): number {
+  const m = pattern.exec(heard);
+  return m ? m[0].length : -1;
+}
+
 function textOf(raw: string): string {
   try {
     const p = JSON.parse(raw) as { text?: string; partial?: string };
@@ -233,6 +266,7 @@ let listening = false;
 let suspended = false;
 let grammar: string[] = [];
 let patterns: RegExp[] = [];
+let residuePattern: RegExp = buildResiduePattern('Ei Argos');
 let subs: EventSubscription[] = [];
 
 let onWake: (() => void) | null = null;
@@ -330,7 +364,17 @@ function handle(raw: string, isFinal: boolean): void {
   // Já acordado: tudo que vier é comando. A wake word pode reaparecer numa nova
   // transcrição depois de um restart do Vosk — nesse caso corta ela de novo.
   const end = findWakeEnd(heard, patterns);
-  const piece = (end >= 0 ? heard.slice(end) : heard).trim();
+  let piece: string;
+  if (end >= 0) {
+    piece = heard.slice(end).trim();
+  } else {
+    // findWakeEnd exige os prefixos precisos do ramo não-armado (ei/ola/ok/oi)
+    // e falha quando o Vosk revisa a wake word para algo mais curto ("e argos").
+    // Antes de aceitar o texto inteiro como comando, checa se não é só esse
+    // resíduo — senão a wake word residual vira o comando enviado à IA.
+    const residueEnd = findResidueEnd(heard, residuePattern);
+    piece = (residueEnd >= 0 ? heard.slice(residueEnd) : heard).trim();
+  }
 
   if (isFinal) {
     if (piece) committed = (committed + ' ' + piece).trim();
@@ -404,6 +448,7 @@ export async function startVoskWakeWord(opts: {
   if (!(await ensureModel())) return false;
 
   patterns = buildWakePatterns(opts.wakeWord || 'Ei Argos');
+  residuePattern = buildResiduePattern(opts.wakeWord || 'Ei Argos');
   grammar = buildGrammar(opts.wakeWord || 'Ei Argos', opts.extraPhrases ?? []);
   vlog('gramatica com ' + grammar.length + ' entradas');
   onWake = opts.onWakeWordDetected;
