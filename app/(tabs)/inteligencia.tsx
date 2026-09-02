@@ -30,7 +30,16 @@ const TABS: { key: TabKey; label: string; emoji: string }[] = [
   { key: 'preferencias', label: 'Preferências', emoji: '⚙️' },
 ];
 
-function TabGrid({ activeTab, onTabChange }: { activeTab: TabKey; onTabChange: (k: TabKey) => void }) {
+function TabGrid({
+  activeTab,
+  onTabChange,
+  pendingMemoryCount,
+}: {
+  activeTab: TabKey;
+  onTabChange: (k: TabKey) => void;
+  /** A-053: memórias com status 'pending' — mostra um badge na aba Memória. */
+  pendingMemoryCount: number;
+}) {
   const rows = [TABS.slice(0, 3), TABS.slice(3, 6)];
   return (
     <View style={styles.tabGrid}>
@@ -38,12 +47,18 @@ function TabGrid({ activeTab, onTabChange }: { activeTab: TabKey; onTabChange: (
         <View key={ri} style={styles.tabRow}>
           {row.map((tab) => {
             const active = tab.key === activeTab;
+            const badgeCount = tab.key === 'memoria' ? pendingMemoryCount : 0;
             return (
               <Pressable
                 key={tab.key}
                 onPress={() => onTabChange(tab.key)}
                 style={[styles.tabCell, active && styles.tabCellActive]}
               >
+                {badgeCount > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+                  </View>
+                )}
                 <Text style={styles.tabEmoji}>{tab.emoji}</Text>
                 <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
                   {tab.label}
@@ -215,7 +230,11 @@ export default function InteligenciaScreen() {
           </Text>
         </View>
 
-        <TabGrid activeTab={activeTab} onTabChange={setActiveTab} />
+        <TabGrid
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          pendingMemoryCount={pendingMemories.length}
+        />
 
         <View style={styles.content}>{renderContent()}</View>
       </SafeAreaView>
@@ -284,6 +303,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.glass.light,
     borderWidth: 1,
     borderColor: 'transparent',
+    position: 'relative',
   },
   tabCellActive: {
     backgroundColor: Colors.accent.primary + '22',
@@ -292,6 +312,22 @@ const styles = StyleSheet.create({
   tabEmoji: { fontSize: 13 },
   tabLabel: { fontSize: 12, fontWeight: '500', color: Colors.text.muted },
   tabLabelActive: { color: Colors.accent.primary, fontWeight: '700' },
+  // A-053: badge de memórias pendentes na aba Memória — o subtítulo do
+  // header já avisa em texto, mas isto é visível sem precisar ler.
+  tabBadge: {
+    position: 'absolute',
+    top: -4,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.status.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    zIndex: 1,
+  },
+  tabBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
   content: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100, gap: 10 },
