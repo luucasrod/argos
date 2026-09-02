@@ -14,6 +14,31 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { isAuthRequired } from '@/services/auth/config';
 import { supabase, mapUser } from '@/services/auth/supabase';
+import { stopAllSpeech } from '@/services/voice/textToSpeech';
+
+/*
+ * Todo reload de OTA passa por aqui (issue #32). O reload derruba a
+ * ReactInstance, e o expo-av tem um bug de thread conhecido: se um
+ * Audio.Sound (voz em nuvem, cloudTts.ts) ainda estiver carregado nesse
+ * momento, AVManager.onHostDestroy() tenta liberar o ExoPlayer numa thread
+ * de pool, não a main — FATAL EXCEPTION, o app fecha sozinho (capturado em
+ * log real, ver a issue). O bundle novo carrega normalmente depois; quem
+ * morre é a instância antiga, no desligamento.
+ *
+ * stopAllSpeech() (#145) já para os dois motores (cloud e sistema) e
+ * descarrega o Audio.Sound de forma limpa, na thread certa, ANTES do
+ * teardown nativo começar — sem áudio carregado, não sobra nada pro
+ * AVManager tentar liberar errado. Silenciar erro de propósito: mesmo se
+ * isto falhar, o reload tem que continuar.
+ */
+async function reloadApp(): Promise<void> {
+  try {
+    await stopAllSpeech();
+  } catch {
+    // Não deixa uma falha aqui impedir o reload.
+  }
+  Updates.reloadAsync().catch(() => {});
+}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -49,7 +74,7 @@ class ErrorBoundary extends React.Component<
             {Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={[errorStyles.btn, errorStyles.btnGhost]}
-                onPress={() => { Updates.reloadAsync().catch(() => {}); }}
+                onPress={() => { void reloadApp(); }}
                 activeOpacity={0.8}
               >
                 <Text style={errorStyles.btnText}>Reiniciar</Text>
@@ -229,7 +254,7 @@ function UpdateGate({ children }: { children: React.ReactNode }) {
           ]);
           if (cancelled) return;
           if (fetched && fetched.isNew) {
-            await Updates.reloadAsync();
+            await reloadApp();
             return; // o processo reinicia aqui
           }
         }
@@ -303,13 +328,13 @@ function UpdateBanner() {
     if (Platform.OS !== 'web' && autoListen) return;
     appliedRef.current = true;
     const t = setTimeout(() => {
-      Updates.reloadAsync().catch(() => {});
+      void reloadApp();
     }, 1200);
     return () => clearTimeout(t);
   }, [isUpdatePending, autoListen]);
 
   const restart = useCallback(() => {
-    Updates.reloadAsync().catch(() => {});
+    void reloadApp();
   }, []);
 
   if (!isDownloading && !isUpdatePending) return null;
