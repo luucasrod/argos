@@ -157,10 +157,15 @@ Para CRIAR AUTOMAÇÃO:
     "name": "Nome da automação",
     "description": "Descrição",
     "emoji": "emoji",
-    "trigger": { "type": "time|voice|manual", "config": {}, "label": "Descrição do trigger" },
+    "trigger": { "type": "time|location|voice|manual", "config": {}, "label": "Descrição do trigger" },
     "actions": [{ "type": "device_control|send_message|open_app", "config": {}, "label": "Descrição da ação" }]
   }
 }
+
+Configuração obrigatória dos gatilhos:
+- Horário: type="time", config={ "time": "HH:mm" }. Opcionalmente use "weekdays" com números 0=domingo até 6=sábado, ou "date" no formato YYYY-MM-DD.
+- Localização: type="location", config={ "latitude": número, "longitude": número, "radiusMeters": número }. Só crie quando houver coordenadas reais; nunca invente coordenadas.
+- Voz: type="voice", config={ "phrase": "frase que dispara" }.
 
 Para CONVERSA NORMAL:
 {
