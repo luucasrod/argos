@@ -55,6 +55,26 @@ export function useVoice(options?: UseVoiceOptions) {
   const startingRef = useRef(false);
   const wakeWordRef = useRef(settings.wakeWord || 'Ei Argos');
   const silenceMs = options?.silenceMs ?? NATIVE_SILENCE_MS;
+  /*
+   * A-048: startWakeWordDetection/stopWakeWordDetection escrevem
+   * isWakeListening de forma otimista (resposta imediata ao toque), mas o
+   * polling abaixo também escreve, a cada 2s, a partir do estado real do
+   * motor. Start/stop são assíncronos (permissão de microfone, warmup/
+   * teardown nativo) — sem isto, um tick do polling podia cair NO MEIO de
+   * uma transição e sobrescrever a escrita otimista com um valor ainda
+   * desatualizado, produzindo o texto contraditório relatado ("não está
+   * ativa" ao lado de "ouvindo..."). Enquanto uma transição está em curso,
+   * o polling não escreve — só volta a fazer isso depois que a transição
+   * termina e a escrita otimista final (baseada no resultado real de
+   * start/stop) já aconteceu.
+   *
+   * Contador, não booleano: alternar rapidamente pode disparar um novo
+   * start/stop antes do anterior terminar (start ainda em voo quando o
+   * stop já foi pedido). Com um booleano, o `finally` do primeiro a
+   * terminar reabriria o polling cedo demais, no meio da transição do
+   * segundo. O polling só volta quando NENHUMA transição está em curso.
+   */
+  const transitionCountRef = useRef(0);
 
   onAutoSendRef.current = options?.onAutoSend;
   wakeWordRef.current = settings.wakeWord || 'Ei Argos';
@@ -64,63 +84,73 @@ export function useVoice(options?: UseVoiceOptions) {
 
   /** Sobe (ou religa) a escuta contínua da wake word em background. */
   const startWakeWordDetection = useCallback(async () => {
-    if (wakeWordEngine.isRunning()) {
-      wakeWordEngine.resume();
-      setIsWakeListening(true);
-      return;
-    }
+    transitionCountRef.current++;
+    try {
+      if (wakeWordEngine.isRunning()) {
+        wakeWordEngine.resume();
+        setIsWakeListening(true);
+        return;
+      }
 
-    // Nomes reais dos dispositivos e cômodos entram na gramática, senão o
-    // reconhecedor não tem como devolver "escritorio" ou "lampada da sala".
-    const devices = useDeviceStore.getState().devices;
-    const voiceAliases = devices
-      .map((device) => getSpeakableDeviceAlias(device.name))
-      .filter((alias): alias is string => Boolean(alias));
-    const extraPhrases = [
-      ...devices.map((d) => d.name),
-      ...voiceAliases,
-      ...devices.map((d) => d.room).filter(Boolean),
-    ] as string[];
+      // Nomes reais dos dispositivos e cômodos entram na gramática, senão o
+      // reconhecedor não tem como devolver "escritorio" ou "lampada da sala".
+      const devices = useDeviceStore.getState().devices;
+      const voiceAliases = devices
+        .map((device) => getSpeakableDeviceAlias(device.name))
+        .filter((alias): alias is string => Boolean(alias));
+      const extraPhrases = [
+        ...devices.map((d) => d.name),
+        ...voiceAliases,
+        ...devices.map((d) => d.room).filter(Boolean),
+      ] as string[];
 
-    const ok = await wakeWordEngine.start({
-      wakeWord: wakeWordRef.current,
-      extraPhrases,
-      onWakeDetected: () => {
-        // Só retorno visual. O comando vem na mesma fala, pelo onCommand abaixo —
-        // não há mais um segundo passo de "começar a escutar".
-        setWakeWordDetected(true);
-        setTimeout(() => setWakeWordDetected(false), 1500);
-        setTranscript('');
-        setIsListening(true);
-        setStatus('listening');
-      },
-      onPartial: (t) => setTranscript(t),
-      onCommand: (text) => {
-        setIsListening(false);
-        const clean = resolveDeviceVoiceAlias(text, devices);
-        if (!clean) {
-          // Wake word disparou mas não veio comando (silêncio total depois
-          // dela) — o turno de medição foi aberto em submit() e nunca vai
-          // ser fechado por speak(), então fecha aqui sem imprimir resumo.
-          perfAbort();
-          setStatus('idle');
-          return;
-        }
-        setTranscript(clean);
-        setStatus('thinking');
-        onAutoSendRef.current?.(clean);
-      },
-    });
+      const ok = await wakeWordEngine.start({
+        wakeWord: wakeWordRef.current,
+        extraPhrases,
+        onWakeDetected: () => {
+          // Só retorno visual. O comando vem na mesma fala, pelo onCommand abaixo —
+          // não há mais um segundo passo de "começar a escutar".
+          setWakeWordDetected(true);
+          setTimeout(() => setWakeWordDetected(false), 1500);
+          setTranscript('');
+          setIsListening(true);
+          setStatus('listening');
+        },
+        onPartial: (t) => setTranscript(t),
+        onCommand: (text) => {
+          setIsListening(false);
+          const clean = resolveDeviceVoiceAlias(text, devices);
+          if (!clean) {
+            // Wake word disparou mas não veio comando (silêncio total depois
+            // dela) — o turno de medição foi aberto em submit() e nunca vai
+            // ser fechado por speak(), então fecha aqui sem imprimir resumo.
+            perfAbort();
+            setStatus('idle');
+            return;
+          }
+          setTranscript(clean);
+          setStatus('thinking');
+          onAutoSendRef.current?.(clean);
+        },
+      });
 
-    setIsWakeListening(ok);
-    if (!ok) {
-      setError('Não consegui ativar a escuta contínua. Permita o microfone nas configurações.');
+      setIsWakeListening(ok);
+      if (!ok) {
+        setError('Não consegui ativar a escuta contínua. Permita o microfone nas configurações.');
+      }
+    } finally {
+      transitionCountRef.current--;
     }
   }, []);
 
   const stopWakeWordDetection = useCallback(async () => {
+    transitionCountRef.current++;
     setIsWakeListening(false);
-    await wakeWordEngine.stop();
+    try {
+      await wakeWordEngine.stop();
+    } finally {
+      transitionCountRef.current--;
+    }
   }, []);
 
   const startListening = useCallback(async (opts?: { skipChime?: boolean }) => {
@@ -307,6 +337,9 @@ export function useVoice(options?: UseVoiceOptions) {
   /* Mantém o rótulo de escuta contínua em sincronia com o serviço. */
   useEffect(() => {
     const id = setInterval(() => {
+      // Não sobrescreve no meio de um start/stop em andamento — ver comentário
+      // de transitionCountRef acima.
+      if (transitionCountRef.current > 0) return;
       setIsWakeListening(wakeWordEngine.isRunning());
     }, 2000);
     return () => clearInterval(id);
