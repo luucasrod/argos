@@ -175,12 +175,28 @@ export default function HomeScreen() {
               <Animated.View entering={enter.down(100)} style={styles.header}>
                 {/* O \u00A0 final NAO e enfeite: ver o comentario em styles.greeting. */}
                 <Text style={styles.greeting}>{'Argos\u00A0'}</Text>
-                <Pressable
-                  onPress={() => router.push('/(modals)/memory')}
-                  style={styles.memoryButton}
-                >
-                  <Text style={styles.memoryButtonText}>🧠</Text>
-                </Pressable>
+                <View style={styles.headerActions}>
+                  {/*
+                   * A-060: "Rotinas" vivia só na 4ª sub-aba de Agenda, e a
+                   * tela completa de Automações+Rotinas (app/(tabs)/
+                   * automations.tsx, que já tem as duas juntas em sub-abas)
+                   * não tinha NENHUM link em lugar nenhum do app — rota
+                   * inteiramente órfã. Atalho aqui, ao lado do botão de
+                   * memória, no lugar mais visível do app (topo da Home).
+                   */}
+                  <Pressable
+                    onPress={() => router.push('/(tabs)/automations')}
+                    style={styles.memoryButton}
+                  >
+                    <Text style={styles.memoryButtonText}>🔄</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => router.push('/(modals)/memory')}
+                    style={styles.memoryButton}
+                  >
+                    <Text style={styles.memoryButtonText}>🧠</Text>
+                  </Pressable>
+                </View>
               </Animated.View>
             </View>
 
@@ -431,6 +447,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     flexShrink: 0,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   memoryButton: {
     width: 40,
     height: 40,
