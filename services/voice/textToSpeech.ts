@@ -137,6 +137,25 @@ export function stopSpeaking() {
   Speech.stop();
 }
 
+/**
+ * Botão de mudo (A-050): para a fala do Argos não importa qual motor está
+ * ativo agora — voz do sistema (`expo-speech`) ou voz em nuvem (`expo-av`,
+ * cloudTts.ts). Chama os dois; o que não estiver falando não faz nada.
+ *
+ * Isso já é suficiente para destravar quem estiver com `await textToSpeech()`
+ * pendente: `Speech.stop()` dispara `onStopped` (registrado em `options` acima)
+ * e `stopCloudSpeech()` dispara a atualização de status com `isLoaded:false`
+ * no listener registrado em `speakWithCloud` — os dois já resolvem a Promise
+ * pendente sozinhos. Quem chama este botão, ainda assim, força `status` para
+ * `idle` explicitamente por segurança (ver app/(tabs)/index.tsx e
+ * conversar.tsx) — os callbacks nativos do TTS já se mostraram não
+ * garantidos antes (ver o guard de `armGuard` acima).
+ */
+export async function stopAllSpeech(): Promise<void> {
+  const { stopCloudSpeech } = await import('@/services/voice/cloudTts');
+  await Promise.allSettled([stopCloudSpeech(), Promise.resolve(stopSpeaking())]);
+}
+
 export function isSpeaking(): Promise<boolean> {
   return Speech.isSpeakingAsync();
 }
