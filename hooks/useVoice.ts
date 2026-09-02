@@ -27,6 +27,7 @@ import { transcribeRecording } from '@/services/voice/transcribeNative';
 import { wakeWordEngine } from '@/services/voice/wakeWordEngine.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
 import { perfAbort } from '@/services/voice/perfLog';
+import { consumeAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
 import {
   getSpeakableDeviceAlias,
@@ -341,6 +342,18 @@ export function useVoice(options?: UseVoiceOptions) {
            */
           void configureAudioMode(true);
           wakeWordEngine.resume();
+          /*
+           * A-052: se a fala que acabou de terminar era uma pergunta do Argos
+           * (marcada por useArgos.ts via markAwaitingFollowUp), arma escuta
+           * ATIVA direto — sem exigir "ei argos" de novo — pela mesma janela
+           * curta já usada no toque no orb (AWAIT_COMMAND_MS, dentro de
+           * armVoskUtterance). Sem resposta nesse tempo, o próprio motor
+           * volta sozinho ao modo passivo (armed=false), sem ficar escutando
+           * indefinidamente — mesmo mecanismo, não um timer novo.
+           */
+          if (consumeAwaitingFollowUp()) {
+            wakeWordEngine.armUtterance();
+          }
         }
       }
     });
