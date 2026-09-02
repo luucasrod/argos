@@ -16,6 +16,7 @@ import { textToSpeech } from '@/services/voice/textToSpeech';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 import { resolveIntentSpeech } from '@/services/voice/speechText';
 import { perfMark } from '@/services/voice/perfLog';
+import { markAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
@@ -131,6 +132,20 @@ export function useArgos() {
   const processIntent = useCallback(
     async (intent: ParsedIntent) => {
       const assistantMessageId = `msg-${Date.now()}-assistant`;
+
+      /*
+       * A-052: quando o Argos faz uma pergunta de volta ("quer ligar a luz
+       * do quarto também?"), o app deve continuar ouvindo a resposta sem
+       * exigir a wake word de novo. B-031 já marca isso no próprio intent
+       * (expectsResponse) — só precisamos avisar useVoice.ts pra armar
+       * escuta ativa (em vez de passiva) na próxima transição pra idle,
+       * que é quando a fala desta resposta específica termina. Setado aqui,
+       * uma vez por intent, cobre todos os ramos abaixo sem duplicar por
+       * chamada de speak().
+       */
+      if (intent.expectsResponse) {
+        markAwaitingFollowUp();
+      }
 
       if (intent.type === 'device_control' && intent.actions && intent.actions.length > 0) {
         /*
