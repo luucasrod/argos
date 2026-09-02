@@ -174,7 +174,11 @@ export default function HomeScreen() {
               </Animated.View>
             </View>
 
-            <View style={styles.bottomStack}>
+            <ScrollView
+              style={styles.bottomStack}
+              contentContainerStyle={styles.bottomStackContent}
+              showsVerticalScrollIndicator={false}
+            >
               {showExecutionOverlay && executionSteps.length > 0 && (
                 <Animated.View entering={enter.slide} style={styles.executionContainer}>
                   <GlassCard style={styles.executionCard} borderColor={Colors.glass.borderAccent}>
@@ -321,7 +325,7 @@ export default function HomeScreen() {
                   ))}
                 </ScrollView>
               </Animated.View>
-            </View>
+            </ScrollView>
           </View>
 
           <Animated.View entering={enter.up(300)} style={styles.inputContainer}>
@@ -424,8 +428,22 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   suggestionText: { color: '#C4B5FD', fontSize: 13, fontWeight: '500' },
+  /*
+   * bottomStack virou ScrollView (A-045): antes era um View com flex:1 +
+   * justifyContent:'flex-end' dentro de `main` (overflow:'hidden'). Em tela
+   * menor, ou com insights + overlay de execução somados ao orb, o conteúdo
+   * ficava mais alto que o espaço disponível e a ponta de cima da pilha —
+   * incluindo os cartões de sugestão — era cortada em silêncio pelo
+   * overflow:hidden do ancestral. ScrollView nunca corta: quando cabe,
+   * `bottomStackContent` com flexGrow:1 + justifyContent:'flex-end' mantém o
+   * visual antigo (tudo ancorado embaixo); quando não cabe, rola em vez de
+   * cortar.
+   */
   bottomStack: {
     flex: 1,
+  },
+  bottomStackContent: {
+    flexGrow: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 24,
     paddingBottom: 4,
