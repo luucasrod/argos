@@ -200,11 +200,7 @@ export default function HomeScreen() {
               </Animated.View>
             </View>
 
-            <ScrollView
-              style={styles.bottomStack}
-              contentContainerStyle={styles.bottomStackContent}
-              showsVerticalScrollIndicator={false}
-            >
+            <View style={styles.bottomStack}>
               {showExecutionOverlay && executionSteps.length > 0 && (
                 <Animated.View entering={enter.slide} style={styles.executionContainer}>
                   <GlassCard style={styles.executionCard} borderColor={Colors.glass.borderAccent}>
@@ -317,45 +313,64 @@ export default function HomeScreen() {
                 ) : null}
               </Animated.View>
 
-              {activeInsights.length > 0 && (
-                <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
-                  <Text style={styles.sectionTitle}>Insights</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {activeInsights.map((insight) => (
-                      <Pressable
-                        key={insight.id}
-                        onPress={() => handleInsightPress(insight, handleSuggestion, dismissInsight)}
-                      >
-                        <GlassCard style={styles.insightCard}>
-                          <Text style={styles.insightText} numberOfLines={2}>
-                            {insight.message}
-                          </Text>
-                          {insight.suggestion ? (
-                            <Text style={styles.insightSuggestion} numberOfLines={1}>
-                              {insight.suggestion} →
+              {/*
+               * #175 (regressão do #164): o #164 tinha trocado o bottomStack
+               * inteiro por ScrollView para o problema original (cartões de
+               * sugestão cortados) — mas um ScrollView com flex:1 dentro
+               * dessa cadeia de containers cresce para o tamanho do
+               * CONTEÚDO em vez de respeitar o espaço flexível disponível,
+               * empurrando a caixa de input (sibling de `main`, fora daqui)
+               * pra fora da tela. bottomStack volta a ser View comum; só
+               * insights+sugestões — o conteúdo que pode mesmo crescer sem
+               * limite — entram num ScrollView com maxHeight FIXO (não
+               * flex:1), que não sofre desse problema: nunca cresce além do
+               * teto, e rola por dentro se não couber.
+               */}
+              <ScrollView
+                style={styles.overflowSection}
+                contentContainerStyle={styles.overflowSectionContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {activeInsights.length > 0 && (
+                  <Animated.View entering={enter.down(350)} style={styles.insightsSection}>
+                    <Text style={styles.sectionTitle}>Insights</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {activeInsights.map((insight) => (
+                        <Pressable
+                          key={insight.id}
+                          onPress={() => handleInsightPress(insight, handleSuggestion, dismissInsight)}
+                        >
+                          <GlassCard style={styles.insightCard}>
+                            <Text style={styles.insightText} numberOfLines={2}>
+                              {insight.message}
                             </Text>
-                          ) : null}
-                        </GlassCard>
+                            {insight.suggestion ? (
+                              <Text style={styles.insightSuggestion} numberOfLines={1}>
+                                {insight.suggestion} →
+                              </Text>
+                            ) : null}
+                          </GlassCard>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </Animated.View>
+                )}
+
+                <Animated.View entering={enter.down(150)} style={styles.suggestionsSection}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {HOME_SUGGESTIONS.map((suggestion) => (
+                      <Pressable
+                        key={suggestion.label}
+                        onPress={() => handleSuggestion(suggestion.message)}
+                        style={styles.suggestionPill}
+                      >
+                        <Text style={styles.suggestionText}>{suggestion.label}</Text>
                       </Pressable>
                     ))}
                   </ScrollView>
                 </Animated.View>
-              )}
-
-              <Animated.View entering={enter.down(150)} style={styles.suggestionsSection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {HOME_SUGGESTIONS.map((suggestion) => (
-                    <Pressable
-                      key={suggestion.label}
-                      onPress={() => handleSuggestion(suggestion.message)}
-                      style={styles.suggestionPill}
-                    >
-                      <Text style={styles.suggestionText}>{suggestion.label}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </Animated.View>
-            </ScrollView>
+              </ScrollView>
+            </View>
           </View>
 
           <Animated.View entering={enter.up(300)} style={styles.inputContainer}>
@@ -471,24 +486,32 @@ const styles = StyleSheet.create({
   },
   suggestionText: { color: '#C4B5FD', fontSize: 13, fontWeight: '500' },
   /*
-   * bottomStack virou ScrollView (A-045): antes era um View com flex:1 +
-   * justifyContent:'flex-end' dentro de `main` (overflow:'hidden'). Em tela
-   * menor, ou com insights + overlay de execução somados ao orb, o conteúdo
-   * ficava mais alto que o espaço disponível e a ponta de cima da pilha —
-   * incluindo os cartões de sugestão — era cortada em silêncio pelo
-   * overflow:hidden do ancestral. ScrollView nunca corta: quando cabe,
-   * `bottomStackContent` com flexGrow:1 + justifyContent:'flex-end' mantém o
-   * visual antigo (tudo ancorado embaixo); quando não cabe, rola em vez de
-   * cortar.
+   * #175: o #164 tinha trocado isto por ScrollView (flex:1 +
+   * contentContainerStyle) pra corrigir o corte dos cartões de sugestão em
+   * tela pequena — mas um ScrollView com flex:1 nesta cadeia de containers
+   * cresce para o tamanho do CONTEÚDO em vez de respeitar o espaço
+   * disponível, empurrando a caixa de input pra fora da tela (regressão
+   * confirmada em aparelho real). Voltou a ser View comum; ver
+   * `overflowSection` abaixo pra saber onde o scroll ficou.
    */
   bottomStack: {
     flex: 1,
-  },
-  bottomStackContent: {
-    flexGrow: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 24,
     paddingBottom: 4,
+    gap: 10,
+  },
+  /*
+   * Só insights + sugestões — o conteúdo de altura variável que motivou o
+   * #164 — ficam num ScrollView com maxHeight FIXO. Diferente de flex:1,
+   * maxHeight é um teto que o Yoga sempre respeita independente do resto da
+   * árvore de layout: nunca cresce além dele (então nunca empurra o input),
+   * e rola por dentro quando o conteúdo passa do teto (então nunca corta).
+   */
+  overflowSection: {
+    maxHeight: 190,
+  },
+  overflowSectionContent: {
     gap: 10,
   },
   orbContainer: {
