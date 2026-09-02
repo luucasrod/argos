@@ -174,7 +174,11 @@ export default function HomeScreen() {
               </Animated.View>
             </View>
 
-            <View style={styles.bottomStack}>
+            <ScrollView
+              style={styles.bottomStack}
+              contentContainerStyle={styles.bottomStackContent}
+              showsVerticalScrollIndicator={false}
+            >
               {showExecutionOverlay && executionSteps.length > 0 && (
                 <Animated.View entering={enter.slide} style={styles.executionContainer}>
                   <GlassCard style={styles.executionCard} borderColor={Colors.glass.borderAccent}>
@@ -314,7 +318,7 @@ export default function HomeScreen() {
                   ))}
                 </ScrollView>
               </Animated.View>
-            </View>
+            </ScrollView>
           </View>
 
           <Animated.View entering={enter.up(300)} style={styles.inputContainer}>
@@ -322,24 +326,35 @@ export default function HomeScreen() {
               style={inputCardStyle}
               borderColor={isInputFocused ? Colors.glass.borderAccent : Colors.glass.border}
             >
-              <TextInput
-                style={styles.input}
-                placeholder="Digite uma mensagem ou comando..."
-                placeholderTextColor={Colors.text.muted}
-                value={textInput}
-                onChangeText={setTextInput}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                onSubmitEditing={handleSend}
-                returnKeyType="send"
-                multiline={false}
-              />
-              <Pressable
-                onPress={handleSend}
-                style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
-              >
-                <Text style={styles.sendIcon}>↑</Text>
-              </Pressable>
+              {/*
+               * GlassCard aplica o `style` recebido (inputCardStyle, com
+               * flexDirection:'row') no View EXTERNO, mas quem envolve os
+               * children é o View INTERNO (styles.content), que não herda
+               * esse flexDirection e cai no padrão 'column' do RN — daí o
+               * botão de enviar empilhar embaixo do campo em vez de ao lado.
+               * conversar.tsx não tem esse bug porque já envolve os filhos
+               * manualmente num View row; replicando o mesmo padrão aqui.
+               */}
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Digite uma mensagem ou comando..."
+                  placeholderTextColor={Colors.text.muted}
+                  value={textInput}
+                  onChangeText={setTextInput}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  onSubmitEditing={handleSend}
+                  returnKeyType="send"
+                  multiline={false}
+                />
+                <Pressable
+                  onPress={handleSend}
+                  style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
+                >
+                  <Text style={styles.sendIcon}>↑</Text>
+                </Pressable>
+              </View>
             </GlassCard>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -417,8 +432,22 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   suggestionText: { color: '#C4B5FD', fontSize: 13, fontWeight: '500' },
+  /*
+   * bottomStack virou ScrollView (A-045): antes era um View com flex:1 +
+   * justifyContent:'flex-end' dentro de `main` (overflow:'hidden'). Em tela
+   * menor, ou com insights + overlay de execução somados ao orb, o conteúdo
+   * ficava mais alto que o espaço disponível e a ponta de cima da pilha —
+   * incluindo os cartões de sugestão — era cortada em silêncio pelo
+   * overflow:hidden do ancestral. ScrollView nunca corta: quando cabe,
+   * `bottomStackContent` com flexGrow:1 + justifyContent:'flex-end' mantém o
+   * visual antigo (tudo ancorado embaixo); quando não cabe, rola em vez de
+   * cortar.
+   */
   bottomStack: {
     flex: 1,
+  },
+  bottomStackContent: {
+    flexGrow: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 24,
     paddingBottom: 4,
@@ -530,6 +559,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {
     width: 36,
