@@ -18,6 +18,21 @@ export const CHIME_MS = 260;
 let sound: Audio.Sound | null = null;
 let loading: Promise<void> | null = null;
 
+/*
+ * Issue #16: usuário relata sentir só a vibração, nunca o bipe, com o app em
+ * background (o caso de uso real da wake word). Antes deste log, os dois
+ * catches abaixo engoliam qualquer erro em silêncio — impossível saber pelo
+ * logcat se o asset falhou ao carregar, se playAsync() lançou (foco de áudio
+ * negado, sessão ocupada pela gravação contínua do Vosk) ou se o problema é
+ * outro (device sem suporte a record+playback simultâneo, por exemplo — não
+ * dá pra distinguir isso de dentro do JS, playAsync() pode resolver "com
+ * sucesso" e mesmo assim não sair som nenhum do hardware).
+ * Ler com `adb logcat | grep argos-chime`.
+ */
+function clog(msg: string): void {
+  console.log('[argos-chime] ' + msg);
+}
+
 async function ensureLoaded(): Promise<void> {
   if (sound) return;
   if (loading) return loading;
@@ -28,8 +43,10 @@ async function ensureLoaded(): Promise<void> {
         { volume: 0.85 }
       );
       sound = s;
-    } catch {
+      clog('asset carregado com sucesso');
+    } catch (e) {
       sound = null;
+      clog('FALHA ao carregar assets/chime.wav: ' + String(e));
     }
   })();
   return loading;
@@ -52,6 +69,7 @@ export async function playListenChimeAndWait(): Promise<void> {
 
   await ensureLoaded();
   if (!sound) {
+    clog('sem asset carregado — tocando só a vibração');
     // Sem áudio disponível, ao menos respeita o tempo para a vibração ser sentida.
     await new Promise((r) => setTimeout(r, 120));
     return;
@@ -60,8 +78,10 @@ export async function playListenChimeAndWait(): Promise<void> {
   try {
     await sound.setPositionAsync(0);
     await sound.playAsync();
-  } catch {
+    clog('playAsync() resolveu sem erro (isso não garante que saiu som — ver #16)');
+  } catch (e) {
     // Áudio ocupado pela gravação — a vibração já serviu de confirmação.
+    clog('FALHA em playAsync(): ' + String(e));
   }
   await new Promise((r) => setTimeout(r, CHIME_MS));
 }
