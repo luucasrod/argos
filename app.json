@@ -17,6 +17,7 @@
       "expo-router",
       "@react-native-voice/voice",
       "./plugins/withForegroundService",
+      "./plugins/withWizUdpModule",
       [
         "react-native-vosk",
         {
