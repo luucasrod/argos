@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { Automation, Routine } from '@/types/automation.types';
 import { PRESET_AUTOMATIONS, PRESET_ROUTINES } from '@/constants/presets';
+import { runAutomation } from '@/services/automation/automationEngine';
+import { getForegroundLocation } from '@/services/automation/foregroundLocation';
+import { AutomationTriggerScheduler } from '@/services/automation/triggerScheduler';
 
 interface AutomationStore {
   automations: Automation[];
@@ -50,3 +54,34 @@ export const useAutomationStore = create<AutomationStore>()(
     }
   )
 );
+
+const scheduler = new AutomationTriggerScheduler({
+  getAutomations: () => useAutomationStore.getState().automations,
+  getLocation: getForegroundLocation,
+  runAutomation: async (automation) => {
+    const store = useAutomationStore.getState();
+    store.setRunningAutomation(automation.id);
+    try {
+      await runAutomation(automation);
+    } finally {
+      useAutomationStore.getState().setRunningAutomation(null);
+    }
+  },
+  onTriggered: (automation, triggeredAt) => {
+    useAutomationStore.getState().updateAutomation(automation.id, {
+      lastTriggered: triggeredAt,
+      runCount: automation.runCount + 1,
+    });
+  },
+});
+
+const schedulerKey = '__argosAutomationTriggerScheduler';
+const schedulerGlobal = globalThis as typeof globalThis & {
+  [schedulerKey]?: AutomationTriggerScheduler;
+};
+
+if (Platform.OS !== 'web' || typeof window !== 'undefined') {
+  schedulerGlobal[schedulerKey]?.stop();
+  schedulerGlobal[schedulerKey] = scheduler;
+  scheduler.start();
+}
