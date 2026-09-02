@@ -22,3 +22,14 @@ Run the dependency-free round-trip and incompatible-version check with Node 22+:
 ```sh
 node --experimental-strip-types contracts/protocol.selftest.mjs
 ```
+
+## Action permissions
+
+`actionPermissions.v1.ts` classifies capabilities by risk and evaluates local
+presence, explicit per-action confirmation, recent reauthentication and remote
+access. Personality is intentionally absent from this contract. Unknown
+capabilities default to high risk. Run:
+
+```sh
+node --experimental-strip-types contracts/actionPermissions.selftest.mjs
+```
