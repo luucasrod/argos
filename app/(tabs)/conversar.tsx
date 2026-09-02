@@ -31,6 +31,24 @@ export default function ConversarScreen() {
   });
   const { light, medium } = useHaptic();
   const listRef = useRef<FlatList>(null);
+  /*
+   * A-059: onContentSizeChange (abaixo) disparava scrollToEnd em QUALQUER
+   * mudança de tamanho de conteúdo — inclusive as remedições que o FlatList
+   * faz sozinho ao (des)montar linhas fora da tela durante o scroll manual,
+   * já que os itens (MessageBubble) têm altura variável e não há
+   * getItemLayout. Resultado: o usuário tentava rolar pra cima pra ler o
+   * histórico e o scroll era puxado de volta pro fim sozinho — "sobe e desce
+   * sozinha" relatado pelo usuário no aparelho real. Só uma mensagem NOVA de
+   * verdade (messages.length cresceu) deve forçar o scroll.
+   */
+  const prevMessageCountRef = useRef(messages.length);
+
+  const handleListContentSizeChange = useCallback(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      listRef.current?.scrollToEnd({ animated: true });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   const handleSend = useCallback(() => {
     if (!currentInput.trim() || status === 'thinking') return;
@@ -39,7 +57,9 @@ export default function ConversarScreen() {
     setLastInputMode('text');
     sendMessage(currentInput);
     setCurrentInput('');
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    // Sem setTimeout(scrollToEnd) redundante aqui: handleListContentSizeChange
+    // já cobre a mensagem nova assim que ela renderiza — duas fontes de scroll
+    // competindo era parte do "briga de scroll" relatado.
   }, [currentInput, status, medium, sendMessage, setCurrentInput, setLastInputMode]);
 
   const handleVoiceToggle = useCallback(() => {
@@ -127,7 +147,7 @@ export default function ConversarScreen() {
             keyExtractor={(m) => m.id}
             renderItem={({ item }) => <MessageBubble message={item} />}
             contentContainerStyle={styles.list}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={handleListContentSizeChange}
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>💬</Text>
