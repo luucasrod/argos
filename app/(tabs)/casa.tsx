@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,13 @@ import { SubTabBar, SubTab } from '@/components/ui/SubTabBar';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
 import { Device, DeviceCapability } from '@/types/device.types';
+import type { RegisteredDevice } from '@/services/devices/deviceRegistry';
+import { type Room, normalizeLocationName } from '@/services/devices/roomRegistry';
+
+/** Gera um id estável e legível a partir do nome do cômodo (ex.: "Escritório" -> "escritorio"). */
+function slugifyRoomName(name: string): string {
+  return normalizeLocationName(name).replace(/\s+/g, '-') || `comodo-${Date.now()}`;
+}
 
 const TABS: SubTab[] = [
   { key: 'dispositivos', label: 'Dispositivos', emoji: '💡' },
@@ -139,26 +146,50 @@ function DeviceCard({
   rooms,
   showRoom = false,
 }: {
-  device: Device;
-  rooms: string[];
+  device: RegisteredDevice;
+  rooms: Room[];
   showRoom?: boolean;
 }) {
-  const { toggleDevice, updateDeviceState, renameDevice, updateDevice } = useDeviceStore();
+  const { toggleDevice, updateDeviceState, renameDevice, updateDevice, assignDeviceToRoom } =
+    useDeviceStore();
   const { light } = useHaptic();
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameInput, setNameInput] = useState(device.name);
   const [showMoveRoom, setShowMoveRoom] = useState(false);
+  const [aliasInput, setAliasInput] = useState('');
 
   const isOnline = device.status === 'online';
   // Apelido falável: só existe quando o nome tem palavra fora do vocabulário
   // do modelo (tv, 4k, speaker...). Mostrado aqui, na tela que o usuário vê —
   // devices.tsx tem href:null no _layout e não aparece para ninguém.
   const voiceAlias = getSpeakableDeviceAlias(device.name);
+  const currentRoom = rooms.find((r) => r.id === device.roomId) ?? null;
+  const aliases = device.aliases ?? [];
 
   const handleRename = () => {
     if (nameInput.trim() && nameInput !== device.name) renameDevice(device.id, nameInput.trim());
     setRenaming(false);
+  };
+
+  /*
+   * A-012: "aliases editáveis" pedido na issue. updateDevice só é tipado para
+   * Partial<Device> (types/device.types.ts) — aliases vive em
+   * RegisteredDevice (services/devices/deviceRegistry.ts), camada do Codex.
+   * Runtime faz um merge raso (`{...d, ...partial}` em useDeviceStore.ts),
+   * então o campo é aplicado corretamente; o cast só contorna a checagem de
+   * propriedade excedente do TypeScript, sem mudar nenhum arquivo fora desta
+   * tela.
+   */
+  const handleAddAlias = () => {
+    const alias = aliasInput.trim();
+    if (!alias || aliases.includes(alias)) return;
+    updateDevice(device.id, { aliases: [...aliases, alias] } as Partial<Device>);
+    setAliasInput('');
+  };
+
+  const handleRemoveAlias = (alias: string) => {
+    updateDevice(device.id, { aliases: aliases.filter((a) => a !== alias) } as Partial<Device>);
   };
 
   return (
@@ -183,7 +214,7 @@ function DeviceCard({
           <View style={styles.deviceMeta}>
             <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.status.success : Colors.status.offline }]} />
             <Text style={styles.deviceStatus}>{isOnline ? 'Online' : 'Offline'}</Text>
-            {showRoom && device.room ? <Text style={styles.deviceRoom}>· {device.room}</Text> : null}
+            {showRoom && currentRoom ? <Text style={styles.deviceRoom}>· {currentRoom.name}</Text> : null}
             {voiceAlias ? <Text style={styles.deviceRoom}>· diga "{voiceAlias}"</Text> : null}
           </View>
         </View>
@@ -231,6 +262,39 @@ function DeviceCard({
               ? <Text style={styles.offlineMsg}>Dispositivo offline — sem controles disponíveis</Text>
               : null
           }
+          {/* A-012: aliases editáveis — nomes extras pelos quais o dispositivo
+              também pode ser chamado, além do nome principal. */}
+          <View style={styles.aliasSection}>
+            <Text style={styles.capLabel}>Apelidos</Text>
+            {aliases.length > 0 && (
+              <View style={styles.aliasChipRow}>
+                {aliases.map((alias) => (
+                  <Pressable
+                    key={alias}
+                    onPress={() => { light(); handleRemoveAlias(alias); }}
+                    style={styles.aliasChip}
+                  >
+                    <Text style={styles.aliasChipText}>{alias} ✕</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <View style={styles.aliasAddRow}>
+              <TextInput
+                style={styles.aliasInput}
+                value={aliasInput}
+                onChangeText={setAliasInput}
+                placeholder="Adicionar apelido..."
+                placeholderTextColor={Colors.text.muted}
+                onSubmitEditing={handleAddAlias}
+                returnKeyType="done"
+              />
+              <Pressable onPress={() => { light(); handleAddAlias(); }} style={styles.aliasAddBtn}>
+                <Text style={styles.aliasAddBtnText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
           <View style={styles.deviceActions}>
             <Pressable onPress={() => { light(); setRenaming(true); setNameInput(device.name); }} style={styles.actionBtn}>
               <Text style={styles.actionBtnText}>✏ Renomear</Text>
@@ -242,35 +306,40 @@ function DeviceCard({
         </View>
       )}
 
-      {/* Modal mover para cômodo */}
+      {/* Modal mover para cômodo — cômodos canônicos (useDeviceStore.rooms,
+          A-012/B-004/B-005), não mais uma lista local. Atualiza roomId
+          (vínculo canônico) e room (nome legado, usado pela gramática de voz
+          em useVoice.ts) juntos, pra não deixar os dois campos divergirem. */}
       <Modal visible={showMoveRoom} transparent animationType="fade" onRequestClose={() => setShowMoveRoom(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowMoveRoom(false)}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Mover para cômodo</Text>
             <Pressable
-              style={[styles.roomPillBtn, !device.room && styles.roomPillBtnActive]}
+              style={[styles.roomPillBtn, !device.roomId && styles.roomPillBtnActive]}
               onPress={() => {
                 light();
-                updateDevice(device.id, { room: undefined });
+                assignDeviceToRoom(device.id, null);
+                updateDevice(device.id, { room: '' });
                 setShowMoveRoom(false);
               }}
             >
-              <Text style={[styles.roomPillText, !device.room && styles.roomPillTextActive]}>
-                Sem cômodo {!device.room ? '✓' : ''}
+              <Text style={[styles.roomPillText, !device.roomId && styles.roomPillTextActive]}>
+                Sem cômodo {!device.roomId ? '✓' : ''}
               </Text>
             </Pressable>
             {rooms.map((r) => (
               <Pressable
-                key={r}
-                style={[styles.roomPillBtn, device.room === r && styles.roomPillBtnActive]}
+                key={r.id}
+                style={[styles.roomPillBtn, device.roomId === r.id && styles.roomPillBtnActive]}
                 onPress={() => {
                   light();
-                  updateDevice(device.id, { room: r });
+                  assignDeviceToRoom(device.id, r.id);
+                  updateDevice(device.id, { room: r.name });
                   setShowMoveRoom(false);
                 }}
               >
-                <Text style={[styles.roomPillText, device.room === r && styles.roomPillTextActive]}>
-                  {r} {device.room === r ? '✓' : ''}
+                <Text style={[styles.roomPillText, device.roomId === r.id && styles.roomPillTextActive]}>
+                  {r.name} {device.roomId === r.id ? '✓' : ''}
                 </Text>
               </Pressable>
             ))}
@@ -290,12 +359,12 @@ function RoomCard({
   room,
   devices,
   allRooms,
-  onDelete,
+  onUnassignAll,
 }: {
-  room: string;
-  devices: Device[];
-  allRooms: string[];
-  onDelete: () => void;
+  room: Room;
+  devices: RegisteredDevice[];
+  allRooms: Room[];
+  onUnassignAll: () => void;
 }) {
   const { light } = useHaptic();
   const [expanded, setExpanded] = useState(false);
@@ -305,7 +374,7 @@ function RoomCard({
     <GlassCard style={styles.roomCard}>
       <Pressable onPress={() => { light(); setExpanded((e) => !e); }} style={styles.roomHeader}>
         <View style={styles.roomInfo}>
-          <Text style={styles.roomName}>{room}</Text>
+          <Text style={styles.roomName}>{room.name}</Text>
           <Text style={styles.roomCount}>
             {devices.length} dispositivo{devices.length !== 1 ? 's' : ''}
             {onlineCount > 0 ? ` · ${onlineCount} online` : ''}
@@ -328,8 +397,17 @@ function RoomCard({
                 ))}
             </View>
           )}
-          <Pressable onPress={() => { light(); onDelete(); }} style={styles.deleteRoomBtn}>
-            <Text style={styles.deleteRoomText}>Remover cômodo</Text>
+          {/*
+           * useDeviceStore não expõe um "removeRoom" (só upsertRoom) — o
+           * cômodo em si não pode ser apagado do store canônico sem tocar
+           * stores/useDeviceStore.ts (zona do Codex). O disponível dentro
+           * desta issue é esvaziar o cômodo (devolve os dispositivos pra
+           * "sem cômodo"); o card some da lista quando fica vazio E o
+           * usuário não tem mais interesse nele — mas o registro do cômodo
+           * em si permanece no store. Ver PR pra sugestão de follow-up.
+           */}
+          <Pressable onPress={() => { light(); onUnassignAll(); }} style={styles.deleteRoomBtn}>
+            <Text style={styles.deleteRoomText}>Remover todos os dispositivos deste cômodo</Text>
           </Pressable>
         </View>
       )}
@@ -345,17 +423,42 @@ export default function CasaScreen() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newEventName, setNewEventName] = useState('');
-  const [rooms, setRooms] = useState<string[]>(['Sala', 'Quarto', 'Cozinha']);
   const [events, setEvents] = useState<{ name: string; time: string }[]>([]);
   const [autoInput, setAutoInput] = useState('');
   const [autoSending, setAutoSending] = useState(false);
 
-  const { devices, updateDevice } = useDeviceStore();
+  const { devices, updateDevice, rooms, upsertRoom, assignDeviceToRoom } = useDeviceStore();
   const { automations, toggleAutomation } = useAutomationStore();
   const { sendMessage } = useArgos();
   const { light, medium } = useHaptic();
 
   const onlineDevices = devices.filter((d) => d.status === 'online');
+
+  /*
+   * A-012: dispositivos existentes de antes desta issue têm `room` (nome
+   * legado, string livre) mas nunca tiveram `roomId` (vínculo canônico,
+   * B-004/B-005) — useDeviceStore não faz essa migração sozinho. Preenche
+   * uma vez por nome de cômodo distinto ainda não representado no registro
+   * canônico. Idempotente: só cria/atribui o que ainda não existe, então
+   * rodar de novo a cada montagem da tela não duplica nada.
+   */
+  useEffect(() => {
+    const legacyRoomNames = [...new Set(
+      devices.map((d) => d.room?.trim()).filter((name): name is string => Boolean(name))
+    )];
+    for (const name of legacyRoomNames) {
+      const normalized = normalizeLocationName(name);
+      let canonical = rooms.find((r) => normalizeLocationName(r.name) === normalized);
+      if (!canonical) {
+        canonical = { id: slugifyRoomName(name), name, aliases: [] };
+        upsertRoom(canonical);
+      }
+      const canonicalId = canonical.id;
+      devices
+        .filter((d) => d.room?.trim() === name && d.roomId !== canonicalId)
+        .forEach((d) => assignDeviceToRoom(d.id, canonicalId));
+    }
+  }, [devices.length]);
 
   const handleSendAuto = async () => {
     if (!autoInput.trim() || autoSending) return;
@@ -365,6 +468,17 @@ export default function CasaScreen() {
     setAutoSending(true);
     await sendMessage(`Quero criar uma automação: ${msg}. Analisa os dispositivos que tenho conectados e me diz se é possível criar essa automação, ou quais dispositivos eu precisaria para isso. Se for possível, cria a automação e mostra o que foi configurado.`);
     setAutoSending(false);
+  };
+
+  const handleAddRoom = () => {
+    const name = newRoomName.trim();
+    const alreadyExists = rooms.some((r) => normalizeLocationName(r.name) === normalizeLocationName(name));
+    if (name && !alreadyExists) {
+      medium();
+      upsertRoom({ id: slugifyRoomName(name), name, aliases: [] });
+    }
+    setShowAddRoom(false);
+    setNewRoomName('');
   };
 
   const renderContent = () => {
@@ -451,7 +565,7 @@ export default function CasaScreen() {
         );
 
       case 'comodos': {
-        const unassigned = devices.filter((d) => !d.room || !rooms.includes(d.room));
+        const unassigned = devices.filter((d) => !d.roomId);
         return (
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <Pressable onPress={() => { light(); setShowAddRoom(true); }} style={styles.addBtn}>
@@ -460,14 +574,18 @@ export default function CasaScreen() {
 
             {rooms.map((room) => (
               <RoomCard
-                key={room}
+                key={room.id}
                 room={room}
-                devices={devices.filter((d) => d.room === room)}
+                devices={devices.filter((d) => d.roomId === room.id)}
                 allRooms={rooms}
-                onDelete={() => {
+                onUnassignAll={() => {
                   medium();
-                  setRooms((r) => r.filter((x) => x !== room));
-                  devices.filter((d) => d.room === room).forEach((d) => updateDevice(d.id, { room: undefined }));
+                  devices
+                    .filter((d) => d.roomId === room.id)
+                    .forEach((d) => {
+                      assignDeviceToRoom(d.id, null);
+                      updateDevice(d.id, { room: '' });
+                    });
                 }}
               />
             ))}
@@ -535,24 +653,14 @@ export default function CasaScreen() {
               placeholder="Ex: Escritório"
               placeholderTextColor={Colors.text.muted}
               autoFocus
-              onSubmitEditing={() => {
-                if (newRoomName.trim() && !rooms.includes(newRoomName.trim())) {
-                  medium(); setRooms((r) => [...r, newRoomName.trim()]);
-                }
-                setShowAddRoom(false); setNewRoomName('');
-              }}
+              onSubmitEditing={handleAddRoom}
             />
             <View style={styles.modalBtns}>
               <Pressable onPress={() => { setShowAddRoom(false); setNewRoomName(''); }} style={styles.modalCancelBtn}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </Pressable>
               <Pressable
-                onPress={() => {
-                  if (newRoomName.trim() && !rooms.includes(newRoomName.trim())) {
-                    medium(); setRooms((r) => [...r, newRoomName.trim()]);
-                  }
-                  setShowAddRoom(false); setNewRoomName('');
-                }}
+                onPress={handleAddRoom}
                 style={styles.modalConfirmBtn}
               >
                 <Text style={styles.modalConfirmText}>Adicionar</Text>
@@ -651,6 +759,27 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.glass.light, borderWidth: 1, borderColor: Colors.glass.border,
   },
   actionBtnText: { color: Colors.text.muted, fontSize: 12, fontWeight: '500' },
+
+  // Aliases (A-012)
+  aliasSection: { gap: 8 },
+  aliasChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  aliasChip: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+    backgroundColor: Colors.glass.medium, borderWidth: 1, borderColor: Colors.glass.border,
+  },
+  aliasChipText: { color: Colors.text.secondary, fontSize: 12, fontWeight: '500' },
+  aliasAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  aliasInput: {
+    flex: 1, color: Colors.text.primary, fontSize: 13,
+    paddingVertical: 7, paddingHorizontal: 10,
+    backgroundColor: Colors.glass.light, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.glass.border,
+  },
+  aliasAddBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: Colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  aliasAddBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   // Capability controls
   capRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
