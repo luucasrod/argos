@@ -50,6 +50,65 @@ function extractPercentage(text: string): number | null {
   return null;
 }
 
+function supportsOnOff(device: Device): boolean {
+  return device.capabilities.some(
+    (capability) => capability.type === 'toggle' &&
+      ['isOn', 'onOff', 'power'].includes(capability.property)
+  );
+}
+
+function setOffIntent(targets: Device[], speech: string): ParsedIntent | null {
+  if (targets.length === 0) return null;
+
+  return {
+    type: 'device_control',
+    // Descreve uma acao em andamento; o executor registra o resultado real.
+    speech,
+    text: speech,
+    actions: targets.map((device) => ({
+      deviceId: device.id,
+      action: 'setOff',
+      property: 'isOn',
+      value: false,
+      label: `Desligando ${device.name}`,
+    })),
+  };
+}
+
+/** Comandos de casa inteira que nao dependem de IDs ficticios do prompt. */
+function matchHouseCommand(text: string, devices: Device[]): ParsedIntent | null {
+  const available = devices.filter((device) => device.status === 'online' && supportsOnOff(device));
+
+  if (/\bboa noite\b/.test(text)) {
+    const targets = available.filter(
+      (device) => device.category === 'lights' || device.category === 'tv'
+    );
+    return setOffIntent(targets, 'Iniciando o modo boa noite e desligando os aparelhos.');
+  }
+
+  const words = text.split(/\s+/);
+  const asksToTurnOff = OFF_WORDS.some((word) => words.includes(word));
+  const asksForLights = words.some((word) => ['luz', 'luzes', 'lampada', 'lampadas'].includes(word));
+  const isCompound = /\b(e|depois|tambem)\b/.test(text);
+  if (!asksToTurnOff || !asksForLights || isCompound) return null;
+
+  const lights = available.filter((device) => device.category === 'lights');
+  const mentionedRooms = [...new Set(
+    devices
+      .filter((device) => device.category === 'lights')
+      .map((device) => normalize(device.room))
+      .filter((room) => room && text.includes(room))
+  )];
+  const targets = mentionedRooms.length > 0
+    ? lights.filter((device) => mentionedRooms.includes(normalize(device.room)))
+    : lights;
+
+  return setOffIntent(
+    targets,
+    targets.length === 1 ? `Apagando ${targets[0].name}.` : `Apagando ${targets.length} luzes acessiveis.`
+  );
+}
+
 /**
  * Detecta comandos de brilho para lâmpadas inteligentes.
  * Ex: "aumenta o brilho", "brilho 50%", "brilho máximo"
@@ -118,6 +177,9 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
 
   // Pedido de cor: o atalho não sabe processar, deixa a IA cuidar da frase inteira.
   if (COLOR_WORDS.some((w) => words.includes(w))) return null;
+
+  const houseMatch = matchHouseCommand(text, devices);
+  if (houseMatch) return houseMatch;
 
   // Tenta brilho antes de on/off
   const brightnessMatch = matchBrightnessCommand(text, devices);
