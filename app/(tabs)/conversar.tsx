@@ -20,9 +20,11 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
+import { stopAllSpeech } from '@/services/voice/textToSpeech';
 
 export default function ConversarScreen() {
-  const { messages, clearMessages, currentInput, setCurrentInput, setLastInputMode } = useAIStore();
+  const { messages, clearMessages, currentInput, setCurrentInput, setLastInputMode, setStatus } =
+    useAIStore();
   const { sendMessage, status } = useArgos();
   const { isListening, transcript, error: voiceError, startListening, stopListening } = useVoice({
     onAutoSend: (text) => { setLastInputMode('voice'); sendMessage(text); },
@@ -49,6 +51,15 @@ export default function ConversarScreen() {
       startListening();
     }
   }, [isListening, light, stopListening, startListening]);
+
+  /** Botão de mudo (A-050): interrompe a fala em qualquer motor de TTS. */
+  const handleMuteSpeech = useCallback(() => {
+    light();
+    void stopAllSpeech();
+    // Não espera a Promise: força o status de volta agora, por segurança —
+    // ver comentário em stopAllSpeech() (services/voice/textToSpeech.ts).
+    setStatus('idle');
+  }, [light, setStatus]);
 
   const statusLabel =
     status === 'idle'
@@ -92,6 +103,15 @@ export default function ConversarScreen() {
               <Text style={styles.listeningText}>
                 {transcript ? `"${transcript}"` : 'Ouvindo... (toque ⏹ para enviar)'}
               </Text>
+            </View>
+          )}
+
+          {status === 'speaking' && (
+            <View style={styles.speakingBanner}>
+              <Text style={styles.speakingText}>🔊 Falando...</Text>
+              <Pressable onPress={handleMuteSpeech} style={styles.muteBtn}>
+                <Text style={styles.muteBtnText}>🔇 Silenciar</Text>
+              </Pressable>
             </View>
           )}
 
@@ -185,6 +205,26 @@ const styles = StyleSheet.create({
   },
   listeningDot: { color: Colors.status.listening, fontSize: 10 },
   listeningText: { color: Colors.status.listening, fontSize: 13, fontStyle: 'italic', flex: 1 },
+
+  speakingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: Colors.status.thinking + '15',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.status.thinking + '30',
+  },
+  speakingText: { color: Colors.status.thinking, fontSize: 13, fontStyle: 'italic', flex: 1 },
+  muteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.glass.medium,
+  },
+  muteBtnText: { color: Colors.text.secondary, fontSize: 13, fontWeight: '500' },
   voiceErrorBanner: {
     marginHorizontal: 16,
     marginBottom: 4,

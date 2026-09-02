@@ -35,10 +35,11 @@ import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 import { handleInsightPress } from '@/services/insights/handleInsightPress';
 import { BackgroundSetupModal } from '@/components/voice/BackgroundSetupModal';
+import { stopAllSpeech } from '@/services/voice/textToSpeech';
 
 export default function HomeScreen() {
   const { sendMessage, status } = useArgos();
-  const { showExecutionOverlay, executionSteps, setLastInputMode } = useAIStore();
+  const { showExecutionOverlay, executionSteps, setLastInputMode, setStatus } = useAIStore();
   const { getActiveInsights, dismissInsight } = useMemoryStore();
   /*
    * Marca a origem como voz ANTES de mandar a mensagem. useArgos.speak() silencia
@@ -126,6 +127,15 @@ export default function HomeScreen() {
       startListening();
     }
   }, [isListening, light, stopListening, startListening]);
+
+  /** Botão de mudo (A-050): interrompe a fala em qualquer motor de TTS. */
+  const handleMuteSpeech = useCallback(() => {
+    light();
+    void stopAllSpeech();
+    // Não espera a Promise: força o status de volta agora, por segurança —
+    // ver comentário em stopAllSpeech() sobre por quê.
+    setStatus('idle');
+  }, [light, setStatus]);
 
   const handleSend = useCallback(() => {
     if (!textInput.trim()) return;
@@ -251,6 +261,13 @@ export default function HomeScreen() {
                     </Pressable>
                   </View>
                 ) : null}
+                {status === 'speaking' ? (
+                  <View style={styles.listenActions}>
+                    <Pressable onPress={handleMuteSpeech} style={styles.listenBtn}>
+                      <Text style={styles.listenBtnText}>🔇 Silenciar</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 {Platform.OS !== 'web' && !isListening && status === 'idle' ? (
                   <Pressable
                     onPress={() => {
@@ -268,17 +285,14 @@ export default function HomeScreen() {
                     }}
                     style={[styles.wakeToggle, isWakeListening && styles.wakeToggleOn]}
                   >
-                    <Text style={[styles.wakeHint, isWakeListening && styles.wakeHintOn]}>
+                    <Text
+                      style={[styles.wakeHint, isWakeListening && styles.wakeHintOn]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       {isWakeListening
                         ? `🎧 Ouvindo — diga “${settings.wakeWord || 'Argos'}” (toque para parar)`
                         : '🎧 Ativar escuta contínua'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {Platform.OS !== 'web' && isWakeListening && !isListening ? (
-                  <Pressable onPress={() => { light(); setShowBgSetup(true); }}>
-                    <Text style={styles.bgSetupLink}>
-                      Parou de ouvir ao sair do app? Toque aqui
                     </Text>
                   </Pressable>
                 ) : null}
@@ -333,24 +347,35 @@ export default function HomeScreen() {
               style={inputCardStyle}
               borderColor={isInputFocused ? Colors.glass.borderAccent : Colors.glass.border}
             >
-              <TextInput
-                style={styles.input}
-                placeholder="Digite uma mensagem ou comando..."
-                placeholderTextColor={Colors.text.muted}
-                value={textInput}
-                onChangeText={setTextInput}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                onSubmitEditing={handleSend}
-                returnKeyType="send"
-                multiline={false}
-              />
-              <Pressable
-                onPress={handleSend}
-                style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
-              >
-                <Text style={styles.sendIcon}>↑</Text>
-              </Pressable>
+              {/*
+               * GlassCard aplica o `style` recebido (inputCardStyle, com
+               * flexDirection:'row') no View EXTERNO, mas quem envolve os
+               * children é o View INTERNO (styles.content), que não herda
+               * esse flexDirection e cai no padrão 'column' do RN — daí o
+               * botão de enviar empilhar embaixo do campo em vez de ao lado.
+               * conversar.tsx não tem esse bug porque já envolve os filhos
+               * manualmente num View row; replicando o mesmo padrão aqui.
+               */}
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Digite uma mensagem ou comando..."
+                  placeholderTextColor={Colors.text.muted}
+                  value={textInput}
+                  onChangeText={setTextInput}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  onSubmitEditing={handleSend}
+                  returnKeyType="send"
+                  multiline={false}
+                />
+                <Pressable
+                  onPress={handleSend}
+                  style={[styles.sendButton, { opacity: textInput.trim() ? 1 : 0.3 }]}
+                >
+                  <Text style={styles.sendIcon}>↑</Text>
+                </Pressable>
+              </View>
             </GlassCard>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -502,6 +527,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+    // A wake word é configurável pelo usuário e pode ser longa — sem isso o
+    // Pressable crescia até caber o texto numa linha só e estourava a
+    // largura da tela.
+    maxWidth: '92%',
+    alignSelf: 'center',
   },
   wakeToggleOn: {
     borderColor: 'rgba(134, 239, 172, 0.45)',
@@ -512,15 +542,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     letterSpacing: 0.2,
+    flexShrink: 1,
   },
   wakeHintOn: { color: '#86efac', fontSize: 12 },
-  bgSetupLink: {
-    marginTop: 8,
-    color: '#A78BFA',
-    fontSize: 11,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
   voiceError: {
     marginTop: 10,
     color: '#fca5a5',
@@ -562,6 +586,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {
     width: 36,
