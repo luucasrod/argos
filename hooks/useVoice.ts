@@ -323,7 +323,25 @@ export function useVoice(options?: UseVoiceOptions) {
       if (state.status === 'speaking') {
         wakeWordEngine.suspend();
       } else if (state.status === 'idle') {
-        if (!activeWindow) wakeWordEngine.resume();
+        if (!activeWindow) {
+          /*
+           * Issue #16: cloudTts.ts configura o modo de áudio global com
+           * allowsRecordingIOS:false antes de falar (correto lá — a escuta
+           * está suspensa durante a fala). Mas nada reconfigurava de volta
+           * para o modo compatível com gravação (allowsRecordingIOS:true)
+           * depois que o Argos termina de falar e a escuta volta — o Vosk
+           * continua gravando pelo AudioRecord nativo dele mesmo assim
+           * (independente do modo do expo-av), mas a sessão de áudio do
+           * expo-av ficava com uma configuração que não bate com o que
+           * está realmente acontecendo no hardware. Suspeita levantada na
+           * investigação do bipe de confirmação não soando (só a
+           * vibração) depois de qualquer resposta falada — reconfigurar
+           * aqui, sempre que a escuta volta, é best-effort e barato
+           * (mesma chamada já usada em startBackgroundWakeWord).
+           */
+          void configureAudioMode(true);
+          wakeWordEngine.resume();
+        }
       }
     });
     return unsubscribe;
