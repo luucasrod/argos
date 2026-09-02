@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 
 import { useMemoryStore } from '@/stores/useMemoryStore';
+import type { MemorySuggestion } from '@/services/ai/memorySuggestions';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useGoalsStore, type Goal, type UpdateGoalInput } from '@/stores/useGoalsStore';
 import { SwipeCardDeck } from '@/components/memory/SwipeCardDeck';
@@ -104,6 +106,13 @@ function MemoryItem({ memory }: { memory: Memory }) {
 
 export default function InteligenciaScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>('memoria');
+  // A-055: dispensar uma sugestão é só uma preferência de sessão desta tela —
+  // getSuggestions() (B-032) deriva a lista das memórias sempre que é chamada,
+  // sem persistência própria (comentário no próprio serviço), então dispensar
+  // não tem onde ser salvo no store sem duplicar a lógica de geração que é do
+  // B-032. Some ao reabrir a tela; se a memória de origem for rejeitada, a
+  // sugestão some por conta própria (não é mais derivada dela).
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<Set<string>>(new Set());
   const {
     memories,
     getPendingMemories,
@@ -111,6 +120,7 @@ export default function InteligenciaScreen() {
     rejectMemory,
     getActiveInsights,
     dismissInsight,
+    getSuggestions,
   } = useMemoryStore();
   const { settings, updateUserProfile } = useSettingsStore();
   const { getActiveGoals, createGoal, updateGoal, deleteGoal, completeGoal } = useGoalsStore();
@@ -128,6 +138,20 @@ export default function InteligenciaScreen() {
   const confirmedMemories = memories.filter((m) => m.status === 'confirmed' && m.isActive);
   const pendingMemories = getPendingMemories();
   const insights = getActiveInsights();
+  const suggestions = getSuggestions().filter((s) => !dismissedSuggestionIds.has(s.id));
+
+  const handleAcceptSuggestion = (suggestion: MemorySuggestion) => {
+    router.push({
+      pathname: suggestion.action.route,
+      // create-automation.tsx ainda não lê este param — ver nota no PR desta
+      // issue. Passar aqui já deixa a integração pronta para quando ler.
+      params: { prompt: suggestion.action.prompt },
+    });
+  };
+
+  const handleDismissSuggestion = (id: string) => {
+    setDismissedSuggestionIds((prev) => new Set(prev).add(id));
+  };
   // A-054: preferências de verdade APRENDIDAS (memória confirmada pela IA),
   // distintas do formulário manual de perfil abaixo. Só leitura — gerenciar
   // (rejeitar etc.) continua na sub-aba Memória.
@@ -184,7 +208,31 @@ export default function InteligenciaScreen() {
         );
 
       case 'sugestoes':
-        return <EmptyState emoji="✨" title="Sugestões" text="Argos vai gerar sugestões com base no que aprender sobre você" />;
+        return (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            {suggestions.length === 0 ? (
+              <EmptyState
+                emoji="✨"
+                title="Sugestões"
+                text="Argos vai gerar sugestões com base no que aprender sobre você"
+              />
+            ) : (
+              suggestions.map((s) => (
+                <GlassCard key={s.id} style={styles.insightCard}>
+                  <Text style={styles.insightMsg}>{s.text}</Text>
+                  <View style={styles.insightFooter}>
+                    <Pressable onPress={() => handleAcceptSuggestion(s)}>
+                      <Text style={styles.insightSug}>Criar automação →</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDismissSuggestion(s.id)}>
+                      <Text style={styles.insightDismiss}>Dispensar</Text>
+                    </Pressable>
+                  </View>
+                </GlassCard>
+              ))
+            )}
+          </ScrollView>
+        );
 
       case 'objetivos':
         return (
