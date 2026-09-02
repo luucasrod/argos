@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import type { MemorySuggestion } from '@/services/ai/memorySuggestions';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useGoalsStore, type Goal, type UpdateGoalInput } from '@/stores/useGoalsStore';
 import { SwipeCardDeck } from '@/components/memory/SwipeCardDeck';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
@@ -122,6 +123,17 @@ export default function InteligenciaScreen() {
     getSuggestions,
   } = useMemoryStore();
   const { settings, updateUserProfile } = useSettingsStore();
+  const { getActiveGoals, createGoal, updateGoal, deleteGoal, completeGoal } = useGoalsStore();
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const activeGoals = getActiveGoals();
+
+  const handleCreateGoal = () => {
+    const title = newGoalTitle.trim();
+    if (!title) return;
+    void createGoal({ title });
+    setNewGoalTitle('');
+  };
 
   const confirmedMemories = memories.filter((m) => m.status === 'confirmed' && m.isActive);
   const pendingMemories = getPendingMemories();
@@ -223,7 +235,58 @@ export default function InteligenciaScreen() {
         );
 
       case 'objetivos':
-        return <EmptyState emoji="🎯" title="Objetivos" text="Defina seus objetivos e Argos vai te ajudar a alcançá-los" />;
+        return (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.sectionLabel}>Novo objetivo</Text>
+            <GlassCard style={styles.prefCard}>
+              <View style={styles.goalAddRow}>
+                <TextInput
+                  style={styles.goalAddInput}
+                  value={newGoalTitle}
+                  onChangeText={setNewGoalTitle}
+                  placeholder="Ex: Dormir mais cedo"
+                  placeholderTextColor={Colors.text.muted}
+                  onSubmitEditing={handleCreateGoal}
+                  returnKeyType="done"
+                />
+                <Pressable
+                  onPress={handleCreateGoal}
+                  disabled={!newGoalTitle.trim()}
+                  style={[styles.goalAddBtn, { opacity: newGoalTitle.trim() ? 1 : 0.4 }]}
+                >
+                  <Text style={styles.goalAddBtnText}>+</Text>
+                </Pressable>
+              </View>
+            </GlassCard>
+
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
+              {activeGoals.length} objetivo{activeGoals.length !== 1 ? 's' : ''}
+            </Text>
+            {activeGoals.length === 0 ? (
+              <EmptyState
+                emoji="🎯"
+                title="Objetivos"
+                text="Defina seus objetivos e Argos vai te ajudar a alcançá-los"
+              />
+            ) : (
+              activeGoals.map((goal) => (
+                <GoalItem
+                  key={goal.id}
+                  goal={goal}
+                  editing={editingGoalId === goal.id}
+                  onStartEdit={() => setEditingGoalId(goal.id)}
+                  onSave={(input) => {
+                    void updateGoal(goal.id, input);
+                    setEditingGoalId(null);
+                  }}
+                  onCancelEdit={() => setEditingGoalId(null)}
+                  onComplete={() => void completeGoal(goal.id)}
+                  onDelete={() => void deleteGoal(goal.id)}
+                />
+              ))
+            )}
+          </ScrollView>
+        );
 
       case 'preferencias':
         return (
@@ -316,6 +379,89 @@ function PrefRow({ label, value, placeholder, onChangeText }: {
         placeholderTextColor={Colors.text.muted}
       />
     </View>
+  );
+}
+
+/** A-056: um objetivo, em modo leitura ou edição. CRUD real via useGoalsStore. */
+function GoalItem({
+  goal,
+  editing,
+  onStartEdit,
+  onSave,
+  onCancelEdit,
+  onComplete,
+  onDelete,
+}: {
+  goal: Goal;
+  editing: boolean;
+  onStartEdit: () => void;
+  onSave: (input: UpdateGoalInput) => void;
+  onCancelEdit: () => void;
+  onComplete: () => void;
+  onDelete: () => void;
+}) {
+  const [title, setTitle] = useState(goal.title);
+  const [description, setDescription] = useState(goal.description ?? '');
+
+  // Resincroniza o rascunho com o dado real toda vez que a edição é aberta —
+  // sem isto, cancelar uma edição e abrir de novo mostraria o texto digitado
+  // antes do cancelamento, não o valor salvo de verdade.
+  useEffect(() => {
+    if (editing) {
+      setTitle(goal.title);
+      setDescription(goal.description ?? '');
+    }
+  }, [editing, goal.title, goal.description]);
+
+  if (editing) {
+    return (
+      <GlassCard style={styles.goalCard}>
+        <TextInput
+          style={styles.goalEditInput}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Título do objetivo"
+          placeholderTextColor={Colors.text.muted}
+        />
+        <TextInput
+          style={styles.goalEditInput}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Descrição (opcional)"
+          placeholderTextColor={Colors.text.muted}
+          multiline
+        />
+        <View style={styles.goalActions}>
+          <Pressable onPress={onCancelEdit}>
+            <Text style={styles.goalActionText}>Cancelar</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => title.trim() && onSave({ title, description })}
+          >
+            <Text style={[styles.goalActionText, styles.goalActionPrimary]}>Salvar</Text>
+          </Pressable>
+        </View>
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard style={styles.goalCard}>
+      <Pressable onPress={onStartEdit}>
+        <Text style={styles.goalTitle}>{goal.title}</Text>
+        {goal.description ? (
+          <Text style={styles.goalDescription}>{goal.description}</Text>
+        ) : null}
+      </Pressable>
+      <View style={styles.goalActions}>
+        <Pressable onPress={onComplete}>
+          <Text style={styles.goalActionText}>✓ Concluir</Text>
+        </Pressable>
+        <Pressable onPress={onDelete}>
+          <Text style={[styles.goalActionText, styles.goalActionDanger]}>Excluir</Text>
+        </Pressable>
+      </View>
+    </GlassCard>
   );
 }
 
@@ -422,6 +568,41 @@ const styles = StyleSheet.create({
   },
   prefDivider: { height: 1, backgroundColor: Colors.glass.border, marginHorizontal: 16 },
   learnedEmptyText: { color: Colors.text.muted, fontSize: 13, lineHeight: 18 },
+
+  goalAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  goalAddInput: {
+    flex: 1,
+    color: Colors.text.primary,
+    fontSize: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.glass.light,
+    borderRadius: 10,
+  },
+  goalAddBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalAddBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  goalCard: { padding: 14, gap: 10 },
+  goalTitle: { color: Colors.text.primary, fontSize: 14, fontWeight: '600' },
+  goalDescription: { color: Colors.text.muted, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  goalEditInput: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: Colors.glass.light,
+    borderRadius: 8,
+  },
+  goalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16 },
+  goalActionText: { color: Colors.text.muted, fontSize: 12, fontWeight: '600' },
+  goalActionPrimary: { color: Colors.accent.primary },
+  goalActionDanger: { color: Colors.status.error },
 
   emptyState: {
     flex: 1,
