@@ -268,7 +268,11 @@ export default function HomeScreen() {
                     }}
                     style={[styles.wakeToggle, isWakeListening && styles.wakeToggleOn]}
                   >
-                    <Text style={[styles.wakeHint, isWakeListening && styles.wakeHintOn]}>
+                    <Text
+                      style={[styles.wakeHint, isWakeListening && styles.wakeHintOn]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       {isWakeListening
                         ? `🎧 Ouvindo — diga “${settings.wakeWord || 'Argos'}” (toque para parar)`
                         : '🎧 Ativar escuta contínua'}
@@ -513,6 +517,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+    // A wake word é configurável pelo usuário e pode ser longa — sem isso o
+    // Pressable crescia até caber o texto numa linha só e estourava a
+    // largura da tela.
+    maxWidth: '92%',
+    alignSelf: 'center',
   },
   wakeToggleOn: {
     borderColor: 'rgba(134, 239, 172, 0.45)',
@@ -523,6 +532,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     letterSpacing: 0.2,
+    flexShrink: 1,
   },
   wakeHintOn: { color: '#86efac', fontSize: 12 },
   bgSetupLink: {
