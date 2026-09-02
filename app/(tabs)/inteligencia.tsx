@@ -116,6 +116,10 @@ export default function InteligenciaScreen() {
   const confirmedMemories = memories.filter((m) => m.status === 'confirmed' && m.isActive);
   const pendingMemories = getPendingMemories();
   const insights = getActiveInsights();
+  // A-054: preferências de verdade APRENDIDAS (memória confirmada pela IA),
+  // distintas do formulário manual de perfil abaixo. Só leitura — gerenciar
+  // (rejeitar etc.) continua na sub-aba Memória.
+  const learnedPreferences = confirmedMemories.filter((m) => m.category === 'preference');
 
   const renderContent = () => {
     switch (activeTab) {
@@ -193,6 +197,18 @@ export default function InteligenciaScreen() {
               <PrefRow label="Nome do assistente" value={settings.personality?.name ?? 'Argos'} placeholder="Argos"
                 onChangeText={(v) => updateUserProfile({ name: v })} />
             </GlassCard>
+
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
+              O que o Argos aprendeu sobre você
+            </Text>
+            {learnedPreferences.length === 0 ? (
+              <Text style={styles.learnedEmptyText}>
+                Nenhuma preferência aprendida ainda — confirme memórias na sub-aba Memória
+                para elas aparecerem aqui.
+              </Text>
+            ) : (
+              learnedPreferences.map((m) => <MemoryItem key={m.id} memory={m} />)
+            )}
           </ScrollView>
         );
 
@@ -357,6 +373,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   prefDivider: { height: 1, backgroundColor: Colors.glass.border, marginHorizontal: 16 },
+  learnedEmptyText: { color: Colors.text.muted, fontSize: 13, lineHeight: 18 },
 
   emptyState: {
     flex: 1,
