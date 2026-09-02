@@ -35,10 +35,11 @@ import { Colors } from '@/constants/colors';
 import { HOME_SUGGESTIONS } from '@/constants/orb';
 import { handleInsightPress } from '@/services/insights/handleInsightPress';
 import { BackgroundSetupModal } from '@/components/voice/BackgroundSetupModal';
+import { stopAllSpeech } from '@/services/voice/textToSpeech';
 
 export default function HomeScreen() {
   const { sendMessage, status } = useArgos();
-  const { showExecutionOverlay, executionSteps, setLastInputMode } = useAIStore();
+  const { showExecutionOverlay, executionSteps, setLastInputMode, setStatus } = useAIStore();
   const { getActiveInsights, dismissInsight } = useMemoryStore();
   /*
    * Marca a origem como voz ANTES de mandar a mensagem. useArgos.speak() silencia
@@ -126,6 +127,15 @@ export default function HomeScreen() {
       startListening();
     }
   }, [isListening, light, stopListening, startListening]);
+
+  /** Botão de mudo (A-050): interrompe a fala em qualquer motor de TTS. */
+  const handleMuteSpeech = useCallback(() => {
+    light();
+    void stopAllSpeech();
+    // Não espera a Promise: força o status de volta agora, por segurança —
+    // ver comentário em stopAllSpeech() sobre por quê.
+    setStatus('idle');
+  }, [light, setStatus]);
 
   const handleSend = useCallback(() => {
     if (!textInput.trim()) return;
@@ -244,6 +254,13 @@ export default function HomeScreen() {
                       style={styles.listenBtn}
                     >
                       <Text style={styles.listenBtnText}>✕ Cancelar</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {status === 'speaking' ? (
+                  <View style={styles.listenActions}>
+                    <Pressable onPress={handleMuteSpeech} style={styles.listenBtn}>
+                      <Text style={styles.listenBtnText}>🔇 Silenciar</Text>
                     </Pressable>
                   </View>
                 ) : null}
