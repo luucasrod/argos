@@ -59,3 +59,18 @@ export function resolveIntentSpeech(intent: ParsedIntent): string {
   if (text) return stripForSpeech(text);
   return '';
 }
+
+/*
+ * A-022: confirmação sutil para ações triviais bem-sucedidas, quando o
+ * usuário escolhe verbosidade mínima. Só entra em uso nos pontos que o
+ * chamador já sabe serem triviais (sem risco, sem ambiguidade, sem falha) —
+ * quem decide ISSO é o chamador (hooks/useArgos.ts), nunca esta função.
+ * Confirmação de risco (autonomia assistida) e qualquer erro continuam
+ * sempre falando a frase completa, em qualquer nível de verbosidade.
+ */
+const MINIMAL_CONFIRMATIONS = ['Feito.', 'Pronto.', 'Ok, feito.'];
+
+/** Frase curta aleatória pra confirmar uma ação trivial (ver comentário acima). */
+export function minimalConfirmation(): string {
+  return MINIMAL_CONFIRMATIONS[Math.floor(Math.random() * MINIMAL_CONFIRMATIONS.length)];
+}
