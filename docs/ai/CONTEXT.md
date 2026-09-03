@@ -31,6 +31,14 @@ store. Todo dispositivo registrado tem `provider`, `nativeId`, `roomId`,
 Snapshots destinados à cloud usam `toCloudDeviceSnapshot()` e não incluem
 `state` nem `metadata`, que podem conter dados voláteis ou sensíveis.
 
+### Permissões por risco
+
+`contracts/actionPermissions.v1.ts` é a política canônica para autorização de
+ações. A capability define o risco; origem remota, presença local, permissão,
+confirmação específica e reautenticação determinam a decisão. Autorizar uma
+ação trivial nunca autoriza uma ação sensível, e personalidade/tom não participa
+da política. Capabilities desconhecidas usam risco alto por padrão.
+
 ### Contexto e precedência
 
 `contracts/context.v1.ts` é o contrato canônico de `ContextSnapshot`. A resolução
