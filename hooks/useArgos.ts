@@ -17,6 +17,7 @@ import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSessio
 import { resolveIntentSpeech } from '@/services/voice/speechText';
 import { perfMark } from '@/services/voice/perfLog';
 import { markAwaitingFollowUp } from '@/services/voice/followUpMode';
+import { recordValueAction, handleCorrectionReply } from '@/services/voice/correctionMemory';
 import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
@@ -325,6 +326,38 @@ export function useArgos() {
               })),
             },
           });
+
+          /*
+           * A-017: se essa ação de valor (ex.: brilho) corrigiu a mesma
+           * ação de pouco antes no mesmo dispositivo, correctionMemory.ts
+           * acumula evidência e só devolve pergunta quando decidir que há
+           * evidência e confiança suficientes — nunca com um evento só.
+           * Só a PRIMEIRA pergunta da leva é usada; ações em lote raramente
+           * pedem mais de uma confirmação por vez.
+           */
+          for (let i = 0; i < intent.actions.length; i++) {
+            const action = intent.actions[i];
+            if (action.action !== 'setValue' || stepResults[i] !== 'success') continue;
+            const deviceLabel = checked[i]?.device?.name ?? action.label;
+            const question = await recordValueAction(
+              action.deviceId,
+              action.property,
+              action.value,
+              deviceLabel
+            );
+            if (question) {
+              markAwaitingFollowUp();
+              void speak(question);
+              addMessage({
+                id: `msg-${Date.now()}-correction-ask`,
+                role: 'assistant',
+                content: question,
+                timestamp: new Date(),
+                type: 'text',
+              });
+              break;
+            }
+          }
         } finally {
           // Sempre libera a UI, mesmo se algo inesperado estourar acima.
           setTimeout(() => {
@@ -632,6 +665,29 @@ export function useArgos() {
       };
 
       addMessage(userMessage);
+
+      /*
+       * A-017: se o Argos acabou de perguntar "quer que eu use X sempre
+       * Y?" (correctionMemory.ts), a resposta é sim/não/agora-não, não um
+       * comando novo — intercepta ANTES do fastIntent/IA, senão "sim"
+       * sozinho nunca bateria com nenhum comando e cairia na IA completa
+       * sem contexto nenhum sobre a pergunta feita localmente.
+       */
+      const correctionAck = await handleCorrectionReply(trimmed);
+      if (correctionAck) {
+        heavy();
+        await speak(correctionAck);
+        setStatus('idle');
+        addMessage({
+          id: `msg-${Date.now()}-correction-ack`,
+          role: 'assistant',
+          content: correctionAck,
+          timestamp: new Date(),
+          type: 'text',
+        });
+        processingRef.current = false;
+        return;
+      }
 
       // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
       // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
