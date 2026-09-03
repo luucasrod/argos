@@ -21,8 +21,68 @@ import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
 import { useHaptic } from './useHaptic';
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
+import { resolveAppLink } from '@/services/browser/appLinks';
 import type { AIPersonality } from '@/types/ai.types';
+
+/**
+ * Abre um app/link no nativo (Android/iOS) via Linking (issue #178).
+ *
+ * Espelha o que services/browser/browserActions.ts já faz na web, mas sem as
+ * APIs de DOM (document/window) usadas lá, que não existem no React Native.
+ * Usa o mesmo catálogo de esquemas (services/browser/appLinks.ts) —
+ * resolveAppLink() devolve os campos ios/android/web crus, sem passar pela
+ * detecção de plataforma daquele arquivo (isIOSWeb/isAndroidWeb), que é
+ * baseada em navigator.userAgent e por isso nunca é verdadeira no nativo.
+ * Aqui a plataforma já é conhecida de verdade via Platform.OS.
+ */
+async function openAppLinkNative(
+  input: string
+): Promise<{ opened: boolean; label: string; message: string }> {
+  const link = resolveAppLink(input);
+  const label = link?.label ?? input;
+  const nativeUrl = Platform.OS === 'ios' ? link?.ios : Platform.OS === 'android' ? link?.android : null;
+
+  const tryOpen = async (url: string | null | undefined): Promise<boolean> => {
+    if (!url) return false;
+    try {
+      // Linking.openURL rejeita quando nenhum app trata o esquema (Android:
+      // "Activity not found") — é o próprio sistema quem diz "não instalado",
+      // não precisa de canOpenURL (que no iOS só funciona com o esquema
+      // declarado em LSApplicationQueriesSchemes, dando falso negativo).
+      await Linking.openURL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (await tryOpen(nativeUrl)) {
+    return { opened: true, label, message: `Abrindo ${label}...` };
+  }
+
+  // Caso pedido na issue: sem o Spotify instalado, oferece (abrindo direto,
+  // já avisando o que aconteceu) o player que o Argos já integra em vez de
+  // só recusar.
+  if (input.trim().toLowerCase() === 'spotify') {
+    const musicFallback = resolveAppLink('youtube music');
+    const musicUrl = Platform.OS === 'ios' ? musicFallback?.ios : musicFallback?.android;
+    if (await tryOpen(musicUrl)) {
+      return {
+        opened: true,
+        label: musicFallback?.label ?? 'YouTube Music',
+        message: 'Você não tem o Spotify instalado, mas abri o YouTube Music.',
+      };
+    }
+  }
+
+  const webUrl = link?.web ?? (input.trim().toLowerCase().startsWith('http') ? input.trim() : null);
+  if (await tryOpen(webUrl)) {
+    return { opened: true, label, message: `Abrindo ${label} no navegador...` };
+  }
+
+  return { opened: false, label, message: `Não consegui abrir ${label}. Ele está instalado?` };
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return Promise.race([
@@ -356,14 +416,16 @@ export function useArgos() {
             });
           }
         } else {
-          await speak('Abrir URLs só está disponível na versão web.', settings.personality);
+          const result = await openAppLinkNative(intent.url);
+          const spoken = resolveIntentSpeech(intent);
+          await speak(spoken || result.message);
           setStatus('idle');
           addMessage({
             id: assistantMessageId,
             role: 'assistant',
-            content: 'Abrir URLs só está disponível na versão web do Argos.',
+            content: intent.text || result.message,
             timestamp: new Date(),
-            type: 'text',
+            type: result.opened ? 'text' : 'error',
           });
         }
 
@@ -373,21 +435,18 @@ export function useArgos() {
         setStatus('executing');
 
         try {
-          let weatherText: string;
-          let weatherContent: string;
-
-          if (Platform.OS === 'web') {
-            const { getWeather } = await import('@/services/browser/weatherService');
-            const result = await getWeather(intent.cityName);
-            weatherText = result.formatted;
-            weatherContent =
-              `🌤 **${result.city}** — ${result.temperature}°C\n` +
-              `${result.description}\n` +
-              `Sensação: ${result.feelsLike}°C · Umidade: ${result.humidity}% · Vento: ${result.windSpeed} km/h`;
-          } else {
-            weatherText = 'Verificação de clima só está disponível na versão web.';
-            weatherContent = weatherText;
-          }
+          // getWeather() (Open-Meteo, fetch puro) já funciona igual em
+          // qualquer plataforma — só a geolocalização automática (sem nome
+          // de cidade) depende do navegador e já degrada sozinha para uma
+          // mensagem pedindo o nome da cidade (services/browser/
+          // weatherService.ts). Nunca foi o serviço que exigia web.
+          const { getWeather } = await import('@/services/browser/weatherService');
+          const result = await getWeather(intent.cityName);
+          const weatherText = result.formatted;
+          const weatherContent =
+            `🌤 **${result.city}** — ${result.temperature}°C\n` +
+            `${result.description}\n` +
+            `Sensação: ${result.feelsLike}°C · Umidade: ${result.humidity}% · Vento: ${result.windSpeed} km/h`;
 
           setStatus('speaking');
           await speak(weatherText);
