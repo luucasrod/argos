@@ -2,7 +2,7 @@
   "expo": {
     "name": "Argos",
     "slug": "argos-assistant",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,8 +15,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permitir que o Argos use sua localização para disparar automações enquanto o app estiver aberto."
+        }
+      ],
       "@react-native-voice/voice",
       "./plugins/withForegroundService",
+      "./plugins/withWizUdpModule",
       [
         "react-native-vosk",
         {

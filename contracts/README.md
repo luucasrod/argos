@@ -22,3 +22,29 @@ Run the dependency-free round-trip and incompatible-version check with Node 22+:
 ```sh
 node --experimental-strip-types contracts/protocol.selftest.mjs
 ```
+
+## Action permissions
+
+`actionPermissions.v1.ts` classifies capabilities by risk and evaluates local
+presence, explicit per-action confirmation, recent reauthentication and remote
+access. Personality is intentionally absent from this contract. Unknown
+capabilities default to high risk. Run:
+
+```sh
+node --experimental-strip-types contracts/actionPermissions.selftest.mjs
+```
+
+## Context and precedence
+
+`context.v1.ts` defines the portable context snapshot and the deterministic
+resolution order used by clients and services:
+
+`explicit command > conversation > trusted local context > confirmed preference > inference`
+
+Conflicting candidates at the winning level, missing evidence, and confidence
+below the configured threshold return a short clarification request. Run its
+dependency-free contract check with Node 22+:
+
+```sh
+node --experimental-strip-types contracts/context.selftest.mjs
+```
