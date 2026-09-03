@@ -31,6 +31,14 @@ store. Todo dispositivo registrado tem `provider`, `nativeId`, `roomId`,
 Snapshots destinados à cloud usam `toCloudDeviceSnapshot()` e não incluem
 `state` nem `metadata`, que podem conter dados voláteis ou sensíveis.
 
+### Contexto e precedência
+
+`contracts/context.v1.ts` é o contrato canônico de `ContextSnapshot`. A resolução
+é determinística e segue: comando explícito > conversa > contexto local confiável
+> preferência confirmada > inferência. Evidências conflitantes no nível vencedor,
+ausentes ou abaixo do limiar de confiança retornam uma pergunta curta de
+clarificação; inferência nunca sobrepõe uma instrução explícita.
+
 ---
 
 ## Voz — arquitetura. Não mexa sem ler esta seção inteira

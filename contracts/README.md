@@ -22,3 +22,18 @@ Run the dependency-free round-trip and incompatible-version check with Node 22+:
 ```sh
 node --experimental-strip-types contracts/protocol.selftest.mjs
 ```
+
+## Context and precedence
+
+`context.v1.ts` defines the portable context snapshot and the deterministic
+resolution order used by clients and services:
+
+`explicit command > conversation > trusted local context > confirmed preference > inference`
+
+Conflicting candidates at the winning level, missing evidence, and confidence
+below the configured threshold return a short clarification request. Run its
+dependency-free contract check with Node 22+:
+
+```sh
+node --experimental-strip-types contracts/context.selftest.mjs
+```
