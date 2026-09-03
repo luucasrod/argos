@@ -39,6 +39,14 @@ confirmação específica e reautenticação determinam a decisão. Autorizar um
 ação trivial nunca autoriza uma ação sensível, e personalidade/tom não participa
 da política. Capabilities desconhecidas usam risco alto por padrão.
 
+### Contexto e precedência
+
+`contracts/context.v1.ts` é o contrato canônico de `ContextSnapshot`. A resolução
+é determinística e segue: comando explícito > conversa > contexto local confiável
+> preferência confirmada > inferência. Evidências conflitantes no nível vencedor,
+ausentes ou abaixo do limiar de confiança retornam uma pergunta curta de
+clarificação; inferência nunca sobrepõe uma instrução explícita.
+
 ---
 
 ## Voz — arquitetura. Não mexa sem ler esta seção inteira
