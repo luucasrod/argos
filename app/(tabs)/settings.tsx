@@ -484,6 +484,11 @@ export default function SettingsScreen() {
 
   const toneOptions: AIPersonality['tone'][] = ['formal', 'casual', 'direct', 'friendly', 'playful'];
   const proactivityOptions: AIPersonality['proactivity'][] = ['low', 'medium', 'high'];
+  const verbosityOptions: { id: AIPersonality['verbosity']; label: string }[] = [
+    { id: 'minimal', label: 'Mínima' },
+    { id: 'normal', label: 'Normal' },
+    { id: 'detailed', label: 'Detalhada' },
+  ];
 
   const previewVoice = () => {
     medium();
@@ -1075,6 +1080,30 @@ export default function SettingsScreen() {
                       style={optionPillStyle(settings.personality.tone === tone)}
                     >
                       <Text style={optionTextStyle(settings.personality.tone === tone)}>{tone}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingRow>
+
+              <View style={styles.divider} />
+
+              <SettingRow
+                label="Verbosidade"
+                description="Confirmação mínima, normal ou detalhada por voz — ações críticas sempre confirmam por completo"
+              >
+                <View style={styles.optionRow}>
+                  {verbosityOptions.map(({ id, label }) => (
+                    <Pressable
+                      key={id}
+                      onPress={() => {
+                        light();
+                        updatePersonality({ verbosity: id });
+                      }}
+                      style={optionPillStyle(settings.personality.verbosity === id)}
+                    >
+                      <Text style={optionTextStyle(settings.personality.verbosity === id)}>
+                        {label}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>

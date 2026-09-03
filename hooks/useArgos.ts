@@ -14,7 +14,7 @@ import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
 import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
-import { resolveIntentSpeech } from '@/services/voice/speechText';
+import { resolveIntentSpeech, minimalConfirmation } from '@/services/voice/speechText';
 import { perfMark } from '@/services/voice/perfLog';
 import { markAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { recordValueAction, handleCorrectionReply } from '@/services/voice/correctionMemory';
@@ -249,10 +249,19 @@ export function useArgos() {
         }
 
         const spoken = resolveIntentSpeech(intent);
+        /*
+         * A-022: controle de dispositivo é a ação trivial mais comum ("liga a
+         * luz") — em verbosidade mínima, confirma com frase curta em vez da
+         * descrição completa. Só aqui: a falha total (bloco acima) e a
+         * confirmação de risco no modo assistido continuam sempre completas,
+         * em qualquer verbosidade — não são "triviais bem-sucedidas".
+         */
+        const spokenConfirmation =
+          settings.personality.verbosity === 'minimal' && spoken ? minimalConfirmation() : spoken;
         // A fala NÃO é aguardada aqui. Antes o dispositivo só era acionado depois
         // do TTS terminar, então a lâmpada esperava a frase inteira — segundos de
         // atraso para nada. Agora executa e fala ao mesmo tempo.
-        if (spoken) void speak(spoken);
+        if (spokenConfirmation) void speak(spokenConfirmation);
 
         setStatus('executing');
 
