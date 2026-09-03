@@ -386,6 +386,13 @@ export default function HomeScreen() {
                * botão de enviar empilhar embaixo do campo em vez de ao lado.
                * conversar.tsx não tem esse bug porque já envolve os filhos
                * manualmente num View row; replicando o mesmo padrão aqui.
+               *
+               * #206/#203: mesmo com esse wrap manual, `inputRow` tinha
+               * `flex: 1` — dentro do `content` do GlassCard (altura
+               * automática, eixo principal vertical) isso zera o flex-basis
+               * do row e ele colapsa pra altura dos filhos de tamanho fixo
+               * (os 36px do botão), espremendo o TextInput. conversar.tsx
+               * nunca teve `flex:1` no inputRow; removido aqui também.
                */}
               <View style={styles.inputRow}>
                 <TextInput
@@ -636,7 +643,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {
     width: 36,
