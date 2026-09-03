@@ -507,9 +507,19 @@ const styles = StyleSheet.create({
    * maxHeight é um teto que o Yoga sempre respeita independente do resto da
    * árvore de layout: nunca cresce além dele (então nunca empurra o input),
    * e rola por dentro quando o conteúdo passa do teto (então nunca corta).
+   *
+   * #203: faltava `flexGrow: 0`. O `<ScrollView>` do RN aplica um baseStyle
+   * interno com `flexGrow: 1` (ver ScrollView.js) ANTES do style daqui —
+   * sem zerar isso, o ScrollView cresce pra preencher todo espaço livre de
+   * `bottomStack` (até o teto de 190), sobrando vão vazio DENTRO dele quando
+   * há poucos itens, e ainda rouba o espaço que devia ficar acima do orb via
+   * `justifyContent: 'flex-end'` — resultado: orb colado no topo, vão vazio
+   * gigante antes da barra de input. `flexGrow: 0` faz o ScrollView se
+   * ajustar ao conteúdo de verdade (até o teto), preservando o `flex-end`.
    */
   overflowSection: {
     maxHeight: 190,
+    flexGrow: 0,
   },
   overflowSectionContent: {
     gap: 10,
