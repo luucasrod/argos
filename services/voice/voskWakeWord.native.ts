@@ -107,14 +107,43 @@ const COMMAND_PHRASES = [
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */
-// 800 ms, nao 1200: o usuario mediu ~4 s entre comecar a falar e o Argos
-// responder, e identificou que a espera esta justamente aqui — o tempo que
-// ele leva pra decidir que a frase acabou. Cada ms daqui sai direto da
-// latencia percebida. 800 ms ainda cobre pausa entre palavras; se comecar a
-// cortar gente no meio da frase, subir de volta.
-const COMMAND_SILENCE_MS = 800;
+// #204: 800ms comecou a cortar gente no meio da frase, exatamente o aviso
+// que este comentario ja dava. Subiu pra 1000 — meio-termo entre a latencia
+// percebida que motivou baixar de 1200 pra 800, e cobrir pausa natural entre
+// frase e complemento. Nao subiu ate 1200 de volta: a janela mais longa
+// (CONNECTOR_SILENCE_MS abaixo) cobre o caso especifico que mais dói (pausa
+// logo apos um conector, esperando complemento), entao o teto geral pode
+// ficar mais baixo sem reabrir o problema de latencia original.
+const COMMAND_SILENCE_MS = 1000;
 /** Espera por um comando quando só a wake word foi dita. */
 const AWAIT_COMMAND_MS = 4000;
+
+/*
+ * #204: usuario relatou corte no meio de frases com pausa natural antes de
+ * um complemento (ex.: "luz do escritorio" [pausa] "em azul" — o "em azul"
+ * nunca chegava, o comando saia incompleto). Uma pausa assim e mais longa
+ * que uma pausa comum entre palavras, mas subir COMMAND_SILENCE_MS pra todo
+ * mundo reintroduziria a latencia percebida que motivou baixar pra 800/1000.
+ *
+ * Heuristica: quando a ULTIMA palavra reconhecida termina em conector/
+ * preposicao, a frase esta gramaticalmente pendente — a pessoa quase sempre
+ * vai completar (com cor, comodo, etc.). Nesse caso especifico, espera mais.
+ * Só entram palavras ja confirmadas na gramatica (DECOYS/COMMAND_PHRASES
+ * acima) — "pra" (colonial, citado no relato do usuario) ficou de fora por
+ * nao ter confirmacao de vocabulario no modelo pt, mesma regra ja usada pra
+ * WAKE_SUFFIX_WORDS: melhor perder essa forma do que arriscar "Ignoring word
+ * missing in vocabulary" silencioso.
+ */
+const TRAILING_CONNECTOR_WORDS = new Set(['de', 'da', 'do', 'em', 'para', 'com']);
+/** Janela quando a fala termina em conector (comentário acima). */
+const CONNECTOR_SILENCE_MS = 1500;
+
+/** Escolhe o teto de silêncio certo para o texto ouvido até agora. */
+function silenceWindowFor(text: string): number {
+  const words = text.trim().split(/\s+/);
+  const last = words[words.length - 1] ?? '';
+  return TRAILING_CONNECTOR_WORDS.has(last) ? CONNECTOR_SILENCE_MS : COMMAND_SILENCE_MS;
+}
 
 function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(DIACRITICS_RE, '').trim();
@@ -425,8 +454,9 @@ function handle(raw: string, isFinal: boolean): void {
     }
     lastCommand = currentCommand();
     onCommandPartial?.(lastCommand);
-    // Se já veio comando junto, corta no silêncio; se não, espera um pouco mais.
-    armSilence(lastCommand ? COMMAND_SILENCE_MS : AWAIT_COMMAND_MS);
+    // Se já veio comando junto, corta no silêncio (mais tempo se terminar em
+    // conector — ver silenceWindowFor); se não, espera um pouco mais.
+    armSilence(lastCommand ? silenceWindowFor(lastCommand) : AWAIT_COMMAND_MS);
     return;
   }
 
@@ -458,7 +488,8 @@ function handle(raw: string, isFinal: boolean): void {
     onCommandPartial?.(now);
     // Só reinicia o relógio quando a transcrição REALMENTE avançou: o Vosk repete
     // a mesma parcial durante o silêncio, e reiniciar a cada evento impediria o corte.
-    armSilence(now ? COMMAND_SILENCE_MS : AWAIT_COMMAND_MS);
+    // Mais tempo se a fala terminar em conector — ver silenceWindowFor.
+    armSilence(now ? silenceWindowFor(now) : AWAIT_COMMAND_MS);
   }
 }
 
