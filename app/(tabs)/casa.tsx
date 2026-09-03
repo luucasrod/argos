@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   FlatList,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,10 +25,31 @@ import { Colors } from '@/constants/colors';
 import { Device, DeviceCapability } from '@/types/device.types';
 import type { RegisteredDevice } from '@/services/devices/deviceRegistry';
 import { type Room, normalizeLocationName } from '@/services/devices/roomRegistry';
+import {
+  SemanticAliasEngine,
+  deviceAliasEntity,
+  roomAliasEntity,
+} from '@/services/devices/semanticAliasEngine';
 
 /** Gera um id estável e legível a partir do nome do cômodo (ex.: "Escritório" -> "escritorio"). */
 function slugifyRoomName(name: string): string {
   return normalizeLocationName(name).replace(/\s+/g, '-') || `comodo-${Date.now()}`;
+}
+
+/*
+ * A-033: SemanticAliasEngine (B-027, já mergeado) não tem persistência
+ * própria — é uma classe em memória que se popula com o que você der. Aqui
+ * é reconstruída a cada checagem, a partir do snapshot atual de
+ * devices/rooms do useDeviceStore, só para detectar colisão ("mostrar
+ * conflitos antes de salvar") antes de gravar o alias de volta em
+ * device.aliases/room.aliases via updateDevice/upsertRoom — os mesmos
+ * campos já usados no resto desta tela, sem duplicar armazenamento.
+ */
+function buildAliasEngine(devices: RegisteredDevice[], rooms: Room[]): SemanticAliasEngine {
+  const engine = new SemanticAliasEngine();
+  devices.forEach((d) => engine.upsert(deviceAliasEntity(d)));
+  rooms.forEach((r) => engine.upsert(roomAliasEntity(r)));
+  return engine;
 }
 
 const TABS: SubTab[] = [
@@ -150,7 +172,7 @@ function DeviceCard({
   rooms: Room[];
   showRoom?: boolean;
 }) {
-  const { toggleDevice, updateDeviceState, renameDevice, updateDevice, assignDeviceToRoom } =
+  const { devices, toggleDevice, updateDeviceState, renameDevice, updateDevice, assignDeviceToRoom } =
     useDeviceStore();
   const { light } = useHaptic();
   const [expanded, setExpanded] = useState(false);
@@ -181,11 +203,36 @@ function DeviceCard({
    * propriedade excedente do TypeScript, sem mudar nenhum arquivo fora desta
    * tela.
    */
+  const saveDeviceAlias = (alias: string) => {
+    updateDevice(device.id, { aliases: [...aliases, alias] } as Partial<Device>);
+    setAliasInput('');
+  };
+
+  /*
+   * A-033: "mostrar conflitos antes de salvar" — confirmAlias() do
+   * SemanticAliasEngine já calcula quem mais responderia por este apelido
+   * (outro device ou cômodo). Não bloqueia: avisa e deixa o usuário decidir,
+   * porque o alias ainda funciona (resolve() por id/nome continua
+   * funcionando mesmo colidindo) — só fica ambíguo por apelido.
+   */
   const handleAddAlias = () => {
     const alias = aliasInput.trim();
     if (!alias || aliases.includes(alias)) return;
-    updateDevice(device.id, { aliases: [...aliases, alias] } as Partial<Device>);
-    setAliasInput('');
+
+    const engine = buildAliasEngine(devices, rooms);
+    const { collisions } = engine.confirmAlias('device', device.id, alias);
+    if (collisions.length > 0) {
+      Alert.alert(
+        'Apelido já em uso',
+        `"${alias}" também é como você chama ${collisions.map((c) => c.name).join(', ')}. Usar o mesmo apelido pode confundir comandos de voz.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Usar mesmo assim', onPress: () => saveDeviceAlias(alias) },
+        ]
+      );
+      return;
+    }
+    saveDeviceAlias(alias);
   };
 
   const handleRemoveAlias = (alias: string) => {
@@ -366,9 +413,41 @@ function RoomCard({
   allRooms: Room[];
   onUnassignAll: () => void;
 }) {
+  const { devices: allDevices, upsertRoom } = useDeviceStore();
   const { light } = useHaptic();
   const [expanded, setExpanded] = useState(false);
+  const [roomAliasInput, setRoomAliasInput] = useState('');
   const onlineCount = devices.filter((d) => d.status === 'online').length;
+  const roomAliases = room.aliases;
+
+  const saveRoomAlias = (alias: string) => {
+    upsertRoom({ ...room, aliases: [...roomAliases, alias] });
+    setRoomAliasInput('');
+  };
+
+  const handleAddRoomAlias = () => {
+    const alias = roomAliasInput.trim();
+    if (!alias || roomAliases.includes(alias)) return;
+
+    const engine = buildAliasEngine(allDevices, allRooms);
+    const { collisions } = engine.confirmAlias('room', room.id, alias);
+    if (collisions.length > 0) {
+      Alert.alert(
+        'Apelido já em uso',
+        `"${alias}" também é como você chama ${collisions.map((c) => c.name).join(', ')}. Usar o mesmo apelido pode confundir comandos de voz.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Usar mesmo assim', onPress: () => saveRoomAlias(alias) },
+        ]
+      );
+      return;
+    }
+    saveRoomAlias(alias);
+  };
+
+  const handleRemoveRoomAlias = (alias: string) => {
+    upsertRoom({ ...room, aliases: roomAliases.filter((a) => a !== alias) });
+  };
 
   return (
     <GlassCard style={styles.roomCard}>
@@ -397,6 +476,38 @@ function RoomCard({
                 ))}
             </View>
           )}
+          {/* A-033: apelidos do cômodo — mesmo padrão dos apelidos de dispositivo. */}
+          <View style={styles.aliasSection}>
+            <Text style={styles.capLabel}>Apelidos do cômodo</Text>
+            {roomAliases.length > 0 && (
+              <View style={styles.aliasChipRow}>
+                {roomAliases.map((alias) => (
+                  <Pressable
+                    key={alias}
+                    onPress={() => { light(); handleRemoveRoomAlias(alias); }}
+                    style={styles.aliasChip}
+                  >
+                    <Text style={styles.aliasChipText}>{alias} ✕</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <View style={styles.aliasAddRow}>
+              <TextInput
+                style={styles.aliasInput}
+                value={roomAliasInput}
+                onChangeText={setRoomAliasInput}
+                placeholder="Adicionar apelido..."
+                placeholderTextColor={Colors.text.muted}
+                onSubmitEditing={handleAddRoomAlias}
+                returnKeyType="done"
+              />
+              <Pressable onPress={() => { light(); handleAddRoomAlias(); }} style={styles.aliasAddBtn}>
+                <Text style={styles.aliasAddBtnText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/*
            * useDeviceStore não expõe um "removeRoom" (só upsertRoom) — o
            * cômodo em si não pode ser apagado do store canônico sem tocar
