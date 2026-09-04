@@ -503,7 +503,14 @@ const styles = StyleSheet.create({
    */
   bottomStack: {
     flex: 1,
-    justifyContent: 'flex-end',
+    // Era 'flex-end': com bottomStack ocupando todo o espaço livre de
+    // `main` e só 2 filhos (orb + overflowSection), isso colava os dois no
+    // fundo e deixava um vão vazio enorme entre o header e o orb. Corrigido
+    // ao vivo no dispositivo (#212 follow-up) — 'space-evenly' distribui o
+    // espaço livre em partes iguais: header→orb, orb→sugestões,
+    // sugestões→input, preenchendo a tela toda em vez de empurrar tudo
+    // pro rodapé.
+    justifyContent: 'space-evenly',
     paddingHorizontal: 24,
     paddingBottom: 4,
     gap: 10,
