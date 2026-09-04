@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   Switch,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as WebBrowser from 'expo-web-browser';
 
 import { useAutomationStore } from '@/stores/useAutomationStore';
 import { useArgos } from '@/hooks/useArgos';
@@ -18,6 +20,29 @@ import { useHaptic } from '@/hooks/useHaptic';
 import { SubTabBar, SubTab } from '@/components/ui/SubTabBar';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Colors } from '@/constants/colors';
+import {
+  getGoogleCalendarAuthorizeUrl,
+  fetchCalendarEvents,
+  disconnectGoogleCalendar,
+  type CalendarEventInfo,
+} from '@/services/devices/googleCalendarService';
+
+/** Mesmo esquema usado em api/_lib/googleCalendarConfig.ts (NATIVE_REDIRECT) — precisa bater. */
+const NATIVE_CALENDAR_REDIRECT = 'argos://integrations/google-calendar/callback';
+
+function formatEventTime(event: CalendarEventInfo): string {
+  if (event.allDay) return 'Dia inteiro';
+  if (!event.start) return '';
+  const date = new Date(event.start);
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function isToday(dateIso: string | null): boolean {
+  if (!dateIso) return false;
+  const d = new Date(dateIso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
 
 const TABS: SubTab[] = [
   { key: 'hoje',       label: 'Hoje',       emoji: '☀️' },
@@ -41,6 +66,72 @@ export default function AgendaScreen() {
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [reminderText, setReminderText] = useState('');
   const [reminderTime, setReminderTime] = useState('');
+
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventInfo[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarConnecting, setCalendarConnecting] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+
+  const loadCalendarEvents = useCallback(async () => {
+    setCalendarLoading(true);
+    try {
+      const { connected, events } = await fetchCalendarEvents();
+      setCalendarConnected(connected);
+      setCalendarEvents(events);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Falha ao buscar eventos.');
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
+
+  // Carrega ao abrir a tela; web também recarrega quando volta do consentimento
+  // do Google (redirect de página inteira, status=success na URL).
+  useEffect(() => {
+    void loadCalendarEvents();
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('status')) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [loadCalendarEvents]);
+
+  const handleConnectCalendar = async () => {
+    medium();
+    setCalendarError(null);
+    setCalendarConnecting(true);
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const url = await getGoogleCalendarAuthorizeUrl('web');
+        window.location.assign(url);
+        return;
+      }
+
+      const url = await getGoogleCalendarAuthorizeUrl('native');
+      const result = await WebBrowser.openAuthSessionAsync(url, NATIVE_CALENDAR_REDIRECT);
+      if (result.type === 'success') {
+        await loadCalendarEvents();
+      }
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Falha ao conectar Google Calendar.');
+    } finally {
+      setCalendarConnecting(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    medium();
+    try {
+      await disconnectGoogleCalendar();
+    } catch {
+      // silencioso — mesma convenção de handleDisconnectAlexa
+    } finally {
+      setCalendarConnected(false);
+      setCalendarEvents([]);
+    }
+  };
 
   const now = new Date();
   const dayName   = DAYS_PT[now.getDay()];
@@ -77,30 +168,86 @@ export default function AgendaScreen() {
             </GlassCard>
 
             <Text style={styles.sectionLabel}>Eventos de hoje</Text>
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>📭</Text>
-              <Text style={styles.emptyText}>
-                Nenhum evento hoje. Conecte seu Google Calendar em Calendário.
-              </Text>
-            </View>
+            {(() => {
+              const todayEvents = calendarEvents.filter((e) => isToday(e.start));
+              if (!calendarConnected) {
+                return (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyEmoji}>📭</Text>
+                    <Text style={styles.emptyText}>
+                      Nenhum evento hoje. Conecte seu Google Calendar em Calendário.
+                    </Text>
+                  </View>
+                );
+              }
+              if (todayEvents.length === 0) {
+                return (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyEmoji}>📭</Text>
+                    <Text style={styles.emptyText}>Nenhum evento hoje.</Text>
+                  </View>
+                );
+              }
+              return todayEvents.map((event) => (
+                <GlassCard key={event.id} style={styles.reminderCard}>
+                  <Text style={styles.reminderText}>{event.title}</Text>
+                  <Text style={styles.reminderTime}>🕐 {formatEventTime(event)}</Text>
+                </GlassCard>
+              ));
+            })()}
           </ScrollView>
         );
 
       case 'calendario':
         return (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <GlassCard style={styles.calendarCard}>
-              <Text style={styles.calendarTitle}>📅 Google Calendar</Text>
-              <Text style={styles.calendarDesc}>
-                Conecte seu calendário para ver eventos diretamente no Argos
-              </Text>
-              <Pressable
-                style={styles.connectBtn}
-                onPress={() => sendMessage('Como conecto meu Google Calendar com o Argos?')}
-              >
-                <Text style={styles.connectBtnText}>Conectar com Google Calendar</Text>
-              </Pressable>
-            </GlassCard>
+            {!calendarConnected ? (
+              <GlassCard style={styles.calendarCard}>
+                <Text style={styles.calendarTitle}>📅 Google Calendar</Text>
+                <Text style={styles.calendarDesc}>
+                  Conecte seu calendário para ver eventos diretamente no Argos
+                </Text>
+                {calendarError ? <Text style={styles.calendarErrorText}>{calendarError}</Text> : null}
+                <Pressable
+                  style={[styles.connectBtn, calendarConnecting && styles.connectBtnDisabled]}
+                  onPress={handleConnectCalendar}
+                  disabled={calendarConnecting}
+                >
+                  <Text style={styles.connectBtnText}>
+                    {calendarConnecting ? 'Conectando…' : 'Conectar com Google Calendar'}
+                  </Text>
+                </Pressable>
+              </GlassCard>
+            ) : (
+              <>
+                <GlassCard style={styles.calendarConnectedCard}>
+                  <Text style={styles.calendarTitle}>📅 Google Calendar conectado</Text>
+                  <Pressable style={styles.disconnectBtn} onPress={handleDisconnectCalendar}>
+                    <Text style={styles.disconnectBtnText}>Desconectar</Text>
+                  </Pressable>
+                </GlassCard>
+
+                <Text style={styles.sectionLabel}>Próximos eventos</Text>
+                {calendarLoading ? (
+                  <Text style={styles.emptyText}>Carregando…</Text>
+                ) : calendarEvents.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyEmoji}>📭</Text>
+                    <Text style={styles.emptyText}>Nenhum evento próximo.</Text>
+                  </View>
+                ) : (
+                  calendarEvents.map((event) => (
+                    <GlassCard key={event.id} style={styles.reminderCard}>
+                      <Text style={styles.reminderText}>{event.title}</Text>
+                      <Text style={styles.reminderTime}>
+                        🕐 {new Date(event.start ?? '').toLocaleDateString('pt-BR')} — {formatEventTime(event)}
+                      </Text>
+                      {event.location ? <Text style={styles.reminderTime}>📍 {event.location}</Text> : null}
+                    </GlassCard>
+                  ))
+                )}
+              </>
+            )}
           </ScrollView>
         );
 
@@ -280,6 +427,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent.primary, alignItems: 'center', width: '100%',
   },
   connectBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  connectBtnDisabled: { opacity: 0.6 },
+  calendarErrorText: { color: Colors.status.error, fontSize: 13, textAlign: 'center' },
+  calendarConnectedCard: {
+    padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  disconnectBtn: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: Colors.glass.medium, borderWidth: 1, borderColor: Colors.glass.border,
+  },
+  disconnectBtnText: { color: Colors.text.secondary, fontSize: 13, fontWeight: '600' },
 
   // Lembretes
   addBtn: {
