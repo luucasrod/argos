@@ -1,5 +1,6 @@
 /**
- * voskWakeWord.native.ts — wake word + comando ON-DEVICE via Vosk, numa fala só.
+ * voskWakeWord.native.ts — wake word + comando ON-DEVICE via Vosk, numa fala só,
+ * com STT em nuvem (Whisper) como rede de segurança pra pergunta livre.
  *
  * Arquitetura, decidida por evidência do logcat:
  *   Um único reconhecedor, sempre com GRAMÁTICA, sobre um único AudioRecord que
@@ -7,6 +8,17 @@
  *   os nomes dos dispositivos e uma lista grande de palavras-isca. Como o comando
  *   também está na gramática, "Ei Argos, desliga a luz do escritório" é reconhecido
  *   numa fala só: a wake word é localizada no texto e o resto é o comando.
+ *
+ * Desde a issue #215 (04/09/2026), o áudio bruto do trecho do comando também é
+ * guardado (services/voice/argosVoiceNative.ts, módulo nativo próprio que
+ * substitui o `SpeechService` de `react-native-vosk` — mesmo AudioRecord, mas
+ * agora também alimenta um buffer PCM em paralelo). Quando o texto que a
+ * gramática reconheceu fica vazio/curto demais pra duração da fala (a mesma
+ * heurística que já existia pra registrar tentativa suspeita), o áudio vai
+ * pro Whisper via `api/transcribe.ts` (endpoint que JÁ EXISTIA, usado pelo
+ * fluxo de toque-no-orb) e o texto que volta de lá substitui o da gramática.
+ * Comando comum ("liga a luz") nunca passa por aqui — a gramática já acerta,
+ * mais rápido e sem custo de rede.
  *
  * Histórico das tentativas, para não repetir:
  *   1. Gramática com 3 entradas: detectava, mas qualquer ruído escorregava para a
@@ -20,10 +32,11 @@
  *
  * Vosk é Apache 2.0 — uso comercial ilimitado, sem chave nem conta.
  */
-import * as Vosk from 'react-native-vosk';
+import * as Vosk from '@/services/voice/argosVoiceNative';
 import type { EventSubscription } from 'react-native';
 import { perfStart } from '@/services/voice/perfLog';
 import { recordSuspiciousAttempt } from '@/services/voice/suspiciousVoiceAttempts';
+import { transcribeCommandAudio } from '@/services/voice/commandAudioTranscribe.native';
 
 const MODEL_PATH = 'model-pt';
 const DIACRITICS_RE = /[̀-ͯ]/g;
@@ -340,6 +353,14 @@ let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCommand = '';
 /** Quando a captura do comando começou (armed virou true), para medir duração. */
 let armedAt = 0;
+/**
+ * `true` enquanto `submit()` está esperando o Whisper (até TIMEOUT_MS em
+ * commandAudioTranscribe.native.ts). `armed` só vira `false` no FIM do
+ * submit(), então sem esta trava, áudio novo chegando durante a espera (ex.:
+ * a pessoa já chamando de novo) seria tratado como continuação do comando
+ * antigo, e podia até disparar um segundo submit() por cima do primeiro.
+ */
+let submitting = false;
 
 /*
  * A-044: heurísticas para registrar tentativas de voz provavelmente mal
@@ -374,32 +395,72 @@ function clearSilence(): void {
 
 function resetUtterance(): void {
   clearSilence();
+  if (armed) Vosk.cancelCommandCapture();
   armed = false;
   committed = '';
   partial = '';
   lastCommand = '';
 }
 
-function submit(): void {
-  const text = currentCommand();
+async function submit(): Promise<void> {
+  if (submitting) return;
+  submitting = true;
+  try {
+    await submitLocked();
+  } finally {
+    submitting = false;
+  }
+}
+
+async function submitLocked(): Promise<void> {
+  const grammarText = currentCommand();
   const now = Date.now();
   const speechMs = armedAt ? now - armedAt : 0;
-  vlog('ENVIANDO comando: "' + text + '"');
+  vlog('gramatica reconheceu: "' + grammarText + '" (' + speechMs + 'ms de fala)');
   perfStart('fim_da_fala (silencio detectado)');
 
-  if (speechMs >= SUSPICIOUS_MIN_SPEECH_MS && text.length <= SUSPICIOUS_MAX_CHARS) {
-    void recordSuspiciousAttempt({ text, speechMs, reason: 'curta_para_duracao' });
+  // Mesma heurística que já existia só pra registrar tentativa suspeita (ver
+  // SUSPICIOUS_* acima) — reaproveitada agora pra decidir quando vale a pena
+  // tentar o Whisper. Texto vazio também cai aqui (0 <= SUSPICIOUS_MAX_CHARS).
+  const suspicious = speechMs >= SUSPICIOUS_MIN_SPEECH_MS && grammarText.length <= SUSPICIOUS_MAX_CHARS;
+  if (grammarText.length > 0 && suspicious) {
+    void recordSuspiciousAttempt({ text: grammarText, speechMs, reason: 'curta_para_duracao' });
   } else if (
-    text &&
+    grammarText &&
     lastSubmitAt &&
     now - lastSubmitAt <= REFORMULATION_WINDOW_MS &&
-    text !== lastSubmitText
+    grammarText !== lastSubmitText
   ) {
-    void recordSuspiciousAttempt({ text, speechMs, reason: 'reformulacao_rapida' });
+    void recordSuspiciousAttempt({ text: grammarText, speechMs, reason: 'reformulacao_rapida' });
   }
   lastSubmitAt = now;
-  lastSubmitText = text;
+  lastSubmitText = grammarText;
 
+  let text = grammarText;
+  if (suspicious) {
+    try {
+      const audioBase64 = await Vosk.getCommandAudioBase64();
+      const cloudText = await transcribeCommandAudio(audioBase64);
+      if (cloudText) {
+        vlog('whisper reconheceu: "' + cloudText + '"');
+        text = cloudText;
+      }
+    } catch (e) {
+      // Sem rede, sem sessão, ou endpoint fora do ar: fica com o texto da
+      // gramática mesmo (que pode ser vazio) — silencioso de propósito, mesmo
+      // padrão do fallback de TTS quando a cota acaba. Melhor responder errado
+      // do que travar esperando a nuvem.
+      vlog('whisper falhou, mantendo texto da gramatica: ' + String(e));
+    }
+  } else {
+    Vosk.cancelCommandCapture();
+  }
+
+  // A espera pelo Whisper pode ter atravessado um stop/cancelamento — não
+  // entrega comando de uma sessão que a UI já encerrou.
+  if (!listening) return;
+
+  vlog('ENVIANDO comando: "' + text + '"');
   resetUtterance();
   onCommandText?.(text);
 }
@@ -408,7 +469,7 @@ function armSilence(ms: number): void {
   clearSilence();
   silenceTimer = setTimeout(() => {
     silenceTimer = null;
-    if (armed) submit();
+    if (armed) void submit();
   }, ms);
 }
 
@@ -425,7 +486,7 @@ function vlog(msg: string): void {
 
 /** Processa uma transcrição (parcial ou final) do reconhecedor. */
 function handle(raw: string, isFinal: boolean): void {
-  if (!listening || suspended) return;
+  if (!listening || suspended || submitting) return;
 
   const heard = normalize(textOf(raw));
   if (heard) {
@@ -446,6 +507,10 @@ function handle(raw: string, isFinal: boolean): void {
     armedAt = Date.now();
     committed = '';
     partial = heard.slice(end).trim();
+    // Guarda o áudio bruto a partir daqui — só é usado se a gramática não
+    // der conta (ver submit()), mas precisa começar já, senão o começo do
+    // comando fica de fora do que manda pro Whisper.
+    Vosk.armCommandCapture();
     // Bipe imediato: a pessoa precisa saber que foi ouvida antes de continuar.
     onWake?.();
     if (isFinal) {
@@ -514,25 +579,33 @@ async function ensureModel(): Promise<boolean> {
 }
 
 /**
- * (Re)inicia o reconhecedor em texto livre, com retentativa: a liberação do
- * AudioRecord pelo nativo não é instantânea, então a primeira tentativa logo
- * após um stop pode falhar com o microfone ainda ocupado.
+ * Inicia o reconhecedor nativo, com retentativa: a liberação do AudioRecord
+ * pelo nativo não é instantânea, então a primeira tentativa logo após um stop
+ * pode falhar com o microfone ainda ocupado.
+ *
+ * Ao contrário do `react-native-vosk` antigo, o módulo nativo próprio
+ * (issue #215) NUNCA para o `AudioRecord`/a thread de leitura sozinho — só
+ * paramos explicitamente em `suspendVoskWakeWord`/`stopVoskWakeWord`. Por
+ * isso isto só precisa ser chamado ao entrar em cena e ao retomar de uma
+ * suspensão, nunca no meio de uma sessão de escuta.
  */
-async function restart(attempt = 0): Promise<void> {
-  if (!listening || suspended) return;
+async function startRecognizer(attempt = 0): Promise<boolean> {
+  if (!listening || suspended) return false;
   try {
     // SEMPRE com gramática: em texto livre o modelo pequeno nunca produz "argos"
     // (comprovado no log). A gramática é o que força o reconhecimento.
     await Vosk.start({ grammar });
     vlog('start OK (' + grammar.length + ' entradas)' + (attempt ? ' tentativa ' + (attempt + 1) : ''));
+    return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     vlog('start FALHOU tentativa ' + (attempt + 1) + ': ' + msg);
     if (attempt < 5) {
       await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
-      return restart(attempt + 1);
+      return startRecognizer(attempt + 1);
     }
     vlog('start desistiu apos 6 tentativas - microfone morto');
+    return false;
   }
 }
 
@@ -562,33 +635,18 @@ export async function startVoskWakeWord(opts: {
   subs.push(Vosk.onPartialResult((e) => handle(e, false)));
   subs.push(Vosk.onResult((e) => handle(e, true)));
   subs.push(
-    Vosk.onFinalResult((e) => {
-      handle(e, true);
-      void restart();
-    })
-  );
-  subs.push(
-    Vosk.onTimeout(() => {
-      if (armed) submit();
-      void restart();
-    })
-  );
-  subs.push(
     Vosk.onError((e) => {
       vlog('onError: ' + String(e));
       resetUtterance();
-      void restart();
     })
   );
 
-  try {
-    await Vosk.start({ grammar });
-    return true;
-  } catch {
+  const ok = await startRecognizer();
+  if (!ok) {
     listening = false;
     clearSubs();
-    return false;
   }
+  return ok;
 }
 
 /**
@@ -601,6 +659,7 @@ export function armVoskUtterance(): boolean {
   resetUtterance();
   armed = true;
   armedAt = Date.now();
+  Vosk.armCommandCapture();
   armSilence(AWAIT_COMMAND_MS);
   return true;
 }
@@ -626,7 +685,7 @@ export function suspendVoskWakeWord(): void {
 export function resumeVoskWakeWord(): void {
   if (!listening || !suspended) return;
   suspended = false;
-  void restart();
+  void startRecognizer();
 }
 
 export async function stopVoskWakeWord(): Promise<void> {
