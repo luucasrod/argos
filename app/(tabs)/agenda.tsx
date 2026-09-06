@@ -30,6 +30,24 @@ import {
 /** Mesmo esquema usado em api/_lib/googleCalendarConfig.ts (NATIVE_REDIRECT) — precisa bater. */
 const NATIVE_CALENDAR_REDIRECT = 'argos://integrations/google-calendar/callback';
 
+/**
+ * Evento `allDay` chega como data civil "YYYY-MM-DD" (sem hora/fuso) — a API
+ * do Google Calendar manda `date`, não `dateTime`, pra esses. `new Date(...)`
+ * nessa string interpreta como meia-noite UTC, e em fuso negativo (Brasil,
+ * UTC-3) isso vira o dia ANTERIOR na hora local. Ler ano/mês/dia direto da
+ * string evita a conversão de fuso inteira — não tem hora real pra converter.
+ */
+function parseCivilDate(dateIso: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateIso);
+  if (!match) return null;
+  return { year: Number(match[1]), month: Number(match[2]) - 1, day: Number(match[3]) };
+}
+
+/** Número inteiro de dias desde a época — só pra comparar datas civis entre si, sem fuso. */
+function civilDayNumber(civil: { year: number; month: number; day: number }): number {
+  return Date.UTC(civil.year, civil.month, civil.day) / 86400000;
+}
+
 function formatEventTime(event: CalendarEventInfo): string {
   if (event.allDay) return 'Dia inteiro';
   if (!event.start) return '';
@@ -37,11 +55,51 @@ function formatEventTime(event: CalendarEventInfo): string {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function isToday(dateIso: string | null): boolean {
-  if (!dateIso) return false;
-  const d = new Date(dateIso);
+function isToday(event: CalendarEventInfo): boolean {
+  if (!event.start) return false;
   const now = new Date();
+  if (event.allDay) {
+    const startCivil = parseCivilDate(event.start);
+    if (!startCivil) return false;
+    const todayDay = civilDayNumber({ year: now.getFullYear(), month: now.getMonth(), day: now.getDate() });
+    const startDay = civilDayNumber(startCivil);
+    // `end` do Google Calendar pra evento de dia inteiro é EXCLUSIVO (um
+    // evento de 1 dia só tem end = start + 1) — sem isso, evento de vários
+    // dias que começou ontem não aparecia mais em "hoje" no meio dele.
+    const endCivil = event.end ? parseCivilDate(event.end) : null;
+    const endDayExclusive = endCivil ? civilDayNumber(endCivil) : startDay + 1;
+    return todayDay >= startDay && todayDay < endDayExclusive;
+  }
+  const d = new Date(event.start);
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+function formatEventDate(event: CalendarEventInfo): string {
+  if (!event.start) return '';
+  if (event.allDay) {
+    const civil = parseCivilDate(event.start);
+    if (!civil) return '';
+    return new Date(civil.year, civil.month, civil.day).toLocaleDateString('pt-BR');
+  }
+  return new Date(event.start).toLocaleDateString('pt-BR');
+}
+
+/**
+ * Extrai a query string de uma URL sem depender de `URL`/`URLSearchParams`
+ * globais — não garantidos no Hermes nativo sem polyfill, e o resultado do
+ * `WebBrowser.openAuthSessionAsync` precisa ser lido nos dois lados (web via
+ * `window.location`, nativo via `result.url`).
+ */
+function parseQueryParams(url: string): Record<string, string> {
+  const query = url.split('?')[1]?.split('#')[0];
+  if (!query) return {};
+  const params: Record<string, string> = {};
+  for (const pair of query.split('&')) {
+    const [rawKey, rawValue = ''] = pair.split('=');
+    if (!rawKey) continue;
+    params[decodeURIComponent(rawKey)] = decodeURIComponent(rawValue.replace(/\+/g, ' '));
+  }
+  return params;
 }
 
 const TABS: SubTab[] = [
@@ -91,8 +149,11 @@ export default function AgendaScreen() {
   useEffect(() => {
     void loadCalendarEvents();
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('status')) {
+      const params = parseQueryParams(window.location.href);
+      if (params.status) {
+        if (params.status === 'error') {
+          setCalendarError(params.message || 'Falha ao conectar Google Calendar.');
+        }
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
@@ -111,8 +172,18 @@ export default function AgendaScreen() {
 
       const url = await getGoogleCalendarAuthorizeUrl('native');
       const result = await WebBrowser.openAuthSessionAsync(url, NATIVE_CALENDAR_REDIRECT);
-      if (result.type === 'success') {
-        await loadCalendarEvents();
+      // `result.type === 'success'` só confirma que o navegador voltou pro
+      // esquema argos:// — não que o Google/nosso callback deram certo. O
+      // backend redireciona com status=error&message=... tanto pra recusa do
+      // usuário quanto pra falha na troca do código; sem ler isso, um erro
+      // real era mostrado como conexão concluída.
+      if (result.type === 'success' && result.url) {
+        const params = parseQueryParams(result.url);
+        if (params.status === 'error') {
+          setCalendarError(params.message || 'Falha ao conectar Google Calendar.');
+        } else {
+          await loadCalendarEvents();
+        }
       }
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Falha ao conectar Google Calendar.');
@@ -125,11 +196,14 @@ export default function AgendaScreen() {
     medium();
     try {
       await disconnectGoogleCalendar();
-    } catch {
-      // silencioso — mesma convenção de handleDisconnectAlexa
-    } finally {
+      // Só limpa o estado depois do servidor confirmar — em erro (offline,
+      // 401, 502) a conta continua vinculada lá, e mostrar "desconectado"
+      // aqui enganaria o usuário sobre o vínculo real.
+      setCalendarError(null);
       setCalendarConnected(false);
       setCalendarEvents([]);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Falha ao desconectar Google Calendar.');
     }
   };
 
@@ -169,7 +243,7 @@ export default function AgendaScreen() {
 
             <Text style={styles.sectionLabel}>Eventos de hoje</Text>
             {(() => {
-              const todayEvents = calendarEvents.filter((e) => isToday(e.start));
+              const todayEvents = calendarEvents.filter(isToday);
               if (!calendarConnected) {
                 return (
                   <View style={styles.emptyState}>
@@ -226,6 +300,7 @@ export default function AgendaScreen() {
                     <Text style={styles.disconnectBtnText}>Desconectar</Text>
                   </Pressable>
                 </GlassCard>
+                {calendarError ? <Text style={styles.calendarErrorText}>{calendarError}</Text> : null}
 
                 <Text style={styles.sectionLabel}>Próximos eventos</Text>
                 {calendarLoading ? (
@@ -240,7 +315,7 @@ export default function AgendaScreen() {
                     <GlassCard key={event.id} style={styles.reminderCard}>
                       <Text style={styles.reminderText}>{event.title}</Text>
                       <Text style={styles.reminderTime}>
-                        🕐 {new Date(event.start ?? '').toLocaleDateString('pt-BR')} — {formatEventTime(event)}
+                        🕐 {formatEventDate(event)} — {formatEventTime(event)}
                       </Text>
                       {event.location ? <Text style={styles.reminderTime}>📍 {event.location}</Text> : null}
                     </GlassCard>
