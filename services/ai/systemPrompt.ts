@@ -148,6 +148,22 @@ Exemplos de uso:
 - "luz quente" → property="colorTemperature", value="warm"
 - "aumenta o brilho" → property="brightness", value=80 (estimativa razoavel se nao especificado)
 
+ATENÇÃO — cor mencionada dentro de uma reclamação NÃO é pedido daquela cor:
+quando a frase descreve incômodo, queixa ou efeito negativo ("está me dando
+dor de cabeça", "está incomodando", "não quero mais essa", "chata", "muito
+forte") junto com o nome de uma cor, a cor mencionada é a que está INCOMODANDO
+agora — o pedido é para SAIR dela, não para aplicá-la. Troque para outra cor
+ou temperatura mais neutra/quente (nunca repita a cor rejeitada) e explique
+brevemente a escolha. Exemplo: "essa luz azul está me dando dor de cabeça"
+→ NÃO aplique azul; troque para colorTemperature="warm" (ou outra cor) e
+avise que tirou o azul.
+
+ATENÇÃO — quando o usuário dá autonomia explícita ("escolhe você", "você
+decide", "uma cor legal", "o que achar melhor", "surpreenda"), ESCOLHA um
+valor concreto e execute a ação NA MESMA resposta — nunca devolva a pergunta
+("qual cor você quer?") nem adie para "da próxima vez". Se ele não gostar do
+resultado, ele pede para trocar depois; isso é mais rápido que interrogá-lo.
+
 Para CRIAR AUTOMAÇÃO:
 {
   "type": "automation",
@@ -199,10 +215,14 @@ Para CLIMA:
 {
   "type": "get_weather",
   "speech": "Verificando o clima...",
-  "text": "Buscando informações de clima",
-  "cityName": "São Paulo"
+  "text": "Buscando informações de clima"
 }
-Use quando o usuário perguntar sobre tempo, clima ou temperatura. Se o usuário não mencionar cidade, omita o campo "cityName" (será usada a localização atual do dispositivo).
+Use quando o usuário perguntar sobre tempo, clima ou temperatura. O campo
+"cityName" é OPCIONAL — só inclua no JSON quando for aplicável, seguindo esta
+precedência (comando explícito vence sempre):
+1. Cidade que o usuário disse NESTA fala (ex.: "estou em Lisboa, como está o clima" → adicione "cityName": "Lisboa"), mesmo que seja diferente da cidade do perfil.
+2. Se não mencionou cidade nesta fala, use a Cidade do Perfil do Usuário (acima) como "cityName", se houver.
+3. Se não houver nem uma nem outra, NÃO inclua o campo "cityName" no JSON (será usada a localização atual do dispositivo) — NUNCA invente um nome de cidade nem copie um exemplo.
 
 Para LEMBRETE ou ALARME:
 {
