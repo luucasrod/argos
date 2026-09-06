@@ -8,7 +8,7 @@ import {
   alexaListDevices,
   alexaControlDevice,
   buildAlexaAction,
-} from './_lib/amazon';
+} from '../amazon';
 
 const REDIRECT_URI = 'https://argos-blue.vercel.app/integrations/amazon/callback';
 
@@ -18,7 +18,7 @@ function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function amazonHandler(req: VercelRequest, res: VercelResponse) {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 

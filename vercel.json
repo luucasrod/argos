@@ -5,6 +5,14 @@
   "installCommand": "npm install",
   "framework": null,
   "rewrites": [
+    { "source": "/api/wiz", "destination": "/api/devices/wiz" },
+    { "source": "/api/tapo", "destination": "/api/devices/tapo" },
+    { "source": "/api/amazon", "destination": "/api/devices/amazon" },
+    { "source": "/api/chrome", "destination": "/api/devices/chrome" },
+    { "source": "/api/ewelink", "destination": "/api/devices/ewelink" },
+    { "source": "/api/tuya", "destination": "/api/devices/tuya" },
+    { "source": "/api/xiaomi", "destination": "/api/devices/xiaomi" },
+    { "source": "/api/xiaomi-pet", "destination": "/api/devices/xiaomi-pet" },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/((?!_expo|assets|favicon|manifest\\.json|sw\\.js|offline\\.html|api).*)", "destination": "/index.html" }
   ],

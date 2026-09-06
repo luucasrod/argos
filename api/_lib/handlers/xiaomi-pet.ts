@@ -9,12 +9,12 @@ import {
   xiaomiSetProperty,
   getXiaomiAccount,
   supabaseAsUser,
-} from './_lib/xiaomi';
+} from '../xiaomi';
 import {
   xiaomiGetPetSpec,
   detectPetDeviceType,
   XiaomiPetDeviceDto,
-} from './_lib/xiaomi-pet';
+} from '../xiaomi-pet';
 
 function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,7 +22,7 @@ function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function xiaomiPetHandler(req: VercelRequest, res: VercelResponse) {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 

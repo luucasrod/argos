@@ -19,7 +19,7 @@ import {
   hexToTuyaHsv,
   tempNameToTuya,
   type TuyaCredentials,
-} from './_lib/tuya';
+} from '../tuya';
 
 /*
  * Nem toda lâmpada Tuya usa o código `switch_led` para ligar/desligar — alguns
@@ -64,7 +64,7 @@ async function resolveTuyaCredentials(userId: string, userToken: string): Promis
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function tuyaHandler(req: VercelRequest, res: VercelResponse) {
   const action = req.query.action as string | undefined;
 
   if (req.method === 'OPTIONS') {
