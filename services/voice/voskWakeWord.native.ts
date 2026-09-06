@@ -382,6 +382,19 @@ const REFORMULATION_WINDOW_MS = 15000;
 let lastSubmitAt = 0;
 let lastSubmitText = '';
 
+/**
+ * Incrementado a cada `resetUtterance()` — cancelamento, stop, suspend ou
+ * rearmar uma fala nova. `submitLocked()` guarda o valor no início e só
+ * entrega o comando se ninguém resetou a fala nesse meio tempo.
+ *
+ * Sem isto, só checar `listening` não bastava (achado na revisão cruzada do
+ * PR #224): `cancel` + novo `start` antes do Whisper resolver deixava
+ * `listening` true de novo, e o texto da fala JÁ CANCELADA era entregue como
+ * se fosse da fala nova — inclusive resetando o estado da fala nova por
+ * cima ao chamar `resetUtterance()` de novo no fim do submit antigo.
+ */
+let utteranceGeneration = 0;
+
 function currentCommand(): string {
   return (committed + ' ' + partial).replace(/\s+/g, ' ').trim();
 }
@@ -394,6 +407,7 @@ function clearSilence(): void {
 }
 
 function resetUtterance(): void {
+  utteranceGeneration += 1;
   clearSilence();
   if (armed) Vosk.cancelCommandCapture();
   armed = false;
@@ -413,6 +427,7 @@ async function submit(): Promise<void> {
 }
 
 async function submitLocked(): Promise<void> {
+  const generation = utteranceGeneration;
   const grammarText = currentCommand();
   const now = Date.now();
   const speechMs = armedAt ? now - armedAt : 0;
@@ -456,9 +471,10 @@ async function submitLocked(): Promise<void> {
     Vosk.cancelCommandCapture();
   }
 
-  // A espera pelo Whisper pode ter atravessado um stop/cancelamento — não
-  // entrega comando de uma sessão que a UI já encerrou.
-  if (!listening) return;
+  // A espera pelo Whisper pode ter atravessado um stop/cancelamento/rearme —
+  // não entrega comando de uma sessão que a UI já encerrou, nem de uma fala
+  // que já foi substituída por outra mais nova (ver utteranceGeneration).
+  if (!listening || generation !== utteranceGeneration) return;
 
   vlog('ENVIANDO comando: "' + text + '"');
   resetUtterance();

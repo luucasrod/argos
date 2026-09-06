@@ -56,6 +56,7 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   private var audioRecord: AudioRecord? = null
   @Volatile private var running = false
   @Volatile private var capturing = false
+  @Volatile private var recordThread: Thread? = null
   private val commandBuffer = ByteArrayOutputStream()
   private val bufferLock = Object()
 
@@ -142,7 +143,7 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
       audioRecord = rec
       rec.startRecording()
       running = true
-      thread(name = "ArgosVoiceLoop") { recordLoop() }
+      recordThread = thread(name = "ArgosVoiceLoop") { recordLoop() }
       promise.resolve("ok")
     } catch (e: Exception) {
       cleanup()
@@ -245,6 +246,24 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     cleanup()
   }
 
+  /**
+   * Ordem importa aqui — resolve race condition apontada na revisão cruzada
+   * do PR #224: antes, `cleanup()` fechava `recognizer`/`audioRecord` sem
+   * esperar a thread do `recordLoop()` sair de fato do `while (running)`. Ela
+   * podia estar dentro de `acceptWaveForm()` com uma referência LOCAL (`val r`)
+   * pro recognizer antigo — chamar método nativo num `Recognizer` já fechado
+   * é undefined behavior no JNI do Vosk (crash), não uma exceção Kotlin que
+   * o `try/catch` do loop pegaria. Start/stop rápido também deixava a thread
+   * antiga viva o suficiente pra usar a instância nova.
+   *
+   * 1. `audioRecord.stop()` primeiro — desbloqueia um `read()` pendente na
+   *    thread do loop (padrão documentado do Android: parar a gravação faz
+   *    `read()` retornar, não trava esperando dado que nunca vem).
+   * 2. Só DEPOIS espera a thread terminar (`join`) — agora ela sai rápido,
+   *    porque o `read()` que a prendia já retornou e `running` é `false`.
+   * 3. Com a thread garantidamente morta, libera `audioRecord`/`recognizer`.
+   *    Nenhuma outra thread pode estar usando os dois nesse ponto.
+   */
   private fun cleanup() {
     running = false
     capturing = false
@@ -252,6 +271,15 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
       audioRecord?.stop()
     } catch (e: Exception) {
       // já parado, ou nunca chegou a iniciar — sem problema.
+    }
+    val thread = recordThread
+    recordThread = null
+    if (thread != null && thread !== Thread.currentThread()) {
+      try {
+        thread.join(1000)
+      } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
+      }
     }
     audioRecord?.release()
     audioRecord = null
