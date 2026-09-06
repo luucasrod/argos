@@ -14,6 +14,7 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlin.concurrent.thread
+import org.json.JSONArray
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.StorageService
@@ -89,15 +90,20 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  /** Gramática no formato que `Recognizer` espera: `["palavra1", "palavra2", ...]`. */
+  /**
+   * Gramática no formato que `Recognizer` espera: `["palavra1", "palavra2", ...]`.
+   * `JSONArray` de verdade, não concatenação de string — a gramática inclui
+   * `extraPhrases` com nomes reais de dispositivo/cômodo (ver
+   * `services/voice/voskWakeWord.native.ts`), e um nome com `"` ou `\` dentro
+   * quebrava o JSON manual e derrubava `start()` (achado na revisão cruzada
+   * do PR #224).
+   */
   private fun grammarToJson(arr: ReadableArray): String {
-    val sb = StringBuilder("[")
+    val json = JSONArray()
     for (i in 0 until arr.size()) {
-      if (i > 0) sb.append(", ")
-      sb.append('"').append(arr.getString(i)).append('"')
+      json.put(arr.getString(i))
     }
-    sb.append(']')
-    return sb.toString()
+    return json.toString()
   }
 
   @ReactMethod

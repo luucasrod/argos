@@ -119,18 +119,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  /*
-   * GET = diagnóstico. Igual ao de api/tts.ts: sem isto, a única forma de
-   * saber se a chave está configurada é ouvir o app — e a queda pro texto da
-   * gramática do Vosk é silenciosa de propósito (ver
-   * services/voice/voskWakeWord.native.ts), então uma chave ausente parece
-   * "o Argos continua não entendendo", sem pista de qual é a causa. Nunca
-   * devolve a chave, só se ela existe.
-   */
-  if (req.method === 'GET') {
-    return res.status(200).json({ openai_configured: !!OPENAI_API_KEY });
-  }
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
