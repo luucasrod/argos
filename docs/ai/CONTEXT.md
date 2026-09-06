@@ -182,6 +182,34 @@ build + instalação real + logcat provam.
 
 ---
 
+## `api/` — limite de Serverless Functions (Vercel Hobby)
+
+O plano Hobby só permite **12 Serverless Functions por deployment** — cada
+arquivo direto em `api/` conta como uma. Em 04/09/2026 o projeto chegou a
+**14** e todo deploy passou a falhar com:
+
+```
+Error: No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan.
+```
+
+`npx vercel deploy --prod` sem `--debug` mostra só `"Not authorized"` —
+mensagem genérica que não tem nada a ver com autenticação. **Sempre rodar
+com `--debug` quando um deploy falhar sem motivo óbvio.**
+
+Solução: rotas que fazem a mesma coisa (proxy de integração de aparelho)
+viram **uma rota dinâmica só**. `api/devices/[provider].ts` despacha por
+`req.query.provider` pra handlers que moraram em `api/_lib/handlers/*.ts`
+(fora de `api/`, não conta como função própria). URLs antigas (`/api/wiz`,
+`/api/tapo`, etc.) continuam funcionando via `rewrites` no `vercel.json` —
+nenhum client precisou mudar. `api/ewelink.ts` já usava essa mesma ideia
+internamente (`?action=`) antes de virar rota dinâmica também.
+
+⚠️ **Ao adicionar um arquivo novo direto em `api/`**, contar quantos existem
+(`find api -maxdepth 1 -name "*.ts" | wc -l`) antes de imaginar que "só mais
+um arquivo" é inofensivo — o teto de 12 volta rápido.
+
+---
+
 ## Voz de saída (TTS)
 
 - Neural via **ElevenLabs** (`eleven_flash_v2_5`), com queda **silenciosa** para
@@ -202,6 +230,17 @@ build + instalação real + logcat provam.
   `pickVoiceForPersonality` devolve `null`, o app usa a voz padrão (feminina) e
   aplica `pitch = 0.72`. É isso que soa robótico — voz feminina com tom forçado
   para baixo.
+- **Sotaque troca sozinho pra PT-PT no meio de uma conversa em pt-BR**
+  (relatado 06/09/2026, ainda sem causa raiz confirmada — issue #B-044).
+  Hipótese: o modelo multilíngue (`eleven_flash_v2_5`) infere sotaque pelo
+  CONTEÚDO do texto (ex.: nome de cidade portuguesa como "Leiria"), não por
+  parâmetro fixo. **Tentativa que NÃO foi feita** por risco: adicionar
+  `language_code: 'pt'` no request — a doc da ElevenLabs só confirma que
+  esse campo **não** funciona no `multilingual_v2`, nada diz sobre o
+  `eleven_flash_v2_5` real usado aqui, e só aceita ISO 639-1 de 2 letras
+  (não distingue pt-BR de pt-PT mesmo se funcionasse). Se a API rejeitar o
+  campo, o TTS inteiro cai pro Azure/sistema — trocaria um bug raro por
+  perder a voz premium sempre. Não tentar sem ouvir o resultado no aparelho.
 
 ---
 
@@ -230,6 +269,37 @@ build + instalação real + logcat provam.
 - **Canal de OTA.** Build local não herda o canal do EAS. Sem
   `expo-channel-name` em `updates.requestHeaders` (`app.json`), nenhum OTA
   chega ao aparelho.
+- **`GlassCard` + `flexDirection: 'row'` no `style` passado por fora colapsa
+  os filhos.** `components/ui/GlassCard.tsx` aplica o `style` recebido no
+  View EXTERNO (`container`), mas quem envolve os `children` é um View
+  INTERNO (`content`) sem `flex` próprio. `content`, como filho único de um
+  `container` em modo linha, não herda a largura do pai — `stretch`
+  (comportamento padrão do RN) só vale no eixo CRUZADO, que em `row` é
+  altura, não largura. Sem `flex`/`width` explícito, `content` colapsa pro
+  tamanho mínimo dos filhos, e qualquer filho com `flex: 1` lá dentro (um
+  `TextInput`, por exemplo) encolhe a quase zero — foi assim que o
+  placeholder da caixa de texto da Home "sumiu" (#A-065): o `TextInput` não
+  tinha onde renderizar. Dois jeitos de evitar: (1) não passar
+  `flexDirection: 'row'` pro `GlassCard` — se os filhos já se organizam em
+  linha por conta própria (um `<View style={{flexDirection:'row'}}>`
+  manual, como em `conversar.tsx`), deixar o `GlassCard` em coluna padrão
+  resolve, porque aí o `stretch` padrão já cobre a largura; (2) se
+  precisar mesmo do `container` em linha, dar `flex: 1` pro wrapper
+  interno também. `app/(tabs)/index.tsx` tinha as duas coisas ao mesmo
+  tempo (row no `GlassCard` E um wrapper manual em row por dentro) —
+  redundante e foi isso que colapsou.
+- **Exemplo literal em few-shot do prompt vaza pro output real.** O
+  schema JSON do intent `get_weather` em `services/ai/systemPrompt.ts`
+  tinha `"cityName": "São Paulo"` como exemplo — quando o modelo não tinha
+  certeza da cidade (usuário mencionou uma cidade que o parser não
+  reconheceu, ou não mencionou nenhuma), ele **ecoava o valor do exemplo**
+  em vez de seguir a instrução em texto ("se não mencionar, omita o
+  campo"). Confirmado em teste real (06/09/2026): perguntar o clima em
+  Santarém devolveu o clima de São Paulo. → **Nunca colocar um valor
+  plausível e específico como exemplo de um campo opcional/derivado da
+  fala** — mostrar o JSON de exemplo SEM o campo, e descrever a regra de
+  quando incluí-lo à parte. Vale para qualquer campo parecido que for
+  adicionado no futuro (nome de cidade, nome de dispositivo, valor livre).
 
 ---
 
@@ -261,3 +331,6 @@ build + instalação real + logcat provam.
 | Wake word com tela apagada | Nunca verificado |
 | Bipe de confirmação | O código diz que dispara; o usuário só sente a vibração. Verificar no logcat antes de assumir que funciona |
 | Segurança no Supabase | Há tabelas com RLS desligado. Detalhes **fora deste arquivo** (repo público) — perguntar ao usuário |
+| ⚠️ Produção do Vercel à frente do git | Em 06/09/2026 a consolidação de `api/` (14→7 arquivos, ver seção acima) foi deployada em produção (`npm run deploy`) a partir de uma branch que ainda **não estava mergeada** em `experimento-grande`. Quem rodar `npm run deploy` de novo a partir de um checkout de `experimento-grande` sem essa consolidação **reverte produção pros 14 arquivos e quebra o deploy de novo**. Mergear essa branch é prioridade antes do próximo deploy de qualquer pessoa |
+| Módulo nativo de áudio próprio + STT em nuvem (Whisper) | Implementado (issue #215: `ArgosVoiceModule.kt` substitui o `SpeechService` de `react-native-vosk`, comando em pergunta livre cai no `api/transcribe.ts` já existente) mas **ainda numa branch separada, sem PR aberto** — não documentado aqui como arquitetura corrente até integrar, conforme a regra deste arquivo (mudança de branch não vale antes do merge) |
+| Sotaque PT-PT aparecendo sozinho (TTS) | #B-044, ver seção de TTS acima — investigado, tentativa óbvia descartada por risco, sem correção ainda |
