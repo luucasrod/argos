@@ -18,7 +18,7 @@ import {
   getValidAccessToken,
   ewelinkRequest,
   supabaseAsUser,
-} from './_lib/ewelink';
+} from '../ewelink';
 
 function cors(res: VercelResponse, methods: string) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,7 +26,7 @@ function cors(res: VercelResponse, methods: string) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function ewelinkHandler(req: VercelRequest, res: VercelResponse) {
   const action = req.query.action as string | undefined;
 
   if (req.method === 'OPTIONS') {

@@ -12,7 +12,7 @@ import {
   listChromeDevices,
   refreshAccessToken,
   supabaseAdmin,
-} from './_lib/chrome';
+} from '../chrome';
 
 function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,7 +20,7 @@ function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function chromeHandler(req: VercelRequest, res: VercelResponse) {
   cors(res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
