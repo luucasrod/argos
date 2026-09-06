@@ -53,12 +53,49 @@ clarificação; inferência nunca sobrepõe uma instrução explícita.
 
 Um **único `AudioRecord`, sempre com gramática, que nunca é fechado**.
 
-- **Vosk** (`react-native-vosk`), modelo pt em `assets/model-pt` (~45 MB)
+- **Módulo nativo próprio `ArgosVoice`** (issue #215, `plugins/native/ArgosVoiceModule.kt`,
+  injetado via `plugins/withArgosVoiceModule.js`) — substitui o `SpeechService`
+  de `react-native-vosk`. É dono direto do `AudioRecord` e chama
+  `org.vosk.Recognizer.acceptWaveForm()` (API pública de baixo nível do Vosk,
+  o mesmo que o `SpeechService` chama por baixo) numa thread própria que
+  **nunca para** enquanto a escuta estiver ativa — sem restart por utterance
+  como o `SpeechService` antigo exigia.
+- Modelo pt em `assets/model-pt` (~45 MB), carregado por esse módulo
 - Gramática de ~165 entradas: wake word + comandos + nomes de aparelho + iscas
 - Aceita: `ei/ola/ok/oi argos` (prefixo) ou `argos escuta/acorda` (sufixo)
-- O comando sai da **mesma fala**, após a wake word. Corte por 1,2 s de silêncio
+- O comando sai da **mesma fala**, após a wake word. Corte por ~1s de silêncio
 - Bipe e vibração disparam **de dentro do serviço**, não do React
 - Foreground service (`react-native-background-actions`), tipo `microphone`
+- `react-native-vosk` (a lib de terceiro) continua no projeto só pelo plugin
+  dela de empacotamento do modelo (asset versioning) — o JS não chama mais
+  nenhuma função dela; `services/voice/argosVoiceNative.ts` fala com o
+  `ArgosVoice` próprio.
+
+### Pergunta livre no comando → Whisper em nuvem
+
+A gramática fechada não entende "moro em Leiria, como está o clima" — não é
+bug, é vocabulário fechado (ver "Regra geral de vocabulário" abaixo).
+Vocabulário aberto local (item 6 de "Já tentado e FALHOU") foi tentado e não
+resolveu bem o suficiente. Solução (issue #215, 04/09/2026):
+
+- `ArgosVoiceModule` guarda o áudio bruto do trecho do comando em paralelo
+  (PCM16 mono 16kHz), só enquanto `armed` (depois da wake word).
+- Quando o texto que a gramática reconheceu fica vazio ou curto demais pra
+  duração da fala (heurística que já existia pra registrar tentativa
+  suspeita — `services/voice/voskWakeWord.native.ts`, `SUSPICIOUS_*`), o
+  áudio vira WAV (cabeçalho RIFF de 44 bytes, `ArgosVoiceModule.wrapPcmAsWav`)
+  e vai pro **endpoint que já existia**, `api/transcribe.ts` (Whisper via
+  `OPENAI_API_KEY`) — o mesmo que o fluxo de toque-no-orb usa
+  (`services/voice/customCapture.web.ts`). Não foi preciso criar endpoint
+  novo, só um cliente novo (`services/voice/commandAudioTranscribe.native.ts`).
+- Comando comum ("liga a luz") nunca passa pela nuvem — a gramática já
+  acerta, mais rápido e sem custo de rede.
+- Sem `OPENAI_API_KEY` configurada, `api/transcribe.ts` devolve 503 e o app
+  fica com o texto (possivelmente vazio) da gramática — silencioso, mesmo
+  padrão do fallback de TTS.
+- **Achado nesta sessão**: `api/transcribe.ts` e o fluxo de toque-no-orb já
+  existiam e não estavam documentados aqui — foi assim que passou
+  despercebido. Antes de propor endpoint de STT novo, conferir aqui primeiro.
 
 ### ⚠️ REGRA CRÍTICA: acento na gramática
 
