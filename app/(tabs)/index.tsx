@@ -503,17 +503,23 @@ const styles = StyleSheet.create({
    */
   bottomStack: {
     flex: 1,
-    // Era 'flex-end': com bottomStack ocupando todo o espaço livre de
-    // `main` e só 2 filhos (orb + overflowSection), isso colava os dois no
-    // fundo e deixava um vão vazio enorme entre o header e o orb. Corrigido
-    // ao vivo no dispositivo (#212 follow-up) — 'space-evenly' distribui o
-    // espaço livre em partes iguais: header→orb, orb→sugestões,
-    // sugestões→input, preenchendo a tela toda em vez de empurrar tudo
-    // pro rodapé.
-    justifyContent: 'space-evenly',
+    /*
+     * #A-064: 'space-evenly' (fix anterior, #212 follow-up) resolveu o vão
+     * vazio entre header e orb, mas trocou por um problema parecido: com só
+     * 2 filhos (orb + overflowSection) e bastante altura livre em `main`,
+     * ele reparte o espaço em 3 vãos GRANDES e iguais (antes do orb, entre
+     * orb e sugestões, depois das sugestões) — confirmado em screenshot real
+     * do aparelho, exatamente a queixa "margem grande em cima e embaixo,
+     * não tem mais nada". 'flex-start' + `paddingTop` mantém o conteúdo
+     * perto do topo (não gruda no rodapé como o 'flex-end' original fazia)
+     * e deixa a sobra de espaço só embaixo — menos vão vazio no meio do
+     * conteúdo em vez de três vãos grandes espalhados.
+     */
+    justifyContent: 'flex-start',
+    paddingTop: 24,
     paddingHorizontal: 24,
     paddingBottom: 4,
-    gap: 10,
+    gap: 24,
   },
   /*
    * Só insights + sugestões — o conteúdo de altura variável que motivou o
@@ -649,7 +655,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.primary,
     flexShrink: 0,
   },
-  inputCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 4 },
+  /*
+   * #A-065: SEM `flexDirection: 'row'` de propósito. GlassCard aplica este
+   * style no View EXTERNO (`container`), mas quem envolve os filhos é um
+   * View INTERNO (`content`, em components/ui/GlassCard.tsx) sem `flex`
+   * próprio. Em modo linha, um filho único sem `flex`/`width` explícito não
+   * herda a largura do pai (stretch só vale no eixo cruzado — em `row` isso
+   * é altura, não largura) e `content` colapsa pro tamanho mínimo dos
+   * filhos. Como `inputRow` logo abaixo já é `flexDirection: 'row'` por
+   * conta própria, isso bastava — o `row` aqui só empurrava o problema um
+   * nível acima e colapsava o TextInput pra largura quase zero (o
+   * placeholder "sumia" porque não tinha onde renderizar). `conversar.tsx`
+   * nunca teve `flexDirection: 'row'` neste nível — é o padrão que funciona.
+   */
+  inputCard: { paddingHorizontal: 16, paddingVertical: 4 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: { flex: 1, color: Colors.text.primary, fontSize: 16, paddingVertical: 12, minHeight: 44 },
   sendButton: {
