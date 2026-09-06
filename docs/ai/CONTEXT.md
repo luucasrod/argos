@@ -198,8 +198,9 @@ com `--debug` quando um deploy falhar sem motivo óbvio.**
 
 Solução: rotas que fazem a mesma coisa (proxy de integração de aparelho)
 viram **uma rota dinâmica só**. `api/devices/[provider].ts` despacha por
-`req.query.provider` pra handlers que moraram em `api/_lib/handlers/*.ts`
-(fora de `api/`, não conta como função própria). URLs antigas (`/api/wiz`,
+`req.query.provider` pra handlers que moraram em `api/_lib/handlers/*.ts` —
+a exclusão da contagem vem do prefixo `_` no nome da pasta (convenção do
+Vercel), não simplesmente de estar fora de `api/devices/`. URLs antigas (`/api/wiz`,
 `/api/tapo`, etc.) continuam funcionando via `rewrites` no `vercel.json` —
 nenhum client precisou mudar. `api/ewelink.ts` já usava essa mesma ideia
 internamente (`?action=`) antes de virar rota dinâmica também.
@@ -331,6 +332,5 @@ um arquivo" é inofensivo — o teto de 12 volta rápido.
 | Wake word com tela apagada | Nunca verificado |
 | Bipe de confirmação | O código diz que dispara; o usuário só sente a vibração. Verificar no logcat antes de assumir que funciona |
 | Segurança no Supabase | Há tabelas com RLS desligado. Detalhes **fora deste arquivo** (repo público) — perguntar ao usuário |
-| ⚠️ Produção do Vercel à frente do git | Em 06/09/2026 a consolidação de `api/` (14→7 arquivos, ver seção acima) foi deployada em produção (`npm run deploy`) a partir de uma branch que ainda **não estava mergeada** em `experimento-grande`. Quem rodar `npm run deploy` de novo a partir de um checkout de `experimento-grande` sem essa consolidação **reverte produção pros 14 arquivos e quebra o deploy de novo**. Mergear essa branch é prioridade antes do próximo deploy de qualquer pessoa |
-| Módulo nativo de áudio próprio + STT em nuvem (Whisper) | Implementado (issue #215: `ArgosVoiceModule.kt` substitui o `SpeechService` de `react-native-vosk`, comando em pergunta livre cai no `api/transcribe.ts` já existente) mas **ainda numa branch separada, sem PR aberto** — não documentado aqui como arquitetura corrente até integrar, conforme a regra deste arquivo (mudança de branch não vale antes do merge) |
+| Módulo nativo de áudio próprio + STT em nuvem (Whisper) | Implementado (issue #215: `ArgosVoiceModule.kt` substitui o `SpeechService` de `react-native-vosk`, comando em pergunta livre cai no `api/transcribe.ts` já existente), PR #224 aberto mas com **alterações solicitadas na revisão cruzada**: race condition no `cleanup()` do módulo Kotlin (fecha `AudioRecord`/`recognizer` sem esperar a thread do loop de gravação terminar) e guard de sessão faltando em `voskWakeWord.native.ts` (um `cancel` + novo `start` antes do Whisper resolver pode entregar o texto da fala cancelada como se fosse da nova). Ainda precisa também de validação em aparelho real antes de aceitar — não documentado aqui como arquitetura corrente até integrar |
 | Sotaque PT-PT aparecendo sozinho (TTS) | #B-044, ver seção de TTS acima — investigado, tentativa óbvia descartada por risco, sem correção ainda |
