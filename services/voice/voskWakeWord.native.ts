@@ -379,6 +379,21 @@ const SUSPICIOUS_MAX_CHARS = 6;
 // de "ele não me entendeu, vou tentar de novo".
 const REFORMULATION_WINDOW_MS = 15000;
 
+/**
+ * A-065: o texto pode não sair vazio/curto e ainda assim ser um corte real —
+ * "clima em Santo André" cortado vira "clima em", que não bate no critério
+ * de SUSPICIOUS_MAX_CHARS mas termina no mesmo conector que já faz
+ * `silenceWindowFor()` esperar mais (ver TRAILING_CONNECTOR_WORDS acima).
+ * Se mesmo com a janela maior a fala terminou assim, vale tentar o Whisper —
+ * reaproveita a MESMA lista já vetada (só vocabulário confirmado no modelo
+ * pt) em vez de manter duas listas de conector pra sincronizar.
+ */
+function endsWithDanglingWord(text: string): boolean {
+  const words = text.trim().split(/\s+/);
+  const last = words[words.length - 1] ?? '';
+  return TRAILING_CONNECTOR_WORDS.has(last);
+}
+
 let lastSubmitAt = 0;
 let lastSubmitText = '';
 
@@ -437,9 +452,17 @@ async function submitLocked(): Promise<void> {
   // Mesma heurística que já existia só pra registrar tentativa suspeita (ver
   // SUSPICIOUS_* acima) — reaproveitada agora pra decidir quando vale a pena
   // tentar o Whisper. Texto vazio também cai aqui (0 <= SUSPICIOUS_MAX_CHARS).
-  const suspicious = speechMs >= SUSPICIOUS_MIN_SPEECH_MS && grammarText.length <= SUSPICIOUS_MAX_CHARS;
-  if (grammarText.length > 0 && suspicious) {
+  const shortForDuration = speechMs >= SUSPICIOUS_MIN_SPEECH_MS && grammarText.length <= SUSPICIOUS_MAX_CHARS;
+  // A-065: mesmo com texto mais longo, terminar em conector solto ("clima
+  // em") é corte real — a janela de silêncio maior por conector
+  // (silenceWindowFor) já tenta evitar isso, mas quando ainda assim
+  // acontece, vale tentar o Whisper em vez de aceitar a frase incompleta.
+  const truncated = grammarText.length > 0 && endsWithDanglingWord(grammarText);
+  const suspicious = shortForDuration || truncated;
+  if (grammarText.length > 0 && shortForDuration) {
     void recordSuspiciousAttempt({ text: grammarText, speechMs, reason: 'curta_para_duracao' });
+  } else if (truncated) {
+    void recordSuspiciousAttempt({ text: grammarText, speechMs, reason: 'termina_em_conector' });
   } else if (
     grammarText &&
     lastSubmitAt &&
