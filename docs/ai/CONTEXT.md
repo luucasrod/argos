@@ -358,6 +358,7 @@ um arquivo" é inofensivo — o teto de 12 volta rápido.
 
 | Item | Situação |
 |---|---|
+| 🎙️ Voz conversacional em tempo real (iniciativa grande, 10 fases) | Épico #232 — sessão contínua, streaming STT/LLM/TTS, barge-in, fast path vs conversational path. Spec completa fora do repo (`A:\Projetos Lucas\argos\ARGOS_Prompt_Claude_Voz_Conversacional_RealTime.pdf`), quebrada em issues #233–#242 seguindo as fases do próprio documento. Só #233 (auditoria) está elegível agora — resto bloqueado pela cadeia de dependências |
 | Voz neural | Cota grátis estourada. Decidir: plano pago, Azure (o código já prevê o caminho) ou esperar o reset |
 | Latência de resposta | `COMMAND_SILENCE_MS` já baixou de 1200 para 800ms (issue #14). Instrumentação por etapa pronta em `services/voice/perfLog.ts` (fim da fala → intent/LLM → TTS → áudio), log com prefixo `[argos-perf]` no logcat (tag `ReactNativeJS`). **Falta**: rodar no aparelho numa interação real e escrever o relatório de qual etapa domina — pendente de acesso físico ao celular |
 | Módulos nativos perdidos | Reescrever como config plugin (ver acima) |
