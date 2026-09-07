@@ -22,7 +22,10 @@ export type SuspiciousAttemptReason =
   | 'curta_para_duracao'
   /** Uma nova wake word + comando chegou pouco depois do anterior — sinal
    *  comum de "ele não me entendeu, vou tentar de novo". */
-  | 'reformulacao_rapida';
+  | 'reformulacao_rapida'
+  /** Texto termina em conector solto ("clima em") mesmo depois da janela de
+   *  silêncio maior por conector (A-065) — corte real, não só texto curto. */
+  | 'termina_em_conector';
 
 export type SuspiciousAttempt = {
   timestamp: number;
