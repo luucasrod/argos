@@ -37,6 +37,7 @@ import type { EventSubscription } from 'react-native';
 import { perfStart } from '@/services/voice/perfLog';
 import { recordSuspiciousAttempt } from '@/services/voice/suspiciousVoiceAttempts';
 import { transcribeCommandAudio } from '@/services/voice/commandAudioTranscribe.native';
+import { isVoiceSessionV2Enabled } from '@/contracts';
 
 const MODEL_PATH = 'model-pt';
 const DIACRITICS_RE = /[̀-ͯ]/g;
@@ -336,6 +337,14 @@ function buildGrammar(wakeWord: string, extra: string[]): string[] {
 let modelLoaded = false;
 let listening = false;
 let suspended = false;
+/**
+ * Cache local do flag `isVoiceSessionV2Enabled` (issue #234/#235) — lido uma
+ * vez em `startVoskWakeWord()`, não a cada wake word. `AsyncStorage` é
+ * assíncrono, e o momento de armar a captura (`handle()`, ramo `!armed`) é
+ * exatamente o caminho mais sensível a latência do pipeline — não dá pra
+ * esperar uma leitura de storage bem ali.
+ */
+let preRollOnArmEnabled = false;
 let grammar: string[] = [];
 let patterns: RegExp[] = [];
 let residuePattern: RegExp = buildResiduePattern('Ei Argos');
@@ -548,8 +557,15 @@ function handle(raw: string, isFinal: boolean): void {
     partial = heard.slice(end).trim();
     // Guarda o áudio bruto a partir daqui — só é usado se a gramática não
     // der conta (ver submit()), mas precisa começar já, senão o começo do
-    // comando fica de fora do que manda pro Whisper.
-    Vosk.armCommandCapture();
+    // comando fica de fora do que manda pro Whisper. Com a arquitetura v2
+    // habilitada (#234/#235), semeia com o pre-roll (~1,5s de áudio ANTES
+    // da wake word ser confirmada) — sem isso, "ei argos desliga a luz"
+    // dito rápido, sem pausa, perdia o começo do comando.
+    if (preRollOnArmEnabled) {
+      Vosk.armCommandCaptureWithPreRoll();
+    } else {
+      Vosk.armCommandCapture();
+    }
     // Bipe imediato: a pessoa precisa saber que foi ouvida antes de continuar.
     onWake?.();
     if (isFinal) {
@@ -658,6 +674,8 @@ export async function startVoskWakeWord(opts: {
 }): Promise<boolean> {
   if (listening) return true;
   if (!(await ensureModel())) return false;
+
+  preRollOnArmEnabled = await isVoiceSessionV2Enabled().catch(() => false);
 
   patterns = buildWakePatterns(opts.wakeWord || 'Ei Argos');
   residuePattern = buildResiduePattern(opts.wakeWord || 'Ei Argos');

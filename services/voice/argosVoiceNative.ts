@@ -16,6 +16,7 @@ const { ArgosVoice } = NativeModules as {
     start(options?: { grammar?: string[] }): Promise<string>;
     stop(): void;
     armCommandCapture(): void;
+    armCommandCaptureWithPreRoll(): void;
     cancelCommandCapture(): void;
     getCommandAudioBase64(): Promise<string>;
     addListener(eventName: string): void;
@@ -52,6 +53,16 @@ export function onError(cb: (e: string) => void): EventSubscription {
 /** Começa a guardar o áudio bruto do comando — chamar ao confirmar a wake word. */
 export function armCommandCapture(): void {
   ArgosVoice.armCommandCapture();
+}
+
+/**
+ * Como `armCommandCapture()`, mas semeia o buffer com o pre-roll (~1,5s de
+ * áudio anterior à wake word confirmada) — issue #235. Só usar quando a
+ * arquitetura de voz v2 estiver habilitada (`isVoiceSessionV2Enabled` em
+ * `contracts/voiceSession.v1.ts`); o padrão continua sendo `armCommandCapture()`.
+ */
+export function armCommandCaptureWithPreRoll(): void {
+  ArgosVoice.armCommandCaptureWithPreRoll();
 }
 
 /** Devolve o áudio guardado (WAV, PCM16 mono 16kHz, base64) e reseta o buffer. */
