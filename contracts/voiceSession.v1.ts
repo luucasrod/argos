@@ -8,10 +8,12 @@
  * central dessa auditoria — `contracts/protocol.ts` já modela origem
  * (`home`/`cloud`), rota (`local`/`cloud`) e idempotência (`commandId`)
  * pra comandos entre Argos F/Home/Cloud, mas nenhuma integração real o usa
- * hoje. Este arquivo NÃO redefine esse protocolo — importa e reusa
- * `CommandRoute`/`commandId` como a chave de idempotência que o fast path
- * (#236) vai precisar quando parar de ser síncrono/mutuamente-exclusivo com
- * o LLM.
+ * hoje. Este arquivo NÃO redefine esse protocolo — reusa `commandId` como
+ * chave de idempotência (mesmo campo de `contracts/protocol.ts`) pro fast
+ * path (#236). A decisão local/cloud (`CommandRoute`) fica de fora daqui de
+ * propósito: quem decide isso é a camada de controle de dispositivo (#239,
+ * ex. `controlTuyaLocalFirst`), não o `CommandRouter` — o router só decide
+ * fast path vs. conversational path.
  *
  * Isto é só o CONTRATO — tipos e um flag local de rollout. Nenhuma
  * implementação de runtime mora aqui; cada fase seguinte implementa a sua
@@ -19,7 +21,6 @@
  * `isVoiceSessionV2Enabled()`. Com o flag desligado (padrão), o app
  * continua exatamente como está hoje — nada aqui é chamado.
  */
-import type { CommandRoute } from './protocol';
 
 // ---------------------------------------------------------------------------
 // Máquina de estados (seção 11 do documento fonte da épico #232)
@@ -151,16 +152,16 @@ export interface ToolExecutor {
 }
 
 // ---------------------------------------------------------------------------
-// Fast path / CommandRouter (#236) — reusa `CommandRoute` de
-// `contracts/protocol.ts` e usa `commandId` como chave de idempotência, a
-// mesma que o protocolo já define mas que `matchFastDeviceCommand` hoje não
-// usa (auditoria #233, seção 5 — sem necessidade hoje porque a execução é
-// síncrona/mutuamente-exclusiva com o LLM; passa a ser necessária assim que
-// streaming permitir os dois rodarem em paralelo de verdade).
+// Fast path / CommandRouter (#236) — usa `commandId` como chave de
+// idempotência, o mesmo campo que `contracts/protocol.ts` já define mas que
+// `matchFastDeviceCommand` hoje não usa (auditoria #233, seção 5 — sem
+// necessidade hoje porque a execução é síncrona/mutuamente-exclusiva com o
+// LLM; passa a ser necessária assim que streaming permitir os dois rodarem
+// em paralelo de verdade).
 // ---------------------------------------------------------------------------
 
 export type FastPathResult =
-  | { handled: true; commandId: string; route: CommandRoute }
+  | { handled: true; commandId: string }
   | { handled: false };
 
 export interface CommandRouter {
