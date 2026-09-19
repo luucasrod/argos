@@ -46,6 +46,12 @@ private const val SAMPLE_RATE = 16000f
 // vosk-android (BUFFER_SIZE_SECONDS), curto pro suficiente pra não atrasar
 // a detecção de silêncio que já existe no lado JS.
 private const val CHUNK_SAMPLES = 3200
+// #246: recriar o Recognizer periodicamente limita qualquer acúmulo interno
+// no lado nativo (JNI do Vosk) numa sessão que roda 24/7 por dias — o
+// decoder do Vosk não é feito pra rodar indefinidamente sem reset. Fechar e
+// reabrir com o mesmo model+gramática é barato (não recarrega o modelo) e
+// não interrompe a captura (audioRecord continua rodando).
+private const val RECOGNIZER_RECYCLE_INTERVAL_MS = 10 * 60 * 1000L
 
 class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -60,11 +66,34 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   @Volatile private var recordThread: Thread? = null
   private val commandBuffer = ByteArrayOutputStream()
   private val bufferLock = Object()
+  @Volatile private var currentGrammarJson: String? = null
+  @Volatile private var lastRecognizerRecycleAt = 0L
 
+  /**
+   * #246: sem essa checagem, o `recordLoop` continua chamando `sendEvent` a
+   * cada ~200ms mesmo depois do bridge JS ser destruído/recriado (troca de
+   * Activity, crash do JS, reload) — foi exatamente isso que apareceu no
+   * logcat real (`reactInstance is null. Dropping work.` em loop rápido,
+   * múltiplas threads). Cada chamada nessas condições ainda faz trabalho no
+   * lado nativo (getJSModule, serialização) sem nenhum consumidor do outro
+   * lado — puro desperdício de CPU/alocação numa sessão que já roda 24/7.
+   */
   private fun sendEvent(name: String, data: String?) {
+    if (!reactContext.hasActiveReactInstance()) return
     reactContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(name, data)
+  }
+
+  /** Fecha e recria o `Recognizer` com o mesmo model+gramática — ver #246. */
+  private fun recycleRecognizer() {
+    val m = model ?: return
+    val grammar = currentGrammarJson
+    val fresh = if (grammar != null) Recognizer(m, SAMPLE_RATE, grammar) else Recognizer(m, SAMPLE_RATE)
+    val old = recognizer
+    recognizer = fresh
+    old?.close()
+    lastRecognizerRecycleAt = System.currentTimeMillis()
   }
 
   @ReactMethod
@@ -119,11 +148,14 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     }
     try {
       val grammarArray = options?.getArray("grammar")
-      recognizer = if (grammarArray != null) {
-        Recognizer(m, SAMPLE_RATE, grammarToJson(grammarArray))
+      val grammarJson = if (grammarArray != null) grammarToJson(grammarArray) else null
+      currentGrammarJson = grammarJson
+      recognizer = if (grammarJson != null) {
+        Recognizer(m, SAMPLE_RATE, grammarJson)
       } else {
         Recognizer(m, SAMPLE_RATE)
       }
+      lastRecognizerRecycleAt = System.currentTimeMillis()
 
       val minBuf = AudioRecord.getMinBufferSize(
         SAMPLE_RATE.toInt(),
@@ -179,6 +211,14 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
         val isFinal = r.acceptWaveForm(shortBuf, read)
         val json = if (isFinal) r.result else r.partialResult
         sendEvent(if (isFinal) "onResult" else "onPartialResult", json)
+        // #246: só recicla em fronteira de frase (isFinal) — trocar o
+        // recognizer no meio de uma fala descartaria o contexto parcial e
+        // pioraria o reconhecimento em curso.
+        if (isFinal &&
+          System.currentTimeMillis() - lastRecognizerRecycleAt > RECOGNIZER_RECYCLE_INTERVAL_MS
+        ) {
+          recycleRecognizer()
+        }
       } catch (e: Exception) {
         sendEvent("onError", e.message ?: "erro no recognizer")
       }
@@ -291,6 +331,7 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     audioRecord = null
     recognizer?.close()
     recognizer = null
+    currentGrammarJson = null
     synchronized(bufferLock) { commandBuffer.reset() }
   }
 
