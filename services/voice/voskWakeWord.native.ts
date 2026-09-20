@@ -344,6 +344,19 @@ let subs: EventSubscription[] = [];
 let onWake: (() => void) | null = null;
 let onCommandText: ((text: string) => void) | null = null;
 let onCommandPartial: ((text: string) => void) | null = null;
+let onBargeIn: ((heard: string) => void) | null = null;
+
+/**
+ * #238 (barge-in) — só true enquanto o Argos está falando (ligado/desligado
+ * por `hooks/useArgos.ts` em volta de `speak()`, sempre atrás de
+ * `isVoiceSessionV2Enabled`). Sem AEC de hardware dedicado (ver
+ * `docs/ai/voz-realtime-plano-streaming-bargein.md`, seção 5) — o próprio
+ * áudio do Argos pode ser captado como "fala do usuário" e disparar um
+ * barge-in falso. `BARGE_IN_MIN_CHARS` é a única defesa hoje; precisa de
+ * ajuste no aparelho real antes de confiar nisso em produção.
+ */
+let bargeInListening = false;
+const BARGE_IN_MIN_CHARS = 4;
 
 /** Estado da fala em curso. */
 let armed = false;
@@ -537,6 +550,18 @@ function handle(raw: string, isFinal: boolean): void {
     );
   }
 
+  /*
+   * #238 barge-in — checagem aditiva, de propósito ANTES de qualquer lógica
+   * de wake word/gramática existente. Com `bargeInListening` desligado
+   * (padrão, fora da v2), este bloco nunca executa e `handle()` continua
+   * bit-a-bit idêntico ao comportamento anterior a esta issue.
+   */
+  if (bargeInListening && !armed && heard.length >= BARGE_IN_MIN_CHARS) {
+    bargeInListening = false;
+    onBargeIn?.(heard);
+    return;
+  }
+
   if (!armed) {
     if (!heard) return;
     const end = findWakeEnd(heard, patterns);
@@ -710,6 +735,27 @@ export function cancelVoskUtterance(): void {
 
 export function isVoskArmed(): boolean {
   return armed;
+}
+
+/**
+ * #238 — registra quem é avisado quando um barge-in dispara. Separado de
+ * `startVoskWakeWord()` de propósito: é chamado uma vez (ex.: no `useEffect`
+ * de setup do hook de voz), não depende do ciclo de vida start/stop da
+ * escuta.
+ */
+export function setBargeInHandler(handler: ((heard: string) => void) | null): void {
+  onBargeIn = handler;
+}
+
+/**
+ * #238 — liga/desliga a escuta de barge-in. `hooks/useArgos.ts` liga logo
+ * antes de tocar TTS e desliga assim que a fala termina (ou já desliga
+ * sozinho, uma vez, no primeiro barge-in disparado — ver o guard em
+ * `handle()`). Chamar com `listening` desligado/`suspended` não tem efeito
+ * observável (o guard no topo de `handle()` já bloqueia tudo nesse caso).
+ */
+export function setBargeInListening(active: boolean): void {
+  bargeInListening = active;
 }
 
 export function suspendVoskWakeWord(): void {
