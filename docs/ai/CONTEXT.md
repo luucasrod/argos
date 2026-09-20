@@ -358,17 +358,17 @@ um arquivo" é inofensivo — o teto de 12 volta rápido.
 
 | Item | Situação |
 |---|---|
-| 🎙️ Voz conversacional em tempo real (iniciativa grande, 10 fases) | Épico #232 — sessão contínua, streaming STT/LLM/TTS, barge-in, fast path vs conversational path. Spec completa fora do repo (`A:\Projetos Lucas\argos\ARGOS_Prompt_Claude_Voz_Conversacional_RealTime.pdf`), quebrada em issues #233–#242 seguindo as fases do próprio documento. Só #233 (auditoria) está elegível agora — resto bloqueado pela cadeia de dependências |
+| 🎙️ Voz conversacional em tempo real (iniciativa grande, 10 fases) | Épico #232. Spec completa fora do repo (`A:\Projetos Lucas\argos\ARGOS_Prompt_Claude_Voz_Conversacional_RealTime.pdf`), quebrada em issues #233–#242. Status em 20/09: #233 (auditoria) e #234 (contratos) fechadas; #235 (audio core/pre-roll) e #236 (CommandRouter) com PR aberto (precisam de build+install no aparelho pra validar antes de mergear — mudam Kotlin nativo); #237 (streaming) e #238 (barge-in) seguem bloqueados até #235/#236 fecharem — plano técnico já escrito em `docs/ai/voz-realtime-plano-streaming-bargein.md`, pronto pra executar |
 | Voz neural | Cota grátis estourada. Decidir: plano pago, Azure (o código já prevê o caminho) ou esperar o reset |
 | Latência de resposta | `COMMAND_SILENCE_MS` já baixou de 1200 para 800ms (issue #14). Instrumentação por etapa pronta em `services/voice/perfLog.ts` (fim da fala → intent/LLM → TTS → áudio), log com prefixo `[argos-perf]` no logcat (tag `ReactNativeJS`). **Falta**: rodar no aparelho numa interação real e escrever o relatório de qual etapa domina — pendente de acesso físico ao celular |
 | Módulos nativos perdidos | Reescrever como config plugin (ver acima) |
 | Deps mortas do Picovoice | Remover do `package.json` |
 | Aparelhos fora do vocabulário | `tv`, `4k`, `speaker`, `standing`, `ar-condicionado`, `2` — precisam de apelido falável |
 | Prompt cresce sem limite | Toda memória ativa entra em todo pedido. Maior custo de token |
-| Controle local Tuya | Código pronto, **não ligado** ao store |
+| Controle local Tuya | **Correção (auditoria #233, 20/09): já está ligado.** `controlTuyaLocalFirst` (`stores/useDeviceStore.ts:145-180`) é chamado pelo store — local-primeiro com timeout 700ms, cai pra nuvem em qualquer falha. Padrão irmão existe pra WiZ. Ainda é código duplicado por provider, não abstração compartilhada com `CommandRoute` de `contracts/protocol.ts` |
 | Tuya 3.4/3.5 | Não suportado (GCM + sessão). Detecta e cai para a nuvem |
 | Wake word com tela apagada | Nunca verificado |
 | Bipe de confirmação | O código diz que dispara; o usuário só sente a vibração. Verificar no logcat antes de assumir que funciona |
 | Segurança no Supabase | Há tabelas com RLS desligado. Detalhes **fora deste arquivo** (repo público) — perguntar ao usuário |
 | Sotaque PT-PT aparecendo sozinho (TTS) | #B-044, ver seção de TTS acima — investigado, tentativa óbvia descartada por risco, sem correção ainda |
-| ⚠️ Merges de 06/09 (#225, #226, #227, #228) ainda não publicados | Consolidação de `api/` + diagnóstico do `/api/transcribe` (#225/#226) precisam de `npm run deploy` pro Vercel. Frontend do Google Calendar (#227, JS puro) precisa de OTA (`npx eas update --branch preview`). **Módulo nativo de áudio (#228) não pode ir por OTA de jeito nenhum** — muda `app.json` e adiciona Kotlin novo; exige `expo prebuild` + build local + instalar no aparelho pelo cabo, e só então validar wake word/comando/pergunta livre com `adb logcat` de verdade. Nenhuma dessas três ações é feita por agente (ver "Publicar OTA é PROIBIDO", mesma regra vale pra `vercel deploy` e `adb install`) |
+| ⚠️ #244/#248 (pre-roll de áudio + mitigação do vazamento #246) mudam Kotlin nativo | Não podem ir por OTA — exigem `expo prebuild` + build local + instalar no aparelho pelo cabo, e só então validar (wake word/comando, e no caso do #248 uma curva de `dumpsys meminfo` longa) antes de mergear. Nenhuma dessas ações é feita por agente (ver "Publicar OTA é PROIBIDO") |
