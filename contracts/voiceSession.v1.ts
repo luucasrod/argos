@@ -22,6 +22,8 @@
  * continua exatamente como está hoje — nada aqui é chamado.
  */
 
+import type { ParsedIntent } from '@/services/ai/intentParser';
+
 // ---------------------------------------------------------------------------
 // Máquina de estados (seção 11 do documento fonte da épico #232)
 // ---------------------------------------------------------------------------
@@ -161,7 +163,7 @@ export interface ToolExecutor {
 // ---------------------------------------------------------------------------
 
 export type FastPathResult =
-  | { handled: true; commandId: string }
+  | { handled: true; commandId: string; intent: ParsedIntent }
   | { handled: false };
 
 export interface CommandRouter {
