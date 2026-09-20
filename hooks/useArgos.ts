@@ -14,7 +14,10 @@ import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
 import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
-import { resolveIntentSpeech, minimalConfirmation } from '@/services/voice/speechText';
+import { resolveIntentSpeech, minimalConfirmation, stripForSpeech } from '@/services/voice/speechText';
+import { isVoiceSessionV2Enabled } from '@/contracts';
+import { sendChatMessageStreaming } from '@/services/voice/streamingConversation';
+import { prefetchCloudSpeech } from '@/services/voice/cloudTts';
 import { perfMark } from '@/services/voice/perfLog';
 import { markAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { recordValueAction, handleCorrectionReply } from '@/services/voice/correctionMemory';
@@ -794,21 +797,51 @@ export function useArgos() {
         const { messages } = useAIStore.getState();
         const historyMessages = buildApiMessageHistory(messages);
 
+        const messageParams = {
+          model,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: historyMessages,
+        };
+
+        /*
+         * #237 — atrás do flag v2 (padrão desligado): consome o LLM em
+         * streaming e, assim que o campo `speech` fechar (ainda com o
+         * resto do JSON chegando), já dispara a síntese de TTS em paralelo
+         * via `prefetchCloudSpeech`. `speak()`/`textToSpeech()` mais abaixo
+         * não mudam nada — se o prefetch bateu (mesmo texto após
+         * `stripForSpeech` + mesmas opções de voz), reaproveita; se não
+         * bateu ou não deu tempo, pede de novo do zero como sempre. Falha
+         * de streaming (rede, servidor sem suporte) cai automaticamente
+         * pro `createMessage` de sempre — ver `sendChatMessageStreaming`.
+         */
         perfMark('llm_requisicao_enviada');
-        const response = await withTimeout(
-          createMessage({
-            model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: historyMessages,
-          }),
-          60000,
-          'A requisição demorou demais. Tente de novo.'
-        );
+        const v2Enabled = await isVoiceSessionV2Enabled().catch(() => false);
+        let rawText: string;
+        if (v2Enabled) {
+          const result = await withTimeout(
+            sendChatMessageStreaming(messageParams, (speech) => {
+              const spoken = stripForSpeech(speech.trim());
+              if (!spoken) return;
+              prefetchCloudSpeech(spoken, {
+                rate: Math.min(2, Math.max(0.5, settings.personality.voiceSpeed ?? 1.0)),
+                gender: settings.personality.voiceGender,
+              });
+            }),
+            60000,
+            'A requisição demorou demais. Tente de novo.'
+          );
+          rawText = result.rawText;
+        } else {
+          const response = await withTimeout(
+            createMessage(messageParams),
+            60000,
+            'A requisição demorou demais. Tente de novo.'
+          );
+          rawText = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
+        }
         perfMark('llm_resposta_recebida');
 
-        const rawText =
-          response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
         const intent = parseAIResponse(rawText);
         perfMark('intent_parseado');
 
