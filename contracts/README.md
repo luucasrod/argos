@@ -48,3 +48,21 @@ dependency-free contract check with Node 22+:
 ```sh
 node --experimental-strip-types contracts/context.selftest.mjs
 ```
+
+## Voice session (real-time conversational voice, epic #232)
+
+`voiceSession.v1.ts` defines the interfaces phases #235–#242 implement:
+`VoiceSession`, `AudioInput`, `WakeWordDetector`, `SpeechRecognizer`,
+`TextToSpeech`, `ConversationEngine`, `CommandRouter`, `ToolExecutor`. It
+reuses `CommandRoute` from `protocol.ts` instead of redefining local/cloud
+routing — see `docs/ai/voz-realtime-auditoria.md` (issue #233) for why.
+
+This file is contracts only — no runtime behavior beyond the local rollout
+flag (`isVoiceSessionV2Enabled`/`setVoiceSessionV2Enabled`, default `false`)
+and two type guards for the LLM ⇄ executor boundary (`isToolCall`,
+`isToolResult`). Every later phase must be gated behind that flag: with it
+off, the app behaves exactly as it does today. Run:
+
+```sh
+node --experimental-strip-types contracts/voiceSession.selftest.mjs
+```
