@@ -1,6 +1,7 @@
 import { supabase } from '@/services/auth/supabase';
+import { API_BASE } from '@/constants/api';
 
-const HA_API = '/api/ha';
+const HA_API = `${API_BASE}/api/ha`;
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
