@@ -1,8 +1,13 @@
 # Plano técnico — streaming + barge-in (#237/#238)
 
-> Preparado em 20/09 enquanto #235 (PR #244) e #236 (PR #245) ainda não
-> fecharam — **não é permissão pra começar #237/#238 antes deles fecharem**,
-> é o desenho pronto pra não perder tempo quando destravar. Base factual:
+> Escrito em 20/09. **Atualização, mesmo dia**: o usuário pediu pra não
+> esperar #244/#248 (mudança nativa parada esperando validação física) e
+> adiantar streaming mesmo assim. Feito: `api/chat.ts`+`api/tts.ts`
+> streaming (PR #251) e o consumo no cliente com extração antecipada de
+> `speech` + prefetch de TTS (PR #252) — **ambos já mergeados em
+> `experimento-grande`**, atrás do flag `isVoiceSessionV2Enabled`
+> (desligado por padrão, zero mudança de comportamento sem ativar). Ver
+> seção 7 (nova) pro estado real por item. Base factual original:
 > `docs/ai/voz-realtime-auditoria.md` (#233) + leitura direta de
 > `api/chat.ts`, `api/tts.ts`, `services/voice/textToSpeech.ts` em 20/09.
 
@@ -137,3 +142,23 @@ segundos de áudio ElevenLabs) deveria nascer junto com o item 3, não
 esperar a fase 8 (#241), porque sem isso não dá pra saber se streaming
 completo (#237+#238) é economicamente sustentável em produção antes de já
 estar tudo construído.
+
+## 7. Estado real em 20/09 (fim da sessão) — o que foi feito vs. o plano acima
+
+| Item do plano | Estado |
+|---|---|
+| 1. Schema fala/ação separados | Já existia (`speech` sempre antes de `actions` no prompt) — não precisou mudar nada, só descobrir que já estava assim |
+| 2. `api/tts.ts` streaming | **Feito** (PR #251) — endpoint de streaming da ElevenLabs, retrocompatível via `stream:true` |
+| 3. `AudioQueue` no RN / playback incremental | **Não feito.** Client ainda acumula a resposta completa antes de tocar (via `speakWithCloud`/`expo-av` de sempre) — o streaming do TTS existe no servidor mas não é consumido progressivamente pelo app ainda. Ganho real hoje vem só do item abaixo |
+| `api/chat.ts` streaming + extração antecipada de `speech` | **Feito** (PR #251 backend + #252 cliente) — `streamingJsonScanner.ts` detecta o campo `speech` fechado no JSON ainda incompleto e dispara `prefetchCloudSpeech` em paralelo. Este é o ganho de latência real que foi pro ar: não espera mais `actions`/resto do JSON pra começar a sintetizar a fala |
+| 4. Sessão multi-turno | Não mexido nesta rodada |
+| 5. Barge-in | **Só infraestrutura, inerte.** Motivo descoberto durante a implementação: o `AudioRecord` é **fechado de verdade** enquanto o Argos fala (`suspendVoskWakeWord`, acionado por `useVoice.ts` no status `speaking`) — não é só "não processado", o microfone desliga. Barge-in de verdade exige manter o mic aberto durante a fala (reabrindo o problema de eco que essa suspensão evita hoje) e mitigar sem AEC de hardware. Isso é uma decisão arquitetural que precisa ser testada no aparelho — não uma implementação de código que dá pra fazer sem ele. `setBargeInListening`/`setBargeInHandler` existem em `voskWakeWord.native.ts`, prontos, mas nada chama `setBargeInListening(true)` ainda |
+
+### Para ligar de verdade e sentir a diferença
+
+1. `AsyncStorage.setItem('argos.voiceSessionV2.enabled', 'true')` (ou uma tela de configuração ainda não construída) — sem isso nada do que foi descrito acima roda, o app usa o caminho de sempre.
+2. Testar no aparelho com o flag ligado antes de virar padrão pra todo mundo — não foi validado em hardware real nesta sessão.
+
+### Próximo passo real pro barge-in
+
+Decidir, testando no aparelho: (a) trocar `MediaRecorder.AudioSource.VOICE_RECOGNITION` por `VOICE_COMMUNICATION` no `ArgosVoiceModule.kt` pra pegar AEC de sistema, comparando qualidade de reconhecimento antes/depois; ou (b) manter o mic fechado durante fala CURTA e só reabrir pra barge-in em respostas longas, aceitando que frases curtas não são interrompíveis. Sem essa decisão testada, não há como saber se vale reabrir o mic durante a fala.
