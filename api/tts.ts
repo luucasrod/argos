@@ -90,6 +90,19 @@ function ratePercent(rate: number | undefined): string {
   return (pct >= 0 ? '+' : '') + pct + '%';
 }
 
+async function pipeWebStreamToResponse(body: ReadableStream<Uint8Array>, res: VercelResponse) {
+  const reader = body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) res.write(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -211,12 +224,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
-  const { text, voice, rate, pitch, gender } = (req.body ?? {}) as {
+  const { text, voice, rate, pitch, gender, stream } = (req.body ?? {}) as {
     text?: string;
     voice?: string;
     rate?: number;
     pitch?: number;
     gender?: 'male' | 'female';
+    stream?: boolean;
   };
 
   const clean = (text ?? '').trim().slice(0, MAX_CHARS);
@@ -240,7 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ELEVEN_VOICES[(voice ?? '').toLowerCase()] ?? ELEVEN_VOICES[defaultForGender];
     try {
       const r = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_22050_32`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${stream === true ? '/stream' : ''}?output_format=mp3_22050_32`,
         {
           method: 'POST',
           headers: {
@@ -265,6 +279,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
 
       if (r.ok) {
+        if (stream === true && r.body) {
+          res.status(200);
+          res.setHeader('Content-Type', r.headers.get('content-type') ?? 'audio/mpeg');
+          res.setHeader('Cache-Control', 'no-cache, no-transform');
+          res.setHeader('X-Accel-Buffering', 'no');
+          await pipeWebStreamToResponse(r.body, res);
+          return res.end();
+        }
+
         const buf = Buffer.from(await r.arrayBuffer());
         return res
           .status(200)
@@ -282,6 +305,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!AZURE_KEY) return res.status(502).json({ error: 'eleven_error' });
     }
   }
+
+  /*
+   * Azure fica como fallback nao-streaming mesmo quando stream:true foi pedido.
+   * O cliente diferencia pelo Content-Type: application/json segue o fluxo antigo
+   * de base64; audio/* e bytes crus e tocado incrementalmente.
+   */
 
   const voiceName = VOICES[(voice ?? '').toLowerCase()] ?? VOICES[DEFAULT_VOICE];
   const pitchPct =

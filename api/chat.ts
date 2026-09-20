@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
 const skipAuth = process.env.SKIP_AUTH === 'true';
+const STREAM_ERROR_PREFIX = '\n__ARGOS_STREAM_ERROR__';
 
 const supabase = createClient(
   process.env.SUPABASE_URL ?? 'https://qzoknfwfvdqcnbsirwlf.supabase.co',
@@ -19,6 +20,17 @@ function setCorsHeaders(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function writeStreamError(res: VercelResponse, err: unknown) {
+  const apiErr = err as { status?: number; error?: { type?: string; message?: string }; message?: string };
+  res.write(
+    `${STREAM_ERROR_PREFIX}:${JSON.stringify({
+      error: apiErr.error?.type ?? 'stream_error',
+      status: apiErr.status,
+      message: apiErr.error?.message ?? apiErr.message ?? 'Erro no stream da Anthropic',
+    })}\n`
+  );
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -51,10 +63,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { model, system, messages, max_tokens } = req.body;
+    const { model, system, messages, max_tokens, stream } = req.body;
 
     if (!model || !messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'invalid_request', message: 'Parâmetros inválidos' });
+    }
+
+    if (stream === true) {
+      res.status(200);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      try {
+        const anthropicStream = anthropic.messages.stream({
+          model,
+          system,
+          messages,
+          max_tokens: max_tokens ?? 1024,
+        });
+
+        for await (const event of anthropicStream as AsyncIterable<{
+          type?: string;
+          delta?: { type?: string; text?: string };
+          error?: { type?: string; message?: string };
+        }>) {
+          if (event.type === 'error') {
+            throw { error: event.error };
+          }
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            res.write(event.delta.text ?? '');
+          }
+        }
+      } catch (err) {
+        // Headers may already be sent, so the client treats this marker as a stream failure.
+        writeStreamError(res, err);
+      }
+
+      return res.end();
     }
 
     const response = await anthropic.messages.create({
