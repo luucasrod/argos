@@ -29,6 +29,7 @@ import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 import { VoiceInstallHelp } from '@/components/settings/VoiceInstallHelp';
 import { generateHAKey, getHAKey, deleteHAKey } from '@/services/ha/haService';
+import { isVoiceSessionV2Enabled, setVoiceSessionV2Enabled } from '@/contracts';
 
 function accountStatusLabel(provider?: string): string {
   if (provider === 'google') return '✓ Conectado com Google';
@@ -185,6 +186,17 @@ export default function SettingsScreen() {
   const [haKeyError, setHaKeyError] = React.useState<string | null>(null);
   const [haCopied, setHaCopied] = React.useState(false);
   const [haUrlCopied, setHaUrlCopied] = React.useState(false);
+
+  /*
+   * #237 — flag da v2 de voz (streaming + prefetch de TTS) vive em AsyncStorage
+   * puro (contracts/voiceSession.v1.ts), não no useSettingsStore — por isso
+   * precisa de estado local + leitura assíncrona em vez do padrão síncrono
+   * usado pelos outros Switch desta tela.
+   */
+  const [voiceV2Enabled, setVoiceV2EnabledState] = React.useState(false);
+  React.useEffect(() => {
+    isVoiceSessionV2Enabled().then(setVoiceV2EnabledState).catch(() => {});
+  }, []);
 
   const HA_ENDPOINT = 'https://argos-blue.vercel.app/api/ha';
 
@@ -1289,6 +1301,22 @@ export default function SettingsScreen() {
                     </Pressable>
                   ))}
                 </View>
+              </SettingRow>
+              <View style={styles.divider} />
+              <SettingRow
+                label="Voz em streaming (beta)"
+                description="Argos começa a falar assim que decide o que dizer, sem esperar o resto da resposta. Experimental — se notar algo estranho, desligue aqui."
+              >
+                <Switch
+                  value={voiceV2Enabled}
+                  onValueChange={(v) => {
+                    light();
+                    setVoiceV2EnabledState(v);
+                    void setVoiceSessionV2Enabled(v);
+                  }}
+                  trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                  thumbColor="#FFFFFF"
+                />
               </SettingRow>
             </GlassCard>
           </Animated.View>
