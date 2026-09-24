@@ -28,6 +28,7 @@ import { textToSpeech } from '@/services/voice/textToSpeech';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 import { VoiceInstallHelp } from '@/components/settings/VoiceInstallHelp';
 import Constants from 'expo-constants';
+import { isVoiceSessionV2Enabled, setVoiceSessionV2Enabled } from '@/contracts';
 
 function SectionLabel({ title }: { title: string }) {
   return <Text style={styles.sectionLabel}>{title}</Text>;
@@ -72,6 +73,19 @@ export default function PerfilScreen() {
   const { clearMessages } = useAIStore();
   const { user, signOut, loading: authLoading } = useAuthStore();
   const { light, medium } = useHaptic();
+
+  /*
+   * #237 — flag da v2 de voz (streaming + prefetch de TTS), vive em
+   * AsyncStorage puro (contracts/voiceSession.v1.ts), não no
+   * useSettingsStore síncrono. NOTA (24/09): a versão original deste
+   * toggle foi pra app/(tabs)/settings.tsx, mas essa tela tem
+   * `href: null` no _layout.tsx — invisível na navegação, ninguém
+   * alcança. perfil.tsx é a tela de voz que o usuário realmente vê.
+   */
+  const [voiceV2Enabled, setVoiceV2EnabledState] = React.useState(false);
+  React.useEffect(() => {
+    isVoiceSessionV2Enabled().then(setVoiceV2EnabledState).catch(() => {});
+  }, []);
 
   const toneOptions: AIPersonality['tone'][] = ['formal', 'casual', 'direct', 'friendly', 'playful'];
   const proactivityOptions: AIPersonality['proactivity'][] = ['low', 'medium', 'high'];
@@ -323,6 +337,22 @@ export default function PerfilScreen() {
                   </Pressable>
                 ))}
               </View>
+            </Row>
+            <View style={styles.divider} />
+            <Row
+              label="Voz em streaming (beta)"
+              description="Argos começa a falar assim que decide o que dizer, sem esperar o resto da resposta. Experimental — se notar algo estranho, desligue aqui."
+            >
+              <Switch
+                value={voiceV2Enabled}
+                onValueChange={(v) => {
+                  light();
+                  setVoiceV2EnabledState(v);
+                  void setVoiceSessionV2Enabled(v);
+                }}
+                trackColor={{ false: Colors.glass.heavy, true: Colors.accent.primary }}
+                thumbColor="#fff"
+              />
             </Row>
           </GlassCard>
 
