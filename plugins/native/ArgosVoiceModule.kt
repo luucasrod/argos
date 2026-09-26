@@ -49,6 +49,10 @@ private const val SAMPLE_RATE = 16000f
 // vosk-android (BUFFER_SIZE_SECONDS), curto pro suficiente pra não atrasar
 // a detecção de silêncio que já existe no lado JS.
 private const val CHUNK_SAMPLES = 3200
+// Faixa sugerida pelo documento de voz conversacional (issue #232): 1,5-2s.
+// 1500ms escolhido como ponto médio inicial; validar no aparelho antes de
+// tocar neste valor.
+private const val PREROLL_MS = 1500
 
 /**
  * LiveKitWakewordDetector — integração com openWakeWord ONNX (V-001).
@@ -136,6 +140,45 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   private val bufferLock = Object()
   private var wakewordDetector: LiveKitWakewordDetector? = null
   @Volatile private var wakewordEnabled = false
+
+  /**
+   * Pre-roll: buffer circular fixo, SEMPRE alimentado (independente de
+   * `capturing`), pra `armCommandCaptureWithPreRoll()` poder semear o
+   * comando com o áudio de antes da wake word ser confirmada — sem isso,
+   * "ei argos desliga a luz" dito rápido, sem pausa, perde o começo do
+   * comando porque `armCommandCapture()` só passa a gravar DEPOIS que o
+   * lado JS já confirmou a wake word (issue #235, achado da auditoria #233).
+   * Memória fixa e pequena (1,5s a 16kHz mono PCM16 = 48.000 bytes) — custo
+   * desprezível manter sempre ligado, mesmo quando não é usado.
+   */
+  private val preRollBytes = (SAMPLE_RATE.toInt() * PREROLL_MS / 1000) * 2
+  private val preRollBuffer = ByteArray(preRollBytes)
+  private var preRollWritePos = 0
+  private var preRollFilled = false
+  private val preRollLock = Object()
+
+  private fun writePreRoll(bytes: ByteArray) {
+    synchronized(preRollLock) {
+      for (b in bytes) {
+        preRollBuffer[preRollWritePos] = b
+        preRollWritePos = (preRollWritePos + 1) % preRollBytes
+        if (preRollWritePos == 0) preRollFilled = true
+      }
+    }
+  }
+
+  /** Conteúdo do pre-roll em ordem cronológica (mais antigo primeiro). */
+  private fun readPreRoll(): ByteArray {
+    synchronized(preRollLock) {
+      if (!preRollFilled) {
+        return preRollBuffer.copyOfRange(0, preRollWritePos)
+      }
+      val out = ByteArray(preRollBytes)
+      System.arraycopy(preRollBuffer, preRollWritePos, out, 0, preRollBytes - preRollWritePos)
+      System.arraycopy(preRollBuffer, 0, out, preRollBytes - preRollWritePos, preRollWritePos)
+      return out
+    }
+  }
 
   private fun sendEvent(name: String, data: String?) {
     reactContext
@@ -261,13 +304,14 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
       val read = rec.read(shortBuf, 0, shortBuf.size)
       if (read <= 0) continue
 
+      val bytes = ByteArray(read * 2)
+      for (i in 0 until read) {
+        val s = shortBuf[i].toInt()
+        bytes[i * 2] = (s and 0xFF).toByte()
+        bytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+      }
+      writePreRoll(bytes)
       if (capturing) {
-        val bytes = ByteArray(read * 2)
-        for (i in 0 until read) {
-          val s = shortBuf[i].toInt()
-          bytes[i * 2] = (s and 0xFF).toByte()
-          bytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
-        }
         synchronized(bufferLock) { commandBuffer.write(bytes) }
       }
 
@@ -295,6 +339,24 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   @ReactMethod
   fun armCommandCapture() {
     synchronized(bufferLock) { commandBuffer.reset() }
+    capturing = true
+  }
+
+  /**
+   * Como `armCommandCapture()`, mas semeia o `commandBuffer` com o pre-roll
+   * (últimos ~1,5s de áudio) antes de começar a capturar ao vivo — evita
+   * perder a primeira palavra do comando quando ele vem colado na wake word.
+   * Método novo e separado de propósito: `armCommandCapture()` sem pre-roll
+   * continua existindo e sendo o padrão; só o lado JS decide chamar este
+   * (gated por `isVoiceSessionV2Enabled`, ver `voskWakeWord.native.ts`).
+   */
+  @ReactMethod
+  fun armCommandCaptureWithPreRoll() {
+    val preRoll = readPreRoll()
+    synchronized(bufferLock) {
+      commandBuffer.reset()
+      commandBuffer.write(preRoll)
+    }
     capturing = true
   }
 
@@ -401,6 +463,10 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     wakewordDetector = null
     wakewordEnabled = false
     synchronized(bufferLock) { commandBuffer.reset() }
+    synchronized(preRollLock) {
+      preRollWritePos = 0
+      preRollFilled = false
+    }
   }
 
   // Necessários pro NativeEventEmitter do lado JS (argosVoiceNative.ts) não
