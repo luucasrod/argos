@@ -102,7 +102,11 @@ function withArgosVoiceGradleDeps(config) {
     // react-native-vosk declara isto como "implementation", não exposto a
     // outros módulos Gradle, por isso repetido aqui.
     implementation 'com.alphacephei:vosk-android:0.3.70@aar'
-    implementation 'net.java.dev.jna:jna:5.17.0@aar'`
+    implementation 'net.java.dev.jna:jna:5.17.0@aar'
+
+    // LiveKit Wakeword (V-001) — openWakeWord ONNX integration
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.+'
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'`
     );
     return cfg;
   });
