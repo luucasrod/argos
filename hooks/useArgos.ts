@@ -218,7 +218,7 @@ export function useArgos() {
        * TTS do turno novo.
        */
       await refreshBargeInFlag();
-      const ttsGen = beginTtsTurn();
+      const ttsGen = await beginTtsTurn();
       try {
         await textToSpeech(text, personality, { cancelled: () => isTurnStale(ttsGen) });
       } finally {

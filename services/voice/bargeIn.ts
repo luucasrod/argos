@@ -37,6 +37,7 @@ import { isVoiceSessionV2Enabled } from '@/contracts';
 import { stopAllSpeech } from './textToSpeech';
 import { invalidateTtsPrefetch } from './ttsPrefetchCache';
 import { perfMark } from './perfLog';
+import { enableEchoCancellation } from './argosVoiceNative';
 
 /** Geração do turno corrente. Bump = "tudo do turno anterior é obsoleto". */
 let turnGen = 0;
@@ -117,11 +118,16 @@ async function armNativeDetection(active: boolean): Promise<void> {
  * Marca início de TTS. Devolve a geração do turno — passar para
  * `endTtsTurn()` e para o token `cancelled` do TTS. Arma a detecção
  * (só com o flag v2 ligado; sem ele é só contabilidade).
+ * Também habilita AEC nativo para cancelar eco do próprio TTS.
  */
-export function beginTtsTurn(): number {
+export async function beginTtsTurn(): Promise<number> {
   ttsActive = true;
   const gen = turnGen;
   void armNativeDetection(true);
+  // V-005: Habilita AEC durante TTS + barge-in listening
+  if (v2cached) {
+    void enableEchoCancellation(true);
+  }
   return gen;
 }
 
@@ -129,11 +135,16 @@ export function beginTtsTurn(): number {
  * Marca fim de TTS. Com geração antiga (turno já interrompido e outro TTS
  * em curso), não faz nada — o `finally` do turno obsoleto não pode
  * desligar o que o turno novo ligou.
+ * Também desabilita AEC.
  */
 export function endTtsTurn(genAtStart: number): void {
   if (genAtStart !== turnGen) return;
   ttsActive = false;
   void armNativeDetection(false);
+  // V-005: Desabilita AEC após TTS terminar
+  if (v2cached) {
+    void enableEchoCancellation(false);
+  }
 }
 
 /**
@@ -149,6 +160,7 @@ export async function handleUserInterrupt(heard: string): Promise<boolean> {
   if (!ttsActive) return false;
 
   const t0 = Date.now();
+  const genAtInterrupt = turnGen;
   turnGen += 1;
   resetTurn?.();
 
@@ -161,7 +173,7 @@ export async function handleUserInterrupt(heard: string): Promise<boolean> {
   // tocar depois (hoje é uma entrada one-shot; com fila de segmentos no
   // futuro, é aqui que ela é esvaziada).
   invalidateTtsPrefetch();
-  endTtsTurn(turnGen);
+  endTtsTurn(genAtInterrupt);
 
   const stopMs = Date.now() - t0;
   // Métrica `barge_in_stop_ms` (#241 consome): latência detecção → mudo.
