@@ -25,11 +25,26 @@ async function getVoices(): Promise<VoiceList> {
   return voicesPromise;
 }
 
-export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
+export interface TextToSpeechOpts {
+  /**
+   * Barge-in (#263): quando devolve true, o turno foi interrompido e este
+   * TTS não pode começar a tocar — nem nuvem nem sistema. Checado DEPOIS
+   * de cada await (síntese), nunca no meio da reprodução (quem para áudio
+   * em curso é `stopAllSpeech()`).
+   */
+  cancelled?: () => boolean;
+}
+
+export async function textToSpeech(
+  text: string,
+  personality: AIPersonality,
+  opts?: TextToSpeechOpts
+): Promise<void> {
   // stripForSpeech, não stripEmojis: o sintetizador lê "asterisco" e "cerquilha"
   // quando o markdown escapa, e nem todo chamador passa por resolveIntentSpeech.
   const spoken = stripForSpeech(text?.trim() ?? '');
   if (!spoken) return;
+  if (opts?.cancelled?.()) return;
 
   Speech.stop();
 
@@ -40,9 +55,11 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
    */
   try {
     const { speakWithCloud } = await import('@/services/voice/cloudTts');
+    if (opts?.cancelled?.()) return;
     const falou = await speakWithCloud(spoken, {
       rate: Math.min(2, Math.max(0.5, personality.voiceSpeed ?? 1.0)),
       gender: personality.voiceGender,
+      cancelled: opts?.cancelled,
     });
     if (falou) return;
     perfMark('tts_cloud_falhou_caindo_para_sistema');
@@ -123,6 +140,12 @@ export async function textToSpeech(text: string, personality: AIPersonality): Pr
 
     if (selected?.identifier) {
       options.voice = selected.identifier;
+    }
+
+    // Turno interrompido enquanto a voz do sistema era resolvida: não começa.
+    if (opts?.cancelled?.()) {
+      finish();
+      return;
     }
 
     try {

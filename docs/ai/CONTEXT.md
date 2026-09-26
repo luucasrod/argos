@@ -167,6 +167,25 @@ WebSocket AssemblyAI Universal-3 Realtime.
 - **Arquitetura**: cliente envia áudio → servidor mantém WebSocket aberto com
   AssemblyAI → server retorna SSE ao cliente
 
+### Barge-in — interromper o Argos no meio da fala (V-007, #263)
+
+Coordenador em `services/voice/bargeIn.ts`: quando o trigger dispara
+(`handleUserInterrupt`), para o TTS via `stopAllSpeech()`, invalida o
+prefetch pendente (`invalidateTtsPrefetch`), bumpa a geração do turno (TTS
+obsoleto não começa a tocar depois; `finally` do turno morto não derruba o
+guard do turno novo) e o texto ouvido entra no pipeline normal
+(`sendMessage`, com o histórico completo — o "reload com contexto" é o
+caminho padrão, não código próprio). Métrica no logcat:
+`[argos-perf] barge_in stop_ms=X` (detecção → mudo; alvo <300ms).
+
+Tudo atrás de `isVoiceSessionV2Enabled()` (padrão off, zero mudança sem
+ativar): com o flag ligado, o mic fica aberto durante o TTS (os dois
+`suspend()` de `useVoice.ts` são pulados) e a detecção da #238 é armada em
+volta de cada `speak()`. Sem AEC de hardware, o próprio TTS pode gerar
+falso-positivo — a única defesa hoje é `BARGE_IN_MIN_CHARS`. Antes de virar
+padrão: validar no aparelho + #260 (echo cancellation) + #261 (VAD
+dedicado, que vai alimentar o mesmo `handleUserInterrupt`).
+
 ---
 
 ## Build nativo e OTA — armadilhas que já custaram caro

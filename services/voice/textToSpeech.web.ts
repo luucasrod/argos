@@ -13,7 +13,13 @@ function estimateDurationMs(text: string, rate: number): number {
   return Math.max(3000, (words / wpm) * 60_000 + 1500);
 }
 
-export async function textToSpeech(text: string, personality: AIPersonality): Promise<void> {
+import type { TextToSpeechOpts } from './textToSpeech';
+
+export async function textToSpeech(
+  text: string,
+  personality: AIPersonality,
+  _opts?: TextToSpeechOpts
+): Promise<void> {
   const spoken = stripEmojis(text?.trim() ?? '');
   if (!spoken || typeof window === 'undefined' || !window.speechSynthesis) return;
 

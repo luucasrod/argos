@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAIStore } from '@/stores/useAIStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -13,6 +13,14 @@ import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
 import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
 import { textToSpeech } from '@/services/voice/textToSpeech';
+import {
+  beginTtsTurn,
+  currentTurnGen,
+  endTtsTurn,
+  isTurnStale,
+  refreshBargeInFlag,
+  registerTurnReset,
+} from '@/services/voice/bargeIn';
 import { pauseVoiceInput, waitForMicRelease } from '@/services/voice/voiceSession';
 import { resolveIntentSpeech, minimalConfirmation, stripForSpeech } from '@/services/voice/speechText';
 import { isVoiceSessionV2Enabled } from '@/contracts';
@@ -175,6 +183,20 @@ export function useArgos() {
   const { heavy, success } = useHaptic();
   const processingRef = useRef(false);
 
+  /*
+   * Barge-in (#263): o coordenador (`services/voice/bargeIn.ts`) precisa
+   * soltar este guard quando interrompe um turno em curso — senão o turno
+   * novo (a fala que interrompeu) cai no `return` de "já estou processando"
+   * e é descartado em silêncio. Registro uma vez, no espírito de
+   * `registerVoicePause`.
+   */
+  useEffect(() => {
+    registerTurnReset(() => {
+      processingRef.current = false;
+    });
+    return () => registerTurnReset(null);
+  }, []);
+
   const speak = useCallback(
     async (text: string, personality: AIPersonality = settings.personality) => {
       if (!text.trim()) return;
@@ -188,7 +210,20 @@ export function useArgos() {
       unlockSpeech();
       setStatus('speaking');
       perfMark('tts_iniciado');
-      await textToSpeech(text, personality);
+      /*
+       * Barge-in (#263): marca o turno de TTS (arma a detecção atrás do flag
+       * v2, dentro de `beginTtsTurn`). O token `cancelled` impede que um TTS
+       * obsoleto comece a tocar depois de um interrupt (síntese resolvendo
+       * tarde); o `finally` com geração impede que o turno morto desligue o
+       * TTS do turno novo.
+       */
+      await refreshBargeInFlag();
+      const ttsGen = beginTtsTurn();
+      try {
+        await textToSpeech(text, personality, { cancelled: () => isTurnStale(ttsGen) });
+      } finally {
+        endTtsTurn(ttsGen);
+      }
     },
     [setStatus, settings.personality]
   );
@@ -666,6 +701,16 @@ export function useArgos() {
       if (currentStatus === 'executing') return;
 
       processingRef.current = true;
+      /*
+       * Barge-in (#263): a geração invalida este turno se um interrupt
+       * chegar no meio dele. O `finally` lá embaixo só solta o guard quando
+       * ainda é o turno corrente — o turno obsoleto nunca pode derrubar o
+       * guard do turno novo que o interrompeu.
+       */
+      const turnGenAtEntry = currentTurnGen();
+      const releaseTurnGuard = () => {
+        if (!isTurnStale(turnGenAtEntry)) processingRef.current = false;
+      };
       pauseVoiceInput();
 
       const userMessage: Message = {
@@ -695,13 +740,13 @@ export function useArgos() {
           role: 'assistant',
           content: correctionAck,
           timestamp: new Date(),
-          type: 'text',
-        });
-        processingRef.current = false;
-        return;
-      }
+            type: 'text',
+          });
+          releaseTurnGuard();
+          return;
+        }
 
-      // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
+        // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
       // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
       const fastIntent = matchFastDeviceCommand(trimmed, useDeviceStore.getState().devices);
       if (fastIntent) {
@@ -744,14 +789,14 @@ export function useArgos() {
             timestamp: new Date(),
             type: 'error',
           });
-          setTimeout(() => setStatus('idle'), 2000);
-        } finally {
-          processingRef.current = false;
+            setTimeout(() => setStatus('idle'), 2000);
+          } finally {
+            releaseTurnGuard();
+          }
+          return;
         }
-        return;
-      }
 
-      setStatus('thinking');
+        setStatus('thinking');
       heavy();
 
       try {
@@ -920,10 +965,10 @@ export function useArgos() {
             void useAuthStore.getState().handleSessionExpired();
           }, 2000);
         }
-      } finally {
-        processingRef.current = false;
-      }
-    },
+        } finally {
+          releaseTurnGuard();
+        }
+      },
     [
       settings,
       memories,
