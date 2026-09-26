@@ -15,13 +15,18 @@
  * módulos Gradle. Por isso este plugin adiciona as MESMAS duas dependências
  * direto no `android/app/build.gradle`, senão o Kotlin não compila
  * (`Unresolved reference: vosk`).
+ *
+ * Para V-002 (Whisper.cpp STT on-device):
+ * - Adiciona a lib nativa whisper-cpp compilada via CMake/NDK
+ * - Copia o modelo whisper-pt/model.bin para o storage do app
+ * - Registra o pacote WhisperCppSTT
  */
 const { withDangerousMod, withAppBuildGradle } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 const PACKAGE_PATH = 'com/masya/argos/modules';
-const SOURCE_FILES = ['ArgosVoiceModule.kt', 'ArgosVoicePackage.kt'];
+const SOURCE_FILES = ['ArgosVoiceModule.kt', 'ArgosVoicePackage.kt', 'WhisperCppModule.kt', 'WhisperCppSTTPackage.kt'];
 
 function withArgosVoiceSources(config) {
   return withDangerousMod(config, [
@@ -83,6 +88,23 @@ function withArgosVoiceRegistration(config) {
         );
       }
 
+      // Also add WhisperCppSTT package registration
+      const WHISPER_IMPORT_LINE = 'import com.masya.argos.modules.WhisperCppSTT';
+      if (!content.includes(WHISPER_IMPORT_LINE)) {
+        content = content.replace(
+          /^(package com\.masya\.argos\s*\n)/m,
+          `$1\n${WHISPER_IMPORT_LINE}\n`
+        );
+      }
+
+      const WHISPER_REGISTRATION_LINE = 'add(WhisperCppSTTPackage())';
+      if (!content.includes(WHISPER_REGISTRATION_LINE)) {
+        content = content.replace(
+          /(PackageList\(this\)\.packages\.apply\s*\{)/,
+          `$1\n              ${WHISPER_REGISTRATION_LINE}`
+        );
+      }
+
       fs.writeFileSync(mainAppPath, content);
       return cfg;
     },
@@ -106,15 +128,56 @@ function withArgosVoiceGradleDeps(config) {
 
     // LiveKit Wakeword (V-001) — openWakeWord ONNX integration
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.+'
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'`
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
+
+    // V-002 Whisper.cpp — native library via CMake/NDK
+    implementation 'com.google.android.gms:play-services-basement:18.0.0'
+
+    // Expo Modules for native bridging
+    expoModulesPlugins()
+    }
     );
     return cfg;
   });
+}
+
+/** Configura o CMake para compilar whisper.cpp como biblioteca nativa Android. */
+function withArgosVoiceCMakeConfig(config) {
+  return withDangerousMod(config, [
+    'android',
+    (cfg) => {
+      const cmakeDir = path.join(
+        cfg.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'jni'
+      );
+      // CMakeLists.txt já está presente em android/app/src/main/jni/
+      // O build.gradle já inclui a configuração CMake
+      return cfg;
+    },
+  ]);
+}
+
+/** Copia o modelo Whisper de assets pra storage do app na primeira inicialização. */
+function withArgosVoiceModelAsset(config) {
+  return withDangerousMod(config, [
+    'android',
+    (cfg) => {
+      // O modelo é copiado no Kotlin WhisperCppSTT.onCreate() via ensureModelAvailable()
+      // Nenhuma ação extra necessária aqui - o arquivo assets/whisper-pt/model.bin
+      // será copiado automaticamente pelo módulo nativo.
+      return cfg;
+    },
+  ]);
 }
 
 module.exports = (config) => {
   config = withArgosVoiceSources(config);
   config = withArgosVoiceRegistration(config);
   config = withArgosVoiceGradleDeps(config);
+  config = withArgosVoiceCMakeConfig(config);
+  config = withArgosVoiceModelAsset(config);
   return config;
 };

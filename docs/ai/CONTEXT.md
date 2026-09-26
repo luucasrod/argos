@@ -148,6 +148,25 @@ Isso é decisão de produto, não bug a "melhorar".
 também**, ou por voz nunca vai funcionar. Não é falha da IA — é vocabulário
 fechado. Foi exatamente o que aconteceu com os comandos de cor.
 
+### STT Cloud — AssemblyAI Streaming (V-006)
+
+Implementado `api/stt-stream.ts` — Edge Function Vercel que proxyia para o
+WebSocket AssemblyAI Universal-3 Realtime.
+
+- **Endpoint**: `POST /api/stt-stream` — aceita PCM 16-bit 16kHz mono
+  (`application/octet-stream`)
+- **Protocolo**: WebSocket (`wss://streaming.assemblyai.com/v3/ws`) com
+  resposta Server-Sent Events (`text/event-stream`)
+- **Modelo**: `universal-3-realtime`, idioma `pt`
+- **Timeout**: 30s (compatível com Vosk/Voice listening max)
+- **Formato de saída**: `{type: "partial_transcript"|"final_transcript", text, confidence?}`
+- **Custo**: ~€0,45/hora (~€15/mês a 1hr/dia)
+- **Chave**: `ASSEMBLYAI_API_KEY` em `.env`
+- **Dependência npm**: `ws` (agora em `package.json`)
+- **Limitação de serverless**: `api/` tem 7 arquivos diretos (limite: 12)
+- **Arquitetura**: cliente envia áudio → servidor mantém WebSocket aberto com
+  AssemblyAI → server retorna SSE ao cliente
+
 ---
 
 ## Build nativo e OTA — armadilhas que já custaram caro

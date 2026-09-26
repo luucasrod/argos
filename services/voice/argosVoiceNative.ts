@@ -7,10 +7,14 @@
  * nada. As únicas funções novas são `armCommandCapture`/`getCommandAudioBase64`,
  * pro trecho do comando poder ser mandado pro STT em nuvem quando a gramática
  * não dá conta (ver docs/ai/CONTEXT.md, seção de Voz).
+ *
+ * Novas funções V-002:
+ * - transcribeAudioWhisper: usa Whisper.cpp on-device (preferred)
+ * - transcribeAudioWhisperFallback: usa Deepgram cloud fallback
  */
 import { NativeEventEmitter, NativeModules, type EventSubscription } from 'react-native';
 
-const { ArgosVoice } = NativeModules as {
+const { ArgosVoice, WhisperCpp } = NativeModules as {
   ArgosVoice: {
     loadModel(path: string): Promise<string>;
     start(options?: { grammar?: string[] }): Promise<string>;
@@ -20,6 +24,10 @@ const { ArgosVoice } = NativeModules as {
     getCommandAudioBase64(): Promise<string>;
     addListener(eventName: string): void;
     removeListeners(count: number): void;
+  };
+  WhisperCpp: {
+    transcribeAudioWhisper(audioBase64: string, language: string): Promise<{text: string; confidence: number; duration_ms: number}>;
+    getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}>;
   };
 };
 
@@ -62,4 +70,16 @@ export function getCommandAudioBase64(): Promise<string> {
 /** Descarta a captura em andamento sem devolver o áudio — ver comentário no Kotlin. */
 export function cancelCommandCapture(): void {
   ArgosVoice.cancelCommandCapture();
+}
+
+/** Transcreve áudio usando Whisper.cpp on-device (V-002, preferred).
+ *  Recebe áudio em base64 e retorna o texto transcrito.
+ *  Se falhar (modelo insuficiente ou dispositivo fraco), pode fallback para Deepgram. */
+export function transcribeAudioWhisper(audioBase64: string, language: string = "pt"): Promise<{text: string; confidence: number; duration_ms: number}> {
+  return WhisperCpp.transcribeAudioWhisper(audioBase64, language);
+}
+
+/** Obtém informações sobre o modelo Whisper carregado. */
+export function getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}> {
+  return WhisperCpp.getModelInfo();
 }
