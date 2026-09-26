@@ -18,6 +18,9 @@ import org.json.JSONArray
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.StorageService
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtSession
+import ai.onnxruntime.OrtEnvironment
 
 /**
  * ArgosVoiceModule — dono único do `AudioRecord`, substitui o `SpeechService`
@@ -47,6 +50,74 @@ private const val SAMPLE_RATE = 16000f
 // a detecção de silêncio que já existe no lado JS.
 private const val CHUNK_SAMPLES = 3200
 
+/**
+ * LiveKitWakewordDetector — integração com openWakeWord ONNX (V-001).
+ * Detecta wake word em português de forma mais precisa que Vosk.
+ */
+private class LiveKitWakewordDetector {
+  private var session: OrtSession? = null
+  private var env: OrtEnvironment? = null
+  private val wakewordThreshold = 0.5f
+  private var lastDetectionTime = 0L
+  private val debounceMs = 500L // Evitar detecções duplas
+
+  fun loadModel(modelPath: String) {
+    try {
+      env = OrtEnvironment.getEnvironment()
+      session = env?.createSession(modelPath)
+    } catch (e: Exception) {
+      android.util.Log.e("LiveKitWakeword", "Failed to load model: ${e.message}")
+    }
+  }
+
+  fun processFrame(audioFrame: ShortArray, read: Int): Boolean {
+    val sess = session ?: return false
+    val now = System.currentTimeMillis()
+    if (now - lastDetectionTime < debounceMs) return false
+
+    return try {
+      // Converter ShortArray pra FloatArray normalizado [-1, 1]
+      val floatAudio = FloatArray(read) { i -> audioFrame[i].toFloat() / 32768f }
+
+      // Criar tensor [1, read] — batch size 1
+      val inputTensor = OnnxTensor.createTensor(env!!, arrayOf(floatAudio))
+      val inputs = mapOf("input" to inputTensor)
+
+      val outputs = sess.run(inputs)
+      inputTensor.close()
+
+      // Modelo openWakeWord retorna confidence score — checar se > threshold
+      val output = outputs.values.firstOrNull() as? OnnxTensor
+      if (output != null) {
+        val result = output.floatBuffer.get(0) // Primeiro elemento do batch
+        output.close()
+
+        if (result > wakewordThreshold) {
+          lastDetectionTime = now
+          android.util.Log.d("LiveKitWakeword", "Detected! Score: $result")
+          true
+        } else {
+          false
+        }
+      } else {
+        false
+      }
+    } catch (e: Exception) {
+      android.util.Log.e("LiveKitWakeword", "Inference error: ${e.message}")
+      false
+    }
+  }
+
+  fun close() {
+    try {
+      session?.close()
+      env?.close()
+    } catch (e: Exception) {
+      android.util.Log.w("LiveKitWakeword", "Close error: ${e.message}")
+    }
+  }
+}
+
 class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
@@ -60,6 +131,8 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
   @Volatile private var recordThread: Thread? = null
   private val commandBuffer = ByteArrayOutputStream()
   private val bufferLock = Object()
+  private var wakewordDetector: LiveKitWakewordDetector? = null
+  @Volatile private var wakewordEnabled = false
 
   private fun sendEvent(name: String, data: String?) {
     reactContext
@@ -87,6 +160,27 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
         { m: Model? -> model = m; promise.resolve("ok") },
         { e2: IOException -> promise.reject("MODEL_ERROR", e2.message, e2) }
       )
+    }
+  }
+
+  /** Carrega modelo ONNX do openWakeWord pra detecção de wake word (V-001). */
+  @ReactMethod
+  fun loadWakewordModel(path: String, promise: Promise) {
+    try {
+      if (wakewordDetector == null) {
+        wakewordDetector = LiveKitWakewordDetector()
+      }
+      // Procura no assets se for caminho relativo
+      val modelPath = if (path.startsWith("/")) {
+        path
+      } else {
+        "${reactContext.cacheDir.absolutePath}/$path"
+      }
+      wakewordDetector?.loadModel(modelPath)
+      wakewordEnabled = true
+      promise.resolve("ok")
+    } catch (e: Exception) {
+      promise.reject("WW_LOAD_ERROR", e.message, e)
     }
   }
 
@@ -172,6 +266,15 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
           bytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
         }
         synchronized(bufferLock) { commandBuffer.write(bytes) }
+      }
+
+      // V-001: Detectar wake word com LiveKit em paralelo
+      if (wakewordEnabled) {
+        val detector = wakewordDetector
+        if (detector != null && detector.processFrame(shortBuf, read) && !capturing) {
+          capturing = true
+          sendEvent("onWakeWord", "argos")
+        }
       }
 
       val r = recognizer ?: continue
@@ -291,6 +394,9 @@ class ArgosVoiceModule(private val reactContext: ReactApplicationContext) :
     audioRecord = null
     recognizer?.close()
     recognizer = null
+    wakewordDetector?.close()
+    wakewordDetector = null
+    wakewordEnabled = false
     synchronized(bufferLock) { commandBuffer.reset() }
   }
 
