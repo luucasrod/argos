@@ -84,23 +84,26 @@ private class LiveKitWakewordDetector {
       val inputs = mapOf("input" to inputTensor)
 
       val outputs = sess.run(inputs)
-      inputTensor.close()
+      try {
+        inputTensor.close()
 
-      // Modelo openWakeWord retorna confidence score — checar se > threshold
-      val output = outputs.values.firstOrNull() as? OnnxTensor
-      if (output != null) {
-        val result = output.floatBuffer.get(0) // Primeiro elemento do batch
-        output.close()
+        // Modelo openWakeWord retorna confidence score — checar se > threshold
+        val output = outputs.values.firstOrNull() as? OnnxTensor
+        if (output != null) {
+          val result = output.floatBuffer.get(0) // Primeiro elemento do batch
 
-        if (result > wakewordThreshold) {
-          lastDetectionTime = now
-          android.util.Log.d("LiveKitWakeword", "Detected! Score: $result")
-          true
+          if (result > wakewordThreshold) {
+            lastDetectionTime = now
+            android.util.Log.d("LiveKitWakeword", "Detected! Score: $result")
+            true
+          } else {
+            false
+          }
         } else {
           false
         }
-      } else {
-        false
+      } finally {
+        outputs.values.forEach { it.close() }
       }
     } catch (e: Exception) {
       android.util.Log.e("LiveKitWakeword", "Inference error: ${e.message}")
