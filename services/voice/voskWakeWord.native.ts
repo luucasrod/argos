@@ -130,6 +130,8 @@ const COMMAND_PHRASES = [
 const COMMAND_SILENCE_MS = 1000;
 /** Espera por um comando quando só a wake word foi dita. */
 const AWAIT_COMMAND_MS = 4000;
+/** Timeout de streaming: continua ouvindo por até 30s sem comando válido. */
+const STREAMING_LISTEN_TIMEOUT_MS = 30000;
 
 /*
  * #204: usuario relatou corte no meio de frases com pausa natural antes de
@@ -374,6 +376,8 @@ let armedAt = 0;
  * antigo, e podia até disparar um segundo submit() por cima do primeiro.
  */
 let submitting = false;
+/** VOZ-RT streaming: timer que para de escutar após 30s sem som válido. */
+let streamingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
 /*
  * A-044: heurísticas para registrar tentativas de voz provavelmente mal
@@ -434,9 +438,28 @@ function clearSilence(): void {
   }
 }
 
+function clearStreamingTimeout(): void {
+  if (streamingTimeoutTimer) {
+    clearTimeout(streamingTimeoutTimer);
+    streamingTimeoutTimer = null;
+  }
+}
+
+function armStreamingTimeout(): void {
+  clearStreamingTimeout();
+  streamingTimeoutTimer = setTimeout(() => {
+    if (listening && armed) {
+      vlog('streaming timeout (30s sem comando válido) - parando escuta');
+      resetUtterance();
+      onCommandText?.(''); // Sinaliza timeout sem enviar comando
+    }
+  }, STREAMING_LISTEN_TIMEOUT_MS);
+}
+
 function resetUtterance(): void {
   utteranceGeneration += 1;
   clearSilence();
+  clearStreamingTimeout();
   if (armed) Vosk.cancelCommandCapture();
   armed = false;
   committed = '';
@@ -513,6 +536,7 @@ async function submitLocked(): Promise<void> {
   if (!listening || generation !== utteranceGeneration) return;
 
   vlog('ENVIANDO comando: "' + text + '"');
+  clearStreamingTimeout(); // Limpa o timeout de 30s — comando foi processado
   resetUtterance();
   onCommandText?.(text);
 }
@@ -586,6 +610,8 @@ function handle(raw: string, isFinal: boolean): void {
     // Se já veio comando junto, corta no silêncio (mais tempo se terminar em
     // conector — ver silenceWindowFor); se não, espera um pouco mais.
     armSilence(lastCommand ? silenceWindowFor(lastCommand) : AWAIT_COMMAND_MS);
+    // VOZ-RT: inicia o timeout de 30s para streaming contínuo sem comando válido.
+    armStreamingTimeout();
     return;
   }
 
@@ -725,6 +751,8 @@ export function armVoskUtterance(): boolean {
   armedAt = Date.now();
   Vosk.armCommandCapture();
   armSilence(AWAIT_COMMAND_MS);
+  // VOZ-RT: inicia o timeout de 30s para streaming contínuo sem comando válido.
+  armStreamingTimeout();
   return true;
 }
 

@@ -341,6 +341,14 @@ export function useVoice(options?: UseVoiceOptions) {
            * (mesma chamada já usada em startBackgroundWakeWord).
            */
           void configureAudioMode(true);
+          /*
+           * Garante que qualquer estado "armed" anterior seja cancelado antes
+           * de retomar. Evita que fique preso em "escuta ativa" de um comando
+           * anterior após processar a ação (VOZ-RT streaming loop).
+           */
+          if (wakeWordEngine.isArmed()) {
+            wakeWordEngine.cancelUtterance();
+          }
           wakeWordEngine.resume();
           /*
            * A-052: se a fala que acabou de terminar era uma pergunta do Argos
