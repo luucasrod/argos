@@ -53,6 +53,15 @@ export function takeCached(text: string, opts: PrefetchOpts): Promise<string> | 
   return promise;
 }
 
+/**
+ * Descarta o prefetch pendente sem consumir — barge-in (#263): o áudio da
+ * resposta interrompida não pode tocar depois. A promise em voo já tem
+ * catch silencioso (ver `prefetch`), então soltar a referência é seguro.
+ */
+export function invalidateTtsPrefetch(): void {
+  pending = null;
+}
+
 /** Só para teste. */
 export function __resetTtsPrefetchCacheForTest(): void {
   pending = null;

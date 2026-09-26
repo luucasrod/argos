@@ -26,6 +26,14 @@ import {
 import { transcribeRecording } from '@/services/voice/transcribeNative';
 import { wakeWordEngine } from '@/services/voice/wakeWordEngine.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
+import {
+  handleUserInterrupt,
+  isBargeInEnabledCached,
+  refreshBargeInFlag,
+  registerTurnRouter,
+  routeInterruptedTurn,
+} from '@/services/voice/bargeIn';
+import { setBargeInHandler } from '@/services/voice/voskWakeWord.native';
 import { perfAbort } from '@/services/voice/perfLog';
 import { consumeAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { playListenChime, preloadListenChime, CHIME_MS } from '@/services/voice/listenChime';
@@ -295,10 +303,19 @@ export function useVoice(options?: UseVoiceOptions) {
    * O speak() do useArgos chama pauseVoiceInput() antes do TTS. No nativo isso
    * nunca estava registrado, então o microfone continuava aberto disputando o
    * áudio com a síntese de voz.
+   *
+   * Barge-in (#263): com o flag v2 ligado, o `suspend()` daqui é pulado de
+   * propósito — o Vosk precisa continuar ouvindo durante a fala, senão a
+   * detecção (`bargeInListening`) nunca dispara. Sem AEC de hardware, o
+   * próprio TTS pode gerar falso-positivo: é beta atrás de flag, e a #261
+   * (VAD) mitiga de verdade. O resto (soltar expo-av, cancelar janela)
+   * continua sempre — nunca dois `AudioRecord`.
    */
   useEffect(() => {
     registerVoicePause(() => {
-      wakeWordEngine.suspend();
+      if (!isBargeInEnabledCached()) {
+        wakeWordEngine.suspend();
+      }
       activeWindow?.cancel();
       activeWindow = null;
       setIsListening(false);
@@ -307,9 +324,42 @@ export function useVoice(options?: UseVoiceOptions) {
     return () => unregisterVoicePause();
   }, []);
 
+  /*
+   * Barge-in (#263): registra UMA vez quem recebe o trigger de interrupção
+   * (`onBargeIn` da #238; a #261 vai alimentar o mesmo `handleUserInterrupt`
+   * quando o VAD existir) e como o texto ouvido volta ao pipeline normal.
+   */
+  useEffect(() => {
+    void refreshBargeInFlag();
+    registerTurnRouter((text) => {
+      onAutoSendRef.current?.(text);
+    });
+    setBargeInHandler((heard) => {
+      void (async () => {
+        const handled = await handleUserInterrupt(heard);
+        if (!handled) return;
+        // O turno novo entra pelo caminho da wake word: escuta ligada,
+        // status 'listening', e o texto segue pro `sendMessage` de sempre
+        // (com o histórico completo — o "reload com contexto" da #263).
+        if (wakeWordEngine.isRunning()) {
+          wakeWordEngine.resume();
+        }
+        setStatus('listening');
+        routeInterruptedTurn(heard);
+      })();
+    });
+    return () => {
+      registerTurnRouter(null);
+      setBargeInHandler(null);
+    };
+  }, [setStatus]);
+
   /* Religa a wake word quando o Argos volta a ficar ocioso (depois de falar/executar). */
   useEffect(() => {
     const unsubscribe = useAIStore.subscribe((state) => {
+      // Cache do flag v2 precisa estar fresco quando o TTS começar (é ele
+      // que decide se o mic fica aberto durante a fala — barge-in, #263).
+      void refreshBargeInFlag();
       if (!wakeWordEngine.isRunning()) return;
       /*
        * Suspende SÓ enquanto o Argos fala (TTS), para ele não se ouvir.
@@ -320,9 +370,15 @@ export function useVoice(options?: UseVoiceOptions) {
        * "start OK", e o estado "armado" se perdia. O comando nunca era enviado.
        * Regra escrita para a arquitetura antiga, em que a escuta ativa usava um
        * microfone separado e o Vosk tinha de soltar o dele. Hoje o Vosk É a escuta.
+       *
+       * Barge-in (#263): com o flag v2 ligado, NÃO suspende durante a fala —
+       * é o que permite a detecção de interrupção disparar. Sem AEC, risco
+       * de falso-positivo documentado em `services/voice/bargeIn.ts`.
        */
       if (state.status === 'speaking') {
-        wakeWordEngine.suspend();
+        if (!isBargeInEnabledCached()) {
+          wakeWordEngine.suspend();
+        }
       } else if (state.status === 'idle') {
         if (!activeWindow) {
           /*

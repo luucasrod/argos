@@ -19,7 +19,17 @@ import { prefetch as prefetchInCache, takeCached } from '@/services/voice/ttsPre
 
 const TIMEOUT_MS = 8000;
 
-type CloudTtsOpts = { voice?: string; rate?: number; gender?: 'male' | 'female' };
+type CloudTtsOpts = {
+  voice?: string;
+  rate?: number;
+  gender?: 'male' | 'female';
+  /**
+   * Barge-in (#263): checado depois da síntese, antes de tocar. Evita que
+   * um áudio do turno interrompido comece a tocar depois do `stopAllSpeech()`
+   * (ex.: `void speak()` em voo + prefetch resolvendo tarde).
+   */
+  cancelled?: () => boolean;
+};
 
 /** Evita bater no servidor repetidamente quando já sabemos que não há chave. */
 let unavailableUntil = 0;
@@ -120,6 +130,9 @@ export async function speakWithCloud(text: string, opts: CloudTtsOpts = {}): Pro
   } catch {
     return false;
   }
+
+  // Resposta interrompida enquanto a rede respondia: não toca.
+  if (opts.cancelled?.()) return false;
 
   try {
     await stopCloudSpeech();
