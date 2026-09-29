@@ -11,10 +11,15 @@
  * Novas funções V-002:
  * - transcribeAudioWhisper: usa Whisper.cpp on-device (preferred)
  * - transcribeAudioWhisperFallback: usa Deepgram cloud fallback
+ *
+ * Novas funções V-005 (AEC):
+ * - enableEchoCancellation: habilita/desabilita AEC nativo (WebRTC)
+ * - isEchoCancellationEnabled: verifica status do AEC
+ * - releaseAudioProcessing: libera recursos do AudioProcessing
  */
-import { NativeEventEmitter, NativeModules, type EventSubscription } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform, type EventSubscription } from 'react-native';
 
-const { ArgosVoice, WhisperCpp } = NativeModules as {
+const { ArgosVoice, WhisperCpp, AudioProcessing } = NativeModules as {
   ArgosVoice: {
     loadModel(path: string): Promise<string>;
     start(options?: { grammar?: string[] }): Promise<string>;
@@ -28,6 +33,13 @@ const { ArgosVoice, WhisperCpp } = NativeModules as {
   WhisperCpp: {
     transcribeAudioWhisper(audioBase64: string, language: string): Promise<{text: string; confidence: number; duration_ms: number}>;
     getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}>;
+  };
+  AudioProcessing: {
+    enableEchoCancellation(enable: boolean): Promise<string>;
+    isEchoCancellationEnabled(): Promise<boolean>;
+    release(): Promise<string>;
+    addListener(eventName: string): void;
+    removeListeners(count: number): void;
   };
 };
 
@@ -82,4 +94,37 @@ export function transcribeAudioWhisper(audioBase64: string, language: string = "
 /** Obtém informações sobre o modelo Whisper carregado. */
 export function getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}> {
   return WhisperCpp.getModelInfo();
+}
+
+/** Habilita ou desabilita o AEC (Acoustic Echo Cancellation) nativo.
+ *  Deve ser chamado durante TTS playback + barge-in listening.
+ *  Android: usa WebRTC AudioProcessing.setEchoCancellation()
+ *  iOS: no-op (usa AVAudioEngine built-in AEC quando disponível) */
+export async function enableEchoCancellation(enable: boolean): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    await AudioProcessing.enableEchoCancellation(enable);
+  } catch (e) {
+    console.warn('[AEC] Failed to set echo cancellation:', e);
+  }
+}
+
+/** Verifica se o AEC está atualmente habilitado. */
+export async function isEchoCancellationEnabled(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    return await AudioProcessing.isEchoCancellationEnabled();
+  } catch {
+    return false;
+  }
+}
+
+/** Libera recursos do AudioProcessing nativo. */
+export async function releaseAudioProcessing(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    await AudioProcessing.release();
+  } catch (e) {
+    console.warn('[AEC] Failed to release AudioProcessing:', e);
+  }
 }
