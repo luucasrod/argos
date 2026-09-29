@@ -5,6 +5,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { createClient } from '@supabase/supabase-js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
@@ -15,6 +16,41 @@ const supabase = createClient(
   process.env.SUPABASE_URL ?? 'https://qzoknfwfvdqcnbsirwlf.supabase.co',
   process.env.SUPABASE_ANON_KEY ?? ''
 );
+
+export interface StreamChatOptions {
+  model: string;
+  system: string;
+  messages: MessageParam[];
+  max_tokens?: number;
+}
+
+/**
+ * Generator que streama tokens de texto da Anthropic API.
+ * Usado tanto pelo handler quanto por clientes que precisam do stream
+ * diretamente (V-008: streaming TTS).
+ */
+export async function* streamChat(options: StreamChatOptions): AsyncGenerator<string, void, unknown> {
+  const anthropicStream = anthropic.messages.stream({
+    model: options.model,
+    system: options.system,
+    messages: options.messages,
+    max_tokens: options.max_tokens ?? 1024,
+  });
+
+  for await (const event of anthropicStream as AsyncIterable<{
+    type?: string;
+    delta?: { type?: string; text?: string };
+    error?: { type?: string; message?: string };
+  }>) {
+    if (event.type === 'error') {
+      throw { error: event.error };
+    }
+    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      const text = event.delta.text ?? '';
+      if (text) yield text;
+    }
+  }
+}
 
 function setCorsHeaders(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -76,27 +112,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader('X-Accel-Buffering', 'no');
 
       try {
-        const anthropicStream = anthropic.messages.stream({
-          model,
-          system,
-          messages,
-          max_tokens: max_tokens ?? 1024,
-        });
-
-        for await (const event of anthropicStream as AsyncIterable<{
-          type?: string;
-          delta?: { type?: string; text?: string };
-          error?: { type?: string; message?: string };
-        }>) {
-          if (event.type === 'error') {
-            throw { error: event.error };
-          }
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            res.write(event.delta.text ?? '');
-          }
+        for await (const text of streamChat({ model, system, messages, max_tokens })) {
+          res.write(text);
         }
       } catch (err) {
-        // Headers may already be sent, so the client treats this marker as a stream failure.
         writeStreamError(res, err);
       }
 

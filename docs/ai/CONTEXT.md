@@ -186,6 +186,36 @@ falso-positivo — a única defesa hoje é `BARGE_IN_MIN_CHARS`. Antes de virar
 padrão: validar no aparelho + #260 (echo cancellation) + #261 (VAD
 dedicado, que vai alimentar o mesmo `handleUserInterrupt`).
 
+### Streaming TTS (V-008, #264)
+
+LLM gera texto token a token → buffer de 50 chars → converte para áudio → play em tempo real. O usuário ouve a resposta enquanto o LLM ainda está gerando.
+
+**Latency improvement:** 5-8s → 1-2s (first token latency).
+
+**Arquitetura:**
+- `services/voice/streamingTts.ts`: `StreamingTtsBuffer` (acumula tokens, libera chunks de 50 chars), `AudioQueue` (fila de áudio com playback sequencial via `expo-av`), `StreamingTtsEngine` (orquestra tudo)
+- `services/ai/streamingChat.ts`: `handleStreamingLLM()` — consome `POST /api/chat` com `stream:true`, alimenta o `StreamingTtsEngine`
+- `api/chat.ts`: `streamChat()` generator exportado — streama tokens do Anthropic SDK; handler usa internamente
+- `api/tts.ts`: `synthesizeBase64()` exportado para `streamingTts.ts` sintetizar chunks
+
+**Fluxo:**
+1. `handleStreamingLLM()` abre conexão com `/api/chat?stream=true`
+2. Lê chunks via `response.body.getReader()` (texto bruto)
+3. Cada chunk vai para `StreamingTtsBuffer.addToken()` → quando >= 50 chars, chunk é liberado
+4. `StreamingTtsEngine.processToken()` sintetiza o chunk via `synthesizeBase64()` → `AudioQueue.enqueue()`
+5. `AudioQueue.playLoop()` toca cada segmento sequencialmente enquanto o LLM continua gerando
+6. No final: `flush()` processa o buffer restante (< 50 chars)
+
+**Cancelamento / Barge-in:** `cancelled` callback verifica `isTurnStale(turnGen)` do `bargeIn.ts`. Se o turno foi invalidado, `engine.stop()` para o queue e o áudio.
+
+**Chunk size:** 50 chars (recomendado). `MIN_CHUNK_SIZE` configurável.
+
+**Files:**
+- `services/voice/streamingTts.ts`
+- `services/ai/streamingChat.ts`
+- `api/chat.ts` (exporta `streamChat`)
+- `api/tts.ts` (exporta `synthesizeBase64`)
+
 ---
 
 ## Build nativo e OTA — armadilhas que já custaram caro

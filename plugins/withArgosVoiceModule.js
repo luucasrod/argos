@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PACKAGE_PATH = 'com/masya/argos/modules';
-const SOURCE_FILES = ['ArgosVoiceModule.kt', 'ArgosVoicePackage.kt', 'WhisperCppModule.kt', 'WhisperCppSTTPackage.kt'];
+const SOURCE_FILES = ['ArgosVoiceModule.kt', 'ArgosVoicePackage.kt', 'WhisperCppModule.kt', 'WhisperCppSTTPackage.kt', 'AudioProcessingModule.kt', 'AudioProcessingPackage.kt'];
 
 function withArgosVoiceSources(config) {
   return withDangerousMod(config, [
@@ -88,12 +88,28 @@ function withArgosVoiceRegistration(config) {
         );
       }
 
+      const AUDIO_PROCESSING_REGISTRATION_LINE = 'add(AudioProcessingPackage())';
+      if (!content.includes(AUDIO_PROCESSING_REGISTRATION_LINE)) {
+        content = content.replace(
+          /(PackageList\(this\)\.packages\.apply\s*\{)/,
+          `$1\n              ${AUDIO_PROCESSING_REGISTRATION_LINE}`
+        );
+      }
+
       // Also add WhisperCppSTT package registration
       const WHISPER_IMPORT_LINE = 'import com.masya.argos.modules.WhisperCppSTT';
       if (!content.includes(WHISPER_IMPORT_LINE)) {
         content = content.replace(
           /^(package com\.masya\.argos\s*\n)/m,
           `$1\n${WHISPER_IMPORT_LINE}\n`
+        );
+      }
+
+      const AUDIO_PROCESSING_IMPORT_LINE = 'import com.masya.argos.modules.AudioProcessingPackage';
+      if (!content.includes(AUDIO_PROCESSING_IMPORT_LINE)) {
+        content = content.replace(
+          /^(package com\.masya\.argos\s*\n)/m,
+          `$1\n${AUDIO_PROCESSING_IMPORT_LINE}\n`
         );
       }
 
@@ -111,7 +127,6 @@ function withArgosVoiceRegistration(config) {
   ]);
 }
 
-/** Expõe org.vosk.Model/Recognizer (e a lib nativa JNA) pro módulo compilar. */
 function withArgosVoiceGradleDeps(config) {
   return withAppBuildGradle(config, (cfg) => {
     const marker = 'com.alphacephei:vosk-android';
@@ -132,6 +147,9 @@ function withArgosVoiceGradleDeps(config) {
 
     // V-002 Whisper.cpp — native library via CMake/NDK
     implementation 'com.google.android.gms:play-services-basement:18.0.0'
+
+    // V-005 AEC — WebRTC AudioProcessing para echo cancellation
+    implementation 'org.webrtc:google-webrtc:1.0.32006'
 
     // Expo Modules for native bridging
     expoModulesPlugins()
