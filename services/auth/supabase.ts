@@ -8,7 +8,22 @@ const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'eyJhbGci
 console.log('[SUPABASE] Initializing with URL:', SUPABASE_URL);
 console.log('[SUPABASE] Anon key set:', !!SUPABASE_ANON_KEY);
 
+const customFetch = async (url: string, init?: RequestInit) => {
+  console.log('[FETCH] Request:', url);
+  try {
+    const response = await fetch(url, init);
+    console.log('[FETCH] Response status:', response.status);
+    return response;
+  } catch (error: any) {
+    console.error('[FETCH] Error:', error.message);
+    throw error;
+  }
+};
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: {
+    fetch: customFetch,
+  },
   auth: {
     storage: Platform.OS === 'web' ? undefined : AsyncStorage,
     autoRefreshToken: true,

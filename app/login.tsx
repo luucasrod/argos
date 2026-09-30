@@ -13,6 +13,7 @@ import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { Colors } from '@/constants/colors';
+import { diagnoseSupabaseConnection } from '@/services/auth/diagnose';
 
 const SUPABASE_PROVIDERS_URL =
   'https://supabase.com/dashboard/project/qzoknfwfvdqcnbsirwlf/auth/providers';
@@ -60,6 +61,23 @@ export default function LoginScreen() {
 
   // Magic link
   const [magicEmail, setMagicEmail] = useState('');
+
+  // Diagnosis
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisResult, setDiagnosisResult] = useState<string | null>(null);
+
+  const handleDiagnosis = async () => {
+    setDiagnosing(true);
+    setDiagnosisResult(null);
+    try {
+      const result = await diagnoseSupabaseConnection();
+      setDiagnosisResult(result.ok ? 'Conexão OK ✓' : `Erro: ${result.error}`);
+    } catch (error: any) {
+      setDiagnosisResult(`Erro: ${error.message}`);
+    } finally {
+      setDiagnosing(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.location) return;
@@ -316,6 +334,22 @@ export default function LoginScreen() {
               <Text style={styles.helpLink}>Abrir configuração do Supabase →</Text>
             </Pressable>
           </View>
+
+          {diagnosisResult && (
+            <View style={[styles.helpBox, { borderColor: diagnosisResult.includes('OK') ? '#34A853' : '#EA4335' }]}>
+              <Text style={styles.helpText}>{diagnosisResult}</Text>
+            </View>
+          )}
+
+          <Pressable
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.btnPressed]}
+            onPress={handleDiagnosis}
+            disabled={diagnosing}
+          >
+            <Text style={styles.secondaryBtnText}>
+              {diagnosing ? 'Testando...' : 'Testar conectividade'}
+            </Text>
+          </Pressable>
 
           <Text style={styles.terms}>
             Ao entrar, você concorda com o uso do Argos como assistente pessoal.{'\n'}
