@@ -234,6 +234,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
         if (error) {
           console.error('[AUTH] Error:', error.message, error.status, error.code);
+
+          // Retry on network errors (Supabase returns errors as objects, not exceptions)
+          if (attempt < maxRetries && error.message?.includes('Network request failed')) {
+            const delayMs = Math.pow(2, attempt) * 500; // Exponential backoff: 1s, 2s, 4s
+            console.log(`[AUTH] Network error detected. Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+
           // Don't retry on auth errors (invalid credentials, etc)
           const msg = error.message.includes('Invalid login credentials')
             ? 'E-mail ou senha incorretos.'
@@ -249,10 +258,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       } catch (err: any) {
         console.error(`[AUTH] Exception (attempt ${attempt}):`, err.message);
 
-        // Retry on network errors
+        // Retry on network errors (in case of actual exceptions)
         if (attempt < maxRetries && err.message?.includes('Network request failed')) {
-          const delayMs = Math.pow(2, attempt) * 500; // Exponential backoff: 1s, 2s, 4s
-          console.log(`[AUTH] Retrying in ${delayMs}ms...`);
+          const delayMs = Math.pow(2, attempt) * 500;
+          console.log(`[AUTH] Network exception detected. Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
         }
