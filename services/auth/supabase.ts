@@ -11,11 +11,25 @@ console.log('[SUPABASE] Anon key set:', !!SUPABASE_ANON_KEY);
 const customFetch = async (url: string, init?: RequestInit) => {
   console.log('[FETCH] Request:', url);
   try {
-    const response = await fetch(url, init);
-    console.log('[FETCH] Response status:', response.status);
+    // Add 10s timeout for fetch requests
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      console.log('[FETCH] Timeout triggered for:', url);
+      controller.abort();
+    }, 10000);
+
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+    console.log('[FETCH] Response status:', response.status, 'for:', url);
     return response;
   } catch (error: any) {
-    console.error('[FETCH] Error:', error.message);
+    console.error('[FETCH] Error for', url, ':', error.message);
+    console.error('[FETCH] Error name:', error.name);
+    console.error('[FETCH] Error code:', error.code);
     throw error;
   }
 };
