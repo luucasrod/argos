@@ -79,6 +79,11 @@ export default function LoginScreen() {
     }
   };
 
+  // Auto-run diagnostics on mount to check Supabase connectivity
+  useEffect(() => {
+    handleDiagnosis();
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.location) return;
 
