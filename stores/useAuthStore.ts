@@ -172,18 +172,28 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     set({ loading: true, authError: null, authMessage: null });
 
-    const { data, error } = await supabase.auth.signUp({
-      email: trimmedEmail,
-      password,
-      options: { data: { full_name: trimmedName, birthdate } },
-    });
+    try {
+      console.log('[AUTH] Attempting signup for:', trimmedEmail);
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: { data: { full_name: trimmedName, birthdate } },
+      });
 
-    if (error) {
-      const msg = error.message.includes('already registered')
-        ? 'Esse e-mail já está cadastrado. Faça login.'
-        : error.message;
-      set({ loading: false, authError: msg });
-      return msg;
+      console.log('[AUTH] Signup response:', { data: !!data, error: error?.message });
+
+      if (error) {
+        console.error('[AUTH] Signup error:', error.message, error.status, error.code);
+        const msg = error.message.includes('already registered')
+          ? 'Esse e-mail já está cadastrado. Faça login.'
+          : error.message;
+        set({ loading: false, authError: msg });
+        return msg;
+      }
+    } catch (err: any) {
+      console.error('[AUTH] Signup exception:', err.message, err.stack);
+      set({ loading: false, authError: `Exceção: ${err.message}` });
+      return err.message;
     }
 
     if (!data.session || !data.user) {
