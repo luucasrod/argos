@@ -213,18 +213,45 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     set({ loading: true, authError: null, authMessage: null });
-    const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
 
-    if (error) {
-      const msg = error.message.includes('Invalid login credentials')
-        ? 'E-mail ou senha incorretos.'
-        : error.message;
-      set({ loading: false, authError: msg });
-      return msg;
+    // Retry com backoff exponencial
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+
+        if (error) {
+          lastError = error;
+          if (error.message.includes('Network') || error.message.includes('Failed')) {
+            // Network error — tentar novamente
+            if (attempt < 3) {
+              set({ authMessage: `Tentativa ${attempt}/3... reconectando...` });
+              await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+              continue;
+            }
+          }
+          const msg = error.message.includes('Invalid login credentials')
+            ? 'E-mail ou senha incorretos.'
+            : error.message;
+          set({ loading: false, authError: msg });
+          return msg;
+        }
+
+        set({ user: mapUser(data.user), loading: false, initialized: true });
+        return null;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 3) {
+          set({ authMessage: `Tentativa ${attempt}/3... reconectando...` });
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
     }
 
-    set({ user: mapUser(data.user), loading: false, initialized: true });
-    return null;
+    // Todas as tentativas falharam
+    const msg = lastError?.message || 'Erro de rede. Verifique sua conexão e tente novamente.';
+    set({ loading: false, authError: msg });
+    return msg;
   },
 
   signOut: async () => {
