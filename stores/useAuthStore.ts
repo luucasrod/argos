@@ -224,33 +224,46 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     set({ loading: true, authError: null, authMessage: null });
 
-    try {
-      console.log('[AUTH] Attempting login for:', trimmed);
-      const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log('[AUTH] Attempting login for:', trimmed, `(attempt ${attempt}/${maxRetries})`);
+        const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
 
-      console.log('[AUTH] Response:', { data: !!data, error: error?.message });
+        console.log('[AUTH] Response:', { data: !!data, error: error?.message });
 
-      if (error) {
-        console.error('[AUTH] Error:', error.message, error.status, error.code);
-        const msg = error.message.includes('Invalid login credentials')
-          ? 'E-mail ou senha incorretos.'
-          : `Erro: ${error.message}`;
-        set({ loading: false, authError: msg });
-        return msg;
+        if (error) {
+          console.error('[AUTH] Error:', error.message, error.status, error.code);
+          // Don't retry on auth errors (invalid credentials, etc)
+          const msg = error.message.includes('Invalid login credentials')
+            ? 'E-mail ou senha incorretos.'
+            : `Erro: ${error.message}`;
+          set({ loading: false, authError: msg });
+          return msg;
+        }
+
+        if (data?.user) {
+          set({ user: mapUser(data.user), loading: false, initialized: true });
+          return null;
+        }
+      } catch (err: any) {
+        console.error(`[AUTH] Exception (attempt ${attempt}):`, err.message);
+
+        // Retry on network errors
+        if (attempt < maxRetries && err.message?.includes('Network request failed')) {
+          const delayMs = Math.pow(2, attempt) * 500; // Exponential backoff: 1s, 2s, 4s
+          console.log(`[AUTH] Retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          continue;
+        }
+
+        set({ loading: false, authError: `Exceção: ${err.message}` });
+        return err.message;
       }
-    } catch (err: any) {
-      console.error('[AUTH] Exception:', err.message, err.stack);
-      set({ loading: false, authError: `Exceção: ${err.message}` });
-      return err.message;
     }
 
-    if (!data?.user) {
-      set({ loading: false, authError: 'Erro ao fazer login. Tente novamente.' });
-      return 'Erro ao fazer login';
-    }
-
-    set({ user: mapUser(data.user), loading: false, initialized: true });
-    return null;
+    set({ loading: false, authError: 'Erro ao fazer login. Tente novamente.' });
+    return 'Erro ao fazer login';
   },
 
   signOut: async () => {
