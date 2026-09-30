@@ -213,14 +213,25 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     set({ loading: true, authError: null, authMessage: null });
-    const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
 
-    if (error) {
-      const msg = error.message.includes('Invalid login credentials')
-        ? 'E-mail ou senha incorretos.'
-        : error.message;
-      set({ loading: false, authError: msg });
-      return msg;
+    try {
+      console.log('[AUTH] Attempting login for:', trimmed);
+      const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+
+      console.log('[AUTH] Response:', { data: !!data, error: error?.message });
+
+      if (error) {
+        console.error('[AUTH] Error:', error.message, error.status, error.code);
+        const msg = error.message.includes('Invalid login credentials')
+          ? 'E-mail ou senha incorretos.'
+          : `Erro: ${error.message}`;
+        set({ loading: false, authError: msg });
+        return msg;
+      }
+    } catch (err: any) {
+      console.error('[AUTH] Exception:', err.message, err.stack);
+      set({ loading: false, authError: `Exceção: ${err.message}` });
+      return err.message;
     }
 
     if (!data?.user) {
