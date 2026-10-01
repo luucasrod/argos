@@ -59,7 +59,7 @@ export async function stopCloudSpeech(): Promise<void> {
  * o streaming do LLM entrega o campo `speech`, e o resultado fica pronto
  * (ou quase) por quando `speak()` de verdade for chamado.
  */
-async function synthesizeBase64(text: string, opts: CloudTtsOpts): Promise<string> {
+export async function synthesizeBase64(text: string, opts: CloudTtsOpts): Promise<string> {
   const token = await getAccessToken().catch(() => null);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
