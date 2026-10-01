@@ -1,11 +1,6 @@
 /**
  * transcribeNative.ts — envia o arquivo gravado para /api/transcribe (Whisper).
  *
- * DEPRECATED para novos fluxos de voz aberta: prefira `sttDeepgram.ts`, que
- * suporta transcrição incremental quando a fonte fornece chunks de áudio. Este
- * arquivo continua como fallback compatível para o `expo-av`, que hoje só
- * entrega URI final no React Native.
- *
  * Usa FormData com `{ uri, name, type }`, que é o caminho de upload de arquivo
  * do React Native: a camada nativa de rede lê o arquivo direto do disco. É de
  * propósito que NÃO se lê o arquivo em JS aqui:

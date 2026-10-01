@@ -40,12 +40,6 @@ export class StreamingTtsBuffer {
     return chunks;
   }
 
-  flush(): string {
-    const text = this.buffer.trim();
-    this.buffer = '';
-    return text;
-  }
-
   get length(): number {
     return this.buffer.length;
   }
@@ -59,7 +53,7 @@ class AudioQueue {
   async enqueue(uri: string): Promise<void> {
     this.queue.push({ uri, status: 'pending' });
     if (!this.isPlaying) {
-      void this.playLoop();
+      await this.playLoop();
     }
   }
 
@@ -111,22 +105,14 @@ class AudioQueue {
     await stopAllSpeech();
   }
 
-  async waitForIdle(): Promise<void> {
-    while (this.isPlaying || this.queue.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-
   get queueLength(): number {
     return this.queue.length;
   }
 }
 
 async function synthesizeChunk(text: string): Promise<string | null> {
-  const clean = text.trim();
-  if (!clean) return null;
   try {
-    const base64 = await synthesizeBase64(clean, {
+    const base64 = await synthesizeBase64(text.trim(), {
       rate: 1.0,
       gender: 'female',
     });
@@ -160,12 +146,13 @@ export class StreamingTtsEngine {
   async processToken(token: string): Promise<void> {
     if (this.options.cancelled?.()) return;
 
-    const firstChunk = this.buffer.addToken(token);
-    const chunks = firstChunk ? [firstChunk, ...this.buffer.drainAll()] : [];
+    this.buffer.addToken(token);
+
+    const chunks = this.buffer.drainAll();
     for (const text of chunks) {
       const uri = await synthesizeChunk(text);
       if (uri && !this.options.cancelled?.()) {
-        void this.queue.enqueue(uri);
+        await this.queue.enqueue(uri);
       }
     }
   }
@@ -175,17 +162,13 @@ export class StreamingTtsEngine {
     if (remaining && !this.options.cancelled?.()) {
       const uri = await synthesizeChunk(remaining);
       if (uri) {
-        void this.queue.enqueue(uri);
+        await this.queue.enqueue(uri);
       }
     }
   }
 
   async stop(): Promise<void> {
     await this.queue.stop();
-  }
-
-  async waitForIdle(): Promise<void> {
-    await this.queue.waitForIdle();
   }
 }
 

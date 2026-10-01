@@ -24,7 +24,7 @@ export async function handleStreamingLLM(
   onToken?: (token: string) => void
 ): Promise<{ text: string; usedStreaming: boolean }> {
   const token = await resolveToken();
-  const turnGen = await beginTtsTurn();
+  const turnGen = beginTtsTurn();
   const cancelled = () => isTurnStale(turnGen);
   const engine = await createStreamingTtsEngine({
     personality: options.personality,
@@ -33,7 +33,7 @@ export async function handleStreamingLLM(
 
   try {
     perfMark('llm_requisicao_enviada_streaming_tts');
-    const res = await expoFetch(`${API_BASE}/api/chatStream`, {
+    const res = await expoFetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -44,6 +44,7 @@ export async function handleStreamingLLM(
         system: options.system,
         messages: options.messages,
         max_tokens: options.max_tokens ?? 1024,
+        stream: true,
       }),
     });
 
@@ -100,7 +101,7 @@ export async function handleStreamingLLM(
     }
 
     await engine.flush();
-    await engine.waitForIdle();
+    await engine.stop();
     endTtsTurn(turnGen);
 
     return { text: fullText, usedStreaming: true };

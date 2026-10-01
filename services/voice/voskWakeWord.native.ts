@@ -133,18 +133,6 @@ const AWAIT_COMMAND_MS = 4000;
 /** Timeout de streaming: continua ouvindo por até 30s sem comando válido. */
 const STREAMING_LISTEN_TIMEOUT_MS = 30000;
 
-/**
- * Falso positivo: o produto prefere perder chamadas reais a acordar sozinho.
- * Como este arquivo recebe texto do Vosk, não amplitude crua do AudioRecord, o
- * "volume gate" aqui é um gate de atividade sustentada: a wake word precisa
- * aparecer em dois eventos próximos, separados por um pequeno intervalo. Um
- * ruído isolado que o decoder força para "ei argos" tende a aparecer uma vez
- * e morre antes de armar.
- */
-const WAKE_CONFIRMATIONS_NEEDED = 2;
-const WAKE_CONFIRM_WINDOW_MS = 1200;
-const WAKE_CONFIRM_MIN_GAP_MS = 120;
-
 /*
  * #204: usuario relatou corte no meio de frases com pausa natural antes de
  * um complemento (ex.: "luz do escritorio" [pausa] "em azul" — o "em azul"
@@ -390,7 +378,6 @@ let armedAt = 0;
 let submitting = false;
 /** VOZ-RT streaming: timer que para de escutar após 30s sem som válido. */
 let streamingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-let wakeCandidate: { key: string; firstAt: number; lastAt: number; confirmations: number } | null = null;
 
 /*
  * A-044: heurísticas para registrar tentativas de voz provavelmente mal
@@ -471,7 +458,6 @@ function armStreamingTimeout(): void {
 
 function resetUtterance(): void {
   utteranceGeneration += 1;
-  resetWakeCandidate();
   clearSilence();
   clearStreamingTimeout();
   if (armed) Vosk.cancelCommandCapture();
@@ -479,38 +465,6 @@ function resetUtterance(): void {
   committed = '';
   partial = '';
   lastCommand = '';
-}
-
-function resetWakeCandidate(): void {
-  wakeCandidate = null;
-}
-
-function wakeKey(heard: string, end: number): string {
-  return heard.slice(0, end).replace(/\s+/g, ' ').trim();
-}
-
-function confirmWakeCandidate(heard: string, end: number, isFinal: boolean): boolean {
-  const now = Date.now();
-  const key = wakeKey(heard, end);
-  const current = wakeCandidate;
-
-  if (!current || current.key !== key || now - current.firstAt > WAKE_CONFIRM_WINDOW_MS) {
-    wakeCandidate = { key, firstAt: now, lastAt: now, confirmations: 1 };
-    vlog(`wake candidato "${key}" aguardando double-check`);
-    return false;
-  }
-
-  if (!isFinal && now - current.lastAt < WAKE_CONFIRM_MIN_GAP_MS) {
-    return false;
-  }
-
-  current.confirmations += 1;
-  current.lastAt = now;
-  vlog(`wake candidato "${key}" confirmacao ${current.confirmations}/${WAKE_CONFIRMATIONS_NEEDED}`);
-
-  if (current.confirmations < WAKE_CONFIRMATIONS_NEEDED) return false;
-  wakeCandidate = null;
-  return true;
 }
 
 async function submit(): Promise<void> {
@@ -603,7 +557,7 @@ function armSilence(ms: number): void {
  * contra transcrições imaginadas em vez das que o modelo realmente devolve.
  */
 function vlog(msg: string): void {
-  console.log('[VOSK] ' + msg);
+  console.log('[argos-vosk] ' + msg);
 }
 
 /** Processa uma transcrição (parcial ou final) do reconhecedor. */
@@ -635,11 +589,7 @@ function handle(raw: string, isFinal: boolean): void {
   if (!armed) {
     if (!heard) return;
     const end = findWakeEnd(heard, patterns);
-    if (end < 0) {
-      resetWakeCandidate();
-      return;
-    }
-    if (!confirmWakeCandidate(heard, end, isFinal)) return;
+    if (end < 0) return;
 
     armed = true;
     armedAt = Date.now();

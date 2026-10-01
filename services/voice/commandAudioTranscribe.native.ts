@@ -8,21 +8,11 @@
  */
 import { getAccessToken } from '@/services/auth/session';
 import { API_BASE } from '@/constants/api';
-import { transcribeWavBase64Deepgram } from '@/services/voice/sttDeepgram';
 
 const TIMEOUT_MS = 10_000;
 
 /** `audioBase64` já vem como WAV (cabeçalho incluído) de `getCommandAudioBase64()`. */
 export async function transcribeCommandAudio(audioBase64: string): Promise<string> {
-  try {
-    const deepgramText = await transcribeWavBase64Deepgram(audioBase64, (event) => {
-      if (event.text) console.log(`[DEEPGRAM] comando ${event.type}: "${event.text}"`);
-    });
-    if (deepgramText) return deepgramText;
-  } catch (e) {
-    console.warn('[DEEPGRAM] fallback para Whisper:', e);
-  }
-
   const token = await getAccessToken();
 
   const controller = new AbortController();

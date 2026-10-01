@@ -1,7 +1,7 @@
 /**
  * api/stt-stream.ts — STT streaming via Deepgram (nova-2).
  *
- * Recebe áudio PCM 16-bit 16kHz mono (ou WAV base64 JSON) via POST e retorna
+ * Recebe chunks de áudio PCM 16-bit 16kHz mono via POST e retorna
  * Server-Sent Events com as transcrições em tempo real.
  *
  * Fluxo:
@@ -21,8 +21,6 @@ export const config = { api: { bodyParser: false } };
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY ?? '';
 const LISTENING_TIMEOUT_MS = 30_000;
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
-const PCM_CHUNK_BYTES = 3200 * 2;
-const WAV_HEADER_BYTES = 44;
 
 function sseEvent(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
@@ -46,23 +44,6 @@ async function readRawBody(req: VercelRequest): Promise<Buffer> {
     chunks.push(buf);
   }
   return Buffer.concat(chunks);
-}
-
-function decodeAudioBody(req: VercelRequest, raw: Buffer): { audio: Buffer; linear16: boolean } {
-  const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
-  if (!contentType.includes('application/json')) {
-    return {
-      audio: raw,
-      linear16: contentType.includes('application/octet-stream') || !contentType,
-    };
-  }
-
-  const parsed = JSON.parse(raw.toString('utf8')) as { audio?: string; mimeType?: string };
-  const audio = parsed.audio ? Buffer.from(parsed.audio, 'base64') : Buffer.alloc(0);
-  if (parsed.mimeType?.includes('wav') && audio.subarray(0, 4).toString('ascii') === 'RIFF') {
-    return { audio: audio.subarray(WAV_HEADER_BYTES), linear16: true };
-  }
-  return { audio, linear16: false };
 }
 
 function sendError(res: VercelResponse, code: string, message: string, closed: boolean): void {
@@ -92,19 +73,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let raw: Buffer;
-  let linear16 = true;
   try {
     raw = await readRawBody(req);
   } catch {
     return res.status(413).json({ error: 'payload_too_large' });
-  }
-
-  try {
-    const decoded = decodeAudioBody(req, raw);
-    raw = decoded.audio;
-    linear16 = decoded.linear16;
-  } catch {
-    return res.status(400).json({ error: 'invalid_audio_payload' });
   }
 
   if (raw.byteLength < 800) {
@@ -133,13 +105,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const deepgram = new DeepgramClient({ apiKey: DEEPGRAM_API_KEY });
-    connection = await deepgram.listen.v1.connect({
-      model: 'nova-3',
+connection = await deepgram.listen.v1.connect({
+      model: 'nova-2',
       language: 'pt',
       interim_results: 'true',
       smart_format: 'true',
-      ...(linear16 ? { encoding: 'linear16', sample_rate: 16000, channels: 1 } : {}),
-      endpointing: 300,
+      sample_rate: 16000,
+      Authorization: DEEPGRAM_API_KEY,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Falha ao conectar Deepgram';
@@ -164,14 +136,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!transcript && !isFinal) return;
 
-      const event = {
+      sendSSE(res, {
         type: isFinal ? 'final' : 'partial',
         text: transcript,
         ...(confidence != null && { confidence }),
         is_final: isFinal,
-      };
-      console.log(`[DEEPGRAM] ${event.type}: "${transcript}"`);
-      sendSSE(res, event);
+      });
     } catch {
       /* Mensagem não parseável, ignorar */
     }
@@ -192,20 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   /* ── Enviar áudio para Deepgram ── */
   try {
-    for (let offset = 0; offset < raw.length && !closed; offset += PCM_CHUNK_BYTES) {
-      connection.sendMedia(raw.subarray(offset, offset + PCM_CHUNK_BYTES));
-      // Pequeno yield: evita despejar arquivos longos de uma vez no WS.
-      await new Promise((r) => setTimeout(r, 5));
-    }
-    const liveConnection = connection as typeof connection & {
-      finish?: () => void;
-      send?: (data: string) => void;
-    };
-    try {
-      liveConnection.finish?.();
-    } catch {
-      liveConnection.send?.(JSON.stringify({ type: 'Finalize' }));
-    }
+    connection.sendMedia(raw);
   } catch (err) {
     if (closed) return;
     const message = err instanceof Error ? err.message : 'Erro ao enviar áudio';

@@ -148,32 +148,24 @@ Isso é decisão de produto, não bug a "melhorar".
 também**, ou por voz nunca vai funcionar. Não é falha da IA — é vocabulário
 fechado. Foi exatamente o que aconteceu com os comandos de cor.
 
-### STT Cloud — Deepgram Streaming (V-006/V-009)
+### STT Cloud — AssemblyAI Streaming (V-006)
 
-`services/voice/sttDeepgram.ts` é o cliente novo para STT incremental. Quando a
-fonte fornece PCM16 mono 16kHz em chunks, `DeepgramStreamingTranscriber` abre
-WebSocket direto com Deepgram e entrega eventos parciais/finais sem esperar a
-fala acabar. O caminho legado por arquivo (`services/voice/transcribeNative.ts`,
-Whisper via `/api/transcribe`) fica de fallback para gravações `expo-av`, porque
-o `expo-av` atual só entrega URI final no JS.
-
-`api/stt-stream.ts` é o proxy Deepgram usado quando o app já tem áudio final
-(bytes crus ou WAV base64 JSON), inclusive pelo fallback de comando do Vosk.
+Implementado `api/stt-stream.ts` — Edge Function Vercel que proxyia para o
+WebSocket AssemblyAI Universal-3 Realtime.
 
 - **Endpoint**: `POST /api/stt-stream` — aceita PCM 16-bit 16kHz mono
-  (`application/octet-stream`) ou `{ audio, mimeType: "audio/wav" }`
-- **Protocolo**: cliente/proxy mantém WebSocket com Deepgram e retorna
-  Server-Sent Events (`text/event-stream`) no proxy
-- **Modelo**: `nova-3`, idioma `pt`
+  (`application/octet-stream`)
+- **Protocolo**: WebSocket (`wss://streaming.assemblyai.com/v3/ws`) com
+  resposta Server-Sent Events (`text/event-stream`)
+- **Modelo**: `universal-3-realtime`, idioma `pt`
 - **Timeout**: 30s (compatível com Vosk/Voice listening max)
-- **Formato de saída**: `{type: "partial"|"final", text, confidence?, is_final?}`
-- **Chave**: `DEEPGRAM_API_KEY` no servidor; `EXPO_PUBLIC_DEEPGRAM_API_KEY`
-  só para testes locais de WebSocket direto
-- **Limitação de serverless**: `api/` fica com 8 arquivos diretos rastreados
-  depois de `api/chatStream.ts` (limite: 12)
-- **Arquitetura**: chunks PCM em tempo real → WebSocket Deepgram direto quando
-  disponível; áudio final → proxy `/api/stt-stream` → SSE; fallback final →
-  `/api/transcribe` Whisper
+- **Formato de saída**: `{type: "partial_transcript"|"final_transcript", text, confidence?}`
+- **Custo**: ~€0,45/hora (~€15/mês a 1hr/dia)
+- **Chave**: `ASSEMBLYAI_API_KEY` em `.env`
+- **Dependência npm**: `ws` (agora em `package.json`)
+- **Limitação de serverless**: `api/` tem 7 arquivos diretos (limite: 12)
+- **Arquitetura**: cliente envia áudio → servidor mantém WebSocket aberto com
+  AssemblyAI → server retorna SSE ao cliente
 
 ### Barge-in — interromper o Argos no meio da fala (V-007, #263)
 
@@ -203,8 +195,6 @@ LLM gera texto token a token → buffer de 50 chars → converte para áudio →
 **Arquitetura:**
 - `services/voice/streamingTts.ts`: `StreamingTtsBuffer` (acumula tokens, libera chunks de 50 chars), `AudioQueue` (fila de áudio com playback sequencial via `expo-av`), `StreamingTtsEngine` (orquestra tudo)
 - `services/ai/streamingChat.ts`: `handleStreamingLLM()` — consome `POST /api/chat` com `stream:true`, alimenta o `StreamingTtsEngine`
-- `hooks/useVoiceStream.ts`: hook de cliente para iniciar/cancelar resposta de voz em streaming
-- `api/chatStream.ts`: endpoint explícito de texto incremental do Claude; `/api/chat` com `stream:true` continua compatível
 - `api/chat.ts`: `streamChat()` generator exportado — streama tokens do Anthropic SDK; handler usa internamente
 - `api/tts.ts`: `synthesizeBase64()` exportado para `streamingTts.ts` sintetizar chunks
 

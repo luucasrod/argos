@@ -33,7 +33,6 @@ import { isAuthRequired } from '@/services/auth/config';
 import { Message } from '@/types/ai.types';
 import { Automation } from '@/types/automation.types';
 import { useHaptic } from './useHaptic';
-import { useJarvisBridge } from './useJarvisBridge';
 import { Platform, Linking } from 'react-native';
 import { resolveAppLink } from '@/services/browser/appLinks';
 import type { AIPersonality } from '@/types/ai.types';
@@ -165,8 +164,6 @@ function buildConfirmationInfo(intent: ParsedIntent): {
 }
 
 export function useArgos() {
-  const { isJarvisMessage, dispatchToJarvis } = useJarvisBridge();
-
   const {
     status,
     setStatus,
@@ -702,35 +699,6 @@ export function useArgos() {
 
       const currentStatus = useAIStore.getState().status;
       if (currentStatus === 'executing') return;
-
-      // JARVIS INTERCEPTOR: Se detecta "jarvis", despacha direto (sem IA)
-      if (isJarvisMessage(trimmed)) {
-        processingRef.current = true;
-        try {
-          const userMessage: Message = {
-            id: `msg-${Date.now()}-user`,
-            role: 'user',
-            content: trimmed,
-            timestamp: new Date(),
-            type: 'text',
-          };
-          addMessage(userMessage);
-
-          // Despacha pro Jarvis
-          const result = await dispatchToJarvis(trimmed);
-
-          if (result.isJarvisCommand) {
-            setStatus('idle');
-            return;
-          }
-        } catch (error) {
-          console.error('[Argos] Erro ao despachar pro Jarvis:', error);
-          setStatus('idle');
-          return;
-        } finally {
-          processingRef.current = false;
-        }
-      }
 
       processingRef.current = true;
       /*

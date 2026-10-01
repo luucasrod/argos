@@ -24,7 +24,6 @@ import {
   type MicWindow,
 } from '@/services/voice/nativeMic';
 import { transcribeRecording } from '@/services/voice/transcribeNative';
-import { transcribeRecordingDeepgram } from '@/services/voice/sttDeepgram';
 import { wakeWordEngine } from '@/services/voice/wakeWordEngine.native';
 import { registerVoicePause, unregisterVoicePause } from '@/services/voice/voiceSession';
 import {
@@ -248,14 +247,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
       let text = '';
       try {
-        try {
-          text = await transcribeRecordingDeepgram(result.uri, (event) => {
-            if (event.text) setTranscript(event.text);
-          });
-        } catch (deepgramError) {
-          console.warn('[DEEPGRAM] gravação final falhou, usando Whisper legado:', deepgramError);
-          text = await transcribeRecording(result.uri);
-        }
+        text = await transcribeRecording(result.uri);
       } catch (e) {
         const msg = e instanceof Error ? e.message : '';
         setError(
