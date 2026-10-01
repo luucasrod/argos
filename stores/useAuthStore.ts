@@ -224,51 +224,24 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     set({ loading: true, authError: null, authMessage: null });
 
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log('[AUTH] Attempting login for:', trimmed, `(attempt ${attempt}/${maxRetries})`);
-        const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: trimmed, password });
 
-        console.log('[AUTH] Response:', { data: !!data, error: error?.message });
-
-        if (error) {
-          console.error('[AUTH] Error:', error.message, error.status, error.code);
-
-          // Retry on network errors (Supabase returns errors as objects, not exceptions)
-          if (attempt < maxRetries && error.message?.includes('Network request failed')) {
-            const delayMs = Math.pow(2, attempt) * 500; // Exponential backoff: 1s, 2s, 4s
-            console.log(`[AUTH] Network error detected. Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            continue;
-          }
-
-          // Don't retry on auth errors (invalid credentials, etc)
-          const msg = error.message.includes('Invalid login credentials')
-            ? 'E-mail ou senha incorretos.'
-            : `Erro: ${error.message}`;
-          set({ loading: false, authError: msg });
-          return msg;
-        }
-
-        if (data?.user) {
-          set({ user: mapUser(data.user), loading: false, initialized: true });
-          return null;
-        }
-      } catch (err: any) {
-        console.error(`[AUTH] Exception (attempt ${attempt}):`, err.message);
-
-        // Retry on network errors (in case of actual exceptions)
-        if (attempt < maxRetries && err.message?.includes('Network request failed')) {
-          const delayMs = Math.pow(2, attempt) * 500;
-          console.log(`[AUTH] Network exception detected. Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          continue;
-        }
-
-        set({ loading: false, authError: `Exceção: ${err.message}` });
-        return err.message;
+      if (error) {
+        const msg = error.message.includes('Invalid login credentials')
+          ? 'E-mail ou senha incorretos.'
+          : `Erro: ${error.message}`;
+        set({ loading: false, authError: msg });
+        return msg;
       }
+
+      if (data?.user) {
+        set({ user: mapUser(data.user), loading: false, initialized: true });
+        return null;
+      }
+    } catch (err: any) {
+      set({ loading: false, authError: `Exceção: ${err.message}` });
+      return err.message;
     }
 
     set({ loading: false, authError: 'Erro ao fazer login. Tente novamente.' });
