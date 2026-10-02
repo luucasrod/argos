@@ -36,6 +36,7 @@ import { Platform } from 'react-native';
 import { isVoiceSessionV2Enabled } from '@/contracts';
 import { stopAllSpeech } from './textToSpeech';
 import { invalidateTtsPrefetch } from './ttsPrefetchCache';
+import { cancelStreamingTtsState } from './streamingTtsState';
 import { perfMark } from './perfLog';
 import { enableEchoCancellation } from './argosVoiceNative';
 
@@ -165,7 +166,7 @@ export async function handleUserInterrupt(heard: string): Promise<boolean> {
   resetTurn?.();
 
   try {
-    await stopAllSpeech();
+    await Promise.allSettled([stopAllSpeech(), cancelStreamingTtsState()]);
   } catch {
     // Parar áudio nunca pode derrubar o turno novo — segue para reouvir.
   }

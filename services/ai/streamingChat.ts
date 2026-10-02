@@ -24,7 +24,7 @@ export async function handleStreamingLLM(
   onToken?: (token: string) => void
 ): Promise<{ text: string; usedStreaming: boolean }> {
   const token = await resolveToken();
-  const turnGen = beginTtsTurn();
+  const turnGen = await beginTtsTurn();
   const cancelled = () => isTurnStale(turnGen);
   const engine = await createStreamingTtsEngine({
     personality: options.personality,

@@ -18,6 +18,77 @@
  */
 
 /**
+ * Scanner incremental que emite tokens do campo `speech` conforme o buffer
+ * cresce. Ao contrário de `extractSpeechFieldIfComplete`, não espera o campo
+ * fechar — emite cada trecho novo disponível, permitindo streaming real-time
+ * de TTS enquanto o LLM ainda está gerando a resposta.
+ */
+export class SpeechTokenScanner {
+  private state: 'searching' | 'in_value' | 'done' = 'searching';
+  private lastPos = 0;
+
+  /**
+   * Processa o buffer acumulado e devolve qualquer texto novo do campo
+   * `speech` desde a última chamada. `null` se nada novo disponível.
+   */
+  feed(buf: string): string | null {
+    if (this.state === 'done') return null;
+
+    if (this.state === 'searching') {
+      const keyIndex = buf.indexOf('"speech"');
+      if (keyIndex === -1) return null;
+
+      const afterKey = keyIndex + '"speech"'.length;
+      const colonIndex = buf.indexOf(':', afterKey);
+      if (colonIndex === -1) return null;
+
+      let i = colonIndex + 1;
+      while (i < buf.length && (buf[i] === ' ' || buf[i] === '\n' || buf[i] === '\t' || buf[i] === '\r')) i++;
+      if (i >= buf.length || buf[i] !== '"') return null;
+
+      this.lastPos = i + 1;
+      this.state = 'in_value';
+    }
+
+    if (this.state === 'in_value') {
+      let j = this.lastPos;
+      let extracted = '';
+      while (j < buf.length) {
+        const ch = buf[j];
+        if (ch === '\\') {
+          if (j + 1 >= buf.length) break; // escape incompleto — aguarda mais dados
+          const next = buf[j + 1];
+          switch (next) {
+            case '"': extracted += '"'; break;
+            case '\\': extracted += '\\'; break;
+            case 'n': extracted += '\n'; break;
+            case 'r': extracted += '\r'; break;
+            case 't': extracted += '\t'; break;
+            default: extracted += next; break;
+          }
+          j += 2;
+        } else if (ch === '"') {
+          this.state = 'done';
+          this.lastPos = j + 1;
+          return extracted || null;
+        } else {
+          extracted += ch;
+          j++;
+        }
+      }
+      this.lastPos = j;
+      return extracted || null;
+    }
+
+    return null;
+  }
+
+  get isDone(): boolean {
+    return this.state === 'done';
+  }
+}
+
+/**
  * Devolve o texto do campo `"speech"` assim que o valor fechar (aspas
  * não-escapada encontrada), ou `null` se ainda não chegou até lá no buffer
  * acumulado. Não lança em buffer malformado — devolve `null` e deixa o

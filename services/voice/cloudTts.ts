@@ -16,6 +16,7 @@ import { getAccessToken } from '@/services/auth/session';
 import { API_BASE } from '@/constants/api';
 import { perfMark, perfEnd } from '@/services/voice/perfLog';
 import { prefetch as prefetchInCache, takeCached } from '@/services/voice/ttsPrefetchCache';
+import { consumeStreamingTts } from '@/services/voice/streamingTtsState';
 
 const TIMEOUT_MS = 8000;
 
@@ -59,7 +60,7 @@ export async function stopCloudSpeech(): Promise<void> {
  * o streaming do LLM entrega o campo `speech`, e o resultado fica pronto
  * (ou quase) por quando `speak()` de verdade for chamado.
  */
-async function synthesizeBase64(text: string, opts: CloudTtsOpts): Promise<string> {
+export async function synthesizeBase64(text: string, opts: CloudTtsOpts): Promise<string> {
   const token = await getAccessToken().catch(() => null);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -121,6 +122,14 @@ export function prefetchCloudSpeech(text: string, opts: CloudTtsOpts = {}): void
 export async function speakWithCloud(text: string, opts: CloudTtsOpts = {}): Promise<boolean> {
   const clean = text.trim();
   if (!clean) return false;
+
+  // Se o streaming TTS já está tocando este texto, apenas aguarda terminar.
+  const streamingCompletion = consumeStreamingTts(clean);
+  if (streamingCompletion !== null) {
+    await streamingCompletion;
+    return true;
+  }
+
   if (Date.now() < unavailableUntil) return false;
 
   let base64: string;

@@ -865,14 +865,25 @@ export function useArgos() {
         let rawText: string;
         if (v2Enabled) {
           const result = await withTimeout(
-            sendChatMessageStreaming(messageParams, (speech) => {
-              const spoken = stripForSpeech(speech.trim());
-              if (!spoken) return;
-              prefetchCloudSpeech(spoken, {
-                rate: Math.min(2, Math.max(0.5, settings.personality.voiceSpeed ?? 1.0)),
-                gender: settings.personality.voiceGender,
-              });
-            }),
+            sendChatMessageStreaming(
+              messageParams,
+              (speech) => {
+                // Prefetch legacy (ativo só quando streaming TTS não iniciou)
+                const spoken = stripForSpeech(speech.trim());
+                if (!spoken) return;
+                prefetchCloudSpeech(spoken, {
+                  rate: Math.min(2, Math.max(0.5, settings.personality.voiceSpeed ?? 1.0)),
+                  gender: settings.personality.voiceGender,
+                });
+              },
+              {
+                personality: {
+                  language: settings.personality.language ?? 'pt-BR',
+                  voiceGender: settings.personality.voiceGender,
+                  voiceSpeed: settings.personality.voiceSpeed ?? 1.0,
+                },
+              }
+            ),
             60000,
             'A requisição demorou demais. Tente de novo.'
           );
