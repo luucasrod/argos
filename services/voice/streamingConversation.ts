@@ -30,7 +30,7 @@ import { createMessage, type MessageParams } from '@/services/ai/anthropicProxy'
 import { extractSpeechFieldIfComplete, SpeechTokenScanner } from './streamingJsonScanner';
 import { createStreamingTtsEngine } from './streamingTts';
 import { registerStreamingTts } from './streamingTtsState';
-import { beginTtsTurn, endTtsTurn, isTurnStale } from './bargeIn';
+import { beginTtsTurn, endTtsTurn, isTurnStale, currentTurnGen } from './bargeIn';
 import { perfMark } from './perfLog';
 
 /** Marcador que api/chat.ts escreve no final do stream se o Anthropic falhar no meio. */
@@ -88,12 +88,13 @@ export async function sendChatMessageStreaming(
   const personality = opts?.personality;
 
   let engine: Awaited<ReturnType<typeof createStreamingTtsEngine>> | null = null;
-  let turnGen = -1;
+  // Snapshot do gen atual — sem armar barge-in ainda (beginTtsTurn só quando áudio começar)
+  let turnGen = currentTurnGen();
+  let turnStarted = false;
   let ttsStreamed = false;
   let fullSpeechText = '';
 
   if (personality) {
-    turnGen = await beginTtsTurn();
     engine = await createStreamingTtsEngine({
       personality,
       cancelled: () => isTurnStale(turnGen),
@@ -113,13 +114,13 @@ export async function sendChatMessageStreaming(
     });
   } catch {
     if (engine) await engine.stop();
-    if (turnGen >= 0) endTtsTurn(turnGen);
+    if (turnStarted) endTtsTurn(turnGen);
     return fallbackToNonStreaming(params);
   }
 
   if (!res.ok || !res.body) {
     if (engine) await engine.stop();
-    if (turnGen >= 0) endTtsTurn(turnGen);
+    if (turnStarted) endTtsTurn(turnGen);
     return fallbackToNonStreaming(params);
   }
 
@@ -162,28 +163,26 @@ export async function sendChatMessageStreaming(
   } catch {
     if (!buf.trim()) {
       if (engine) await engine.stop();
-      if (turnGen >= 0) endTtsTurn(turnGen);
+      if (turnStarted) endTtsTurn(turnGen);
       return fallbackToNonStreaming(params);
     }
   }
 
   // Flush de tokens restantes no buffer do engine
-  if (engine && ttsStreamed) {
+  if (engine && ttsStreamed && fullSpeechText.trim()) {
     try {
       await engine.flush();
     } catch {}
-    // Registra no estado global para speak() poder aguardar sem re-sintetizar
-    if (fullSpeechText.trim()) {
-      const completionPromise = engine.waitForCompletion().finally(() => {
-        endTtsTurn(turnGen);
-      });
-      registerStreamingTts(fullSpeechText, completionPromise, () => engine!.stop());
-    } else {
-      await engine.stop();
+    // Arma barge-in só agora — áudio vai começar a tocar
+    turnGen = await beginTtsTurn();
+    turnStarted = true;
+    const completionPromise = engine.waitForCompletion().finally(() => {
       endTtsTurn(turnGen);
-    }
-  } else if (turnGen >= 0) {
-    endTtsTurn(turnGen);
+    });
+    registerStreamingTts(fullSpeechText, completionPromise, () => engine!.stop());
+  } else {
+    if (engine) await engine.stop();
+    if (turnStarted) endTtsTurn(turnGen);
   }
 
   if (!gotAnyChunk || !buf.trim()) {
