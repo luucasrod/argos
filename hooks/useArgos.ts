@@ -634,6 +634,109 @@ export function useArgos() {
           type: 'text',
         });
 
+      } else if (intent.type === 'get_calendar_events') {
+        const intro = resolveIntentSpeech(intent) || 'Verificando sua agenda...';
+        await speak(intro);
+        setStatus('executing');
+
+        try {
+          const { fetchCalendarEvents } = await import('@/services/devices/googleCalendarService');
+          const { connected, events } = await fetchCalendarEvents();
+
+          if (!connected) {
+            const msg = 'Seu Google Calendar não está conectado. Abra a aba Agenda para conectar.';
+            setStatus('speaking');
+            await speak(msg);
+            setStatus('idle');
+            addMessage({
+              id: assistantMessageId,
+              role: 'assistant',
+              content: msg,
+              timestamp: new Date(),
+              type: 'text',
+            });
+          } else {
+            const period = intent.period ?? 'today';
+            const now = new Date();
+
+            const filtered = events.filter((ev) => {
+              if (!ev.start) return false;
+              const evDate = new Date(ev.start);
+              if (period === 'today') {
+                return evDate.toDateString() === now.toDateString();
+              } else if (period === 'tomorrow') {
+                const tom = new Date(now);
+                tom.setDate(tom.getDate() + 1);
+                return evDate.toDateString() === tom.toDateString();
+              } else {
+                // week
+                const endOfWeek = new Date(now);
+                endOfWeek.setDate(endOfWeek.getDate() + 7);
+                return evDate >= now && evDate <= endOfWeek;
+              }
+            });
+
+            const periodLabel = period === 'today' ? 'hoje' : period === 'tomorrow' ? 'amanhã' : 'nesta semana';
+
+            let speechText: string;
+            let chatContent: string;
+
+            if (filtered.length === 0) {
+              speechText = `Você não tem eventos ${periodLabel}, senhor.`;
+              chatContent = `📅 Nenhum evento ${periodLabel}.`;
+            } else {
+              const eventSummaries = filtered.slice(0, 5).map((ev) => {
+                const time = ev.allDay
+                  ? 'dia todo'
+                  : ev.start
+                    ? new Date(ev.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : '';
+                return time ? `${ev.title} às ${time}` : ev.title;
+              });
+
+              speechText =
+                `Você tem ${filtered.length} evento${filtered.length !== 1 ? 's' : ''} ${periodLabel}: ` +
+                eventSummaries.join(', ') + '.';
+
+              chatContent =
+                `📅 **${filtered.length} evento${filtered.length !== 1 ? 's' : ''} ${periodLabel}:**\n` +
+                filtered.slice(0, 10).map((ev) => {
+                  const time = ev.allDay
+                    ? 'Dia todo'
+                    : ev.start
+                      ? new Date(ev.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      : '';
+                  return `• **${ev.title}**${time ? ` — ${time}` : ''}${ev.location ? ` (${ev.location})` : ''}`;
+                }).join('\n');
+            }
+
+            setStatus('speaking');
+            await speak(speechText);
+            setStatus('idle');
+
+            addMessage({
+              id: assistantMessageId,
+              role: 'assistant',
+              content: chatContent,
+              timestamp: new Date(),
+              type: 'text',
+            });
+          }
+        } catch (err) {
+          const errorMsg =
+            err instanceof Error ? err.message : 'Não consegui acessar sua agenda agora.';
+          setStatus('speaking');
+          await speak(errorMsg);
+          setStatus('idle');
+          addMessage({
+            id: assistantMessageId,
+            role: 'assistant',
+            content: errorMsg,
+            timestamp: new Date(),
+            type: 'error',
+          });
+        }
+
       } else {
         const spoken = resolveIntentSpeech(intent);
         if (spoken) await speak(spoken);

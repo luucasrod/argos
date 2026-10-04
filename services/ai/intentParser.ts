@@ -9,7 +9,8 @@ export interface ParsedIntent {
     | 'get_weather'
     | 'set_reminder'
     | 'save_note'
-    | 'play_music';
+    | 'play_music'
+    | 'get_calendar_events';
   speech: string;
   text: string;
   // device_control
@@ -37,6 +38,9 @@ export interface ParsedIntent {
   // play_music
   musicQuery?: string;
   musicAction?: 'play' | 'pause' | 'next' | 'previous';
+  // get_calendar_events
+  period?: 'today' | 'tomorrow' | 'week';
+  query?: string;
   // extração de memória (presente em qualquer tipo de resposta)
   newMemory?: {
     title: string;

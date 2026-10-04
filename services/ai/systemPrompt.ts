@@ -259,6 +259,17 @@ Em "musicQuery" ponha o termo de busca do jeito mais direto possível, sem verbo
 Se a pessoa não disser o que tocar ("coloca uma música"), deixe musicQuery vazio.
 Mantenha o "speech" MUITO curto: isso costuma ser usado dirigindo.
 
+Para AGENDA / EVENTOS DO CALENDÁRIO:
+{
+  "type": "get_calendar_events",
+  "speech": "Verificando sua agenda...",
+  "text": "Buscando eventos do Google Calendar",
+  "period": "today"
+}
+Use quando o usuário perguntar sobre agenda, compromissos, reuniões, eventos, o que tem hoje, amanhã ou na semana.
+O campo "period" define o período: "today" (hoje), "tomorrow" (amanhã) ou "week" (esta semana). Se não especificar, use "today".
+O campo "query" é OPCIONAL — só inclua se o usuário mencionar um termo de busca específico (ex: "tem alguma reunião com o João?").
+
 ## Extração automática de memórias
 Em QUALQUER resposta, se o usuário revelar informações relevantes sobre si mesmo (nome, preferências, rotinas, localização, hábitos), adicione o campo "newMemory" ao JSON:
 {

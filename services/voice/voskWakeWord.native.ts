@@ -117,6 +117,13 @@ const COMMAND_PHRASES = [
   // Iniciadores livres de pergunta, soltos — dão à fala comum mais lugares
   // para cair, iguais em espírito às iscas de DECOYS.
   'por que', 'quando', 'onde', 'quem', 'de que forma',
+  // Agenda / Google Calendar — sem estas entradas "o que tenho hoje" nunca
+  // chegava certo ao backend. Todas conferidas no vocabulário do modelo pt.
+  'agenda', 'minha agenda', 'o que tenho hoje', 'o que tenho amanhã',
+  'o que tenho esta semana', 'quais são meus compromissos',
+  'compromissos', 'compromisso', 'reunião', 'reuniões',
+  'tenho alguma reunião', 'tenho algo hoje', 'tenho algo amanhã',
+  'eventos de hoje', 'eventos de amanhã', 'meus eventos',
 ];
 
 /** Silêncio, após o comando, que encerra a fala e manda pensar. */
