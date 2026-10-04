@@ -172,13 +172,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     set({ loading: true, authError: null, authMessage: null });
 
+    let data: Awaited<ReturnType<typeof supabase.auth.signUp>>['data'] | null = null;
+
     try {
       console.log('[AUTH] Attempting signup for:', trimmedEmail);
-      const { data, error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
         options: { data: { full_name: trimmedName, birthdate } },
       });
+
+      data = signUpData;
 
       console.log('[AUTH] Signup response:', { data: !!data, error: error?.message });
 
@@ -196,7 +200,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       return err.message;
     }
 
-    if (!data.session || !data.user) {
+    if (!data?.session || !data?.user) {
       // Confirmação de e-mail ainda ativa no Supabase — não deveria acontecer em produção.
       set({
         loading: false,
@@ -208,9 +212,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     await supabase
       .from('profiles')
       .update({ name: trimmedName, birthdate })
-      .eq('id', data.user.id);
+      .eq('id', data?.user?.id);
 
-    set({ user: mapUser(data.user), loading: false, initialized: true });
+    set({ user: mapUser(data?.user ?? null), loading: false, initialized: true });
     return null;
   },
 
