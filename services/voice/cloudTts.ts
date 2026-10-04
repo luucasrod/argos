@@ -84,13 +84,11 @@ export async function synthesizeBase64(text: string, opts: CloudTtsOpts): Promis
 
   if (!res.ok) {
     /*
-     * Qualquer erro do servidor (503 sem provedor, 502 de cota estourada,
-     * 400 de chave inválida etc.) entra em cooldown — não só 503. Sem isso,
-     * uma chave quebrada fazia TODA mensagem esperar os 8s de timeout antes
-     * de cair pra voz do sistema: parecia lentidão, mas era uma falha
-     * conhecida sendo retentada do zero a cada fala.
+     * Lança em qualquer falha — o chamador decide se deve aplicar cooldown.
+     * speakWithCloud (caminho de TTS normal) aplica cooldown no catch.
+     * synthesizeChunk (caminho de streaming) NÃO aplica — uma falha pontual
+     * num chunk de streaming não deve silenciar o TTS inteiro por 5 minutos.
      */
-    unavailableUntil = Date.now() + COOLDOWN_MS;
     throw new Error(`tts_http_${res.status}`);
   }
 
@@ -140,6 +138,14 @@ export async function speakWithCloud(text: string, opts: CloudTtsOpts = {}): Pro
     const cached = takeCached(preprocessed, opts);
     base64 = cached ? await cached : await synthesizeBase64(preprocessed, opts);
   } catch {
+    /*
+     * Qualquer erro do servidor (503 sem provedor, 502 de cota estourada,
+     * 400 de chave inválida etc.) entra em cooldown — não só 503. Sem isso,
+     * uma chave quebrada fazia TODA mensagem esperar os 8s de timeout antes
+     * de cair pra voz do sistema: parecia lentidão, mas era uma falha
+     * conhecida sendo retentada do zero a cada fala.
+     */
+    unavailableUntil = Date.now() + COOLDOWN_MS;
     return false;
   }
 

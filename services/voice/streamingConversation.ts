@@ -93,6 +93,8 @@ export async function sendChatMessageStreaming(
   let turnStarted = false;
   let ttsStreamed = false;
   let fullSpeechText = '';
+  // Collects processToken promises so no call is in-flight when flush() runs
+  const tokenPromises: Promise<void>[] = [];
 
   if (personality) {
     engine = await createStreamingTtsEngine({
@@ -143,7 +145,7 @@ export async function sendChatMessageStreaming(
         if (newTokens) {
           fullSpeechText += newTokens;
           ttsStreamed = true;
-          void engine.processToken(newTokens);
+          tokenPromises.push(engine.processToken(newTokens));
         }
       }
 
@@ -171,6 +173,8 @@ export async function sendChatMessageStreaming(
   // Flush de tokens restantes no buffer do engine
   if (engine && ttsStreamed && fullSpeechText.trim()) {
     try {
+      // Aguarda todos os processToken em voo antes de fazer flush
+      await Promise.allSettled(tokenPromises);
       await engine.flush();
     } catch {}
     // Arma barge-in só agora — áudio vai começar a tocar

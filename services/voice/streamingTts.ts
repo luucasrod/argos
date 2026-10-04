@@ -55,6 +55,7 @@ class AudioQueue {
   private isPlaying = false;
   private cancelled = false;
   private completionResolvers: Array<() => void> = [];
+  private currentSound: Audio.Sound | null = null;
 
   async enqueue(uri: string): Promise<void> {
     this.queue.push({ uri, status: 'pending' });
@@ -77,6 +78,7 @@ class AudioQueue {
             { uri: segment.uri },
             { shouldPlay: true, volume: 1 }
           );
+          this.currentSound = sound;
 
           await new Promise<void>((resolve) => {
             let done = false;
@@ -91,9 +93,11 @@ class AudioQueue {
             setTimeout(finish, 60000);
           });
 
+          this.currentSound = null;
           await sound.unloadAsync();
           perfEnd('streaming_tts_playback_terminado');
         } catch {
+          this.currentSound = null;
           perfMark('streaming_tts_playback_erro');
         }
 
@@ -118,6 +122,13 @@ class AudioQueue {
   async stop(): Promise<void> {
     this.cancelled = true;
     this.queue = [];
+    // Stop the currently-playing sound to prevent memory leak
+    const s = this.currentSound;
+    this.currentSound = null;
+    if (s) {
+      try { await s.stopAsync(); } catch {}
+      try { await s.unloadAsync(); } catch {}
+    }
     const resolvers = this.completionResolvers;
     this.completionResolvers = [];
     for (const r of resolvers) r();
