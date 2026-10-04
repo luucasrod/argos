@@ -8,12 +8,14 @@
  */
 
 interface StreamingState {
+  id: number;
   text: string;
   completed: Promise<void>;
   stop: () => Promise<void>;
 }
 
 let active: StreamingState | null = null;
+let nextId = 0;
 
 /** Registra que o streaming TTS está tocando `text`. `stop` é chamado pelo barge-in. */
 export function registerStreamingTts(
@@ -21,10 +23,11 @@ export function registerStreamingTts(
   completed: Promise<void>,
   stop: () => Promise<void>
 ): void {
-  active = { text: text.trim(), completed, stop };
-  // Limpa automaticamente quando terminar
+  const id = ++nextId;
+  active = { id, text: text.trim(), completed, stop };
+  // Usa o ID único para não apagar um registro mais recente com o mesmo texto
   completed.finally(() => {
-    if (active?.text === text.trim()) active = null;
+    if (active?.id === id) active = null;
   });
 }
 

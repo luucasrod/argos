@@ -122,7 +122,7 @@ export default function InteligenciaScreen() {
     dismissInsight,
     getSuggestions,
   } = useMemoryStore();
-  const { settings, updateUserProfile } = useSettingsStore();
+  const { settings, updateUserProfile, updatePersonality } = useSettingsStore();
   const { getActiveGoals, createGoal, updateGoal, deleteGoal, completeGoal } = useGoalsStore();
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
@@ -306,7 +306,7 @@ export default function InteligenciaScreen() {
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Personalidade do assistente</Text>
             <GlassCard style={styles.prefCard}>
               <PrefRow label="Nome do assistente" value={settings.personality?.name ?? 'Argos'} placeholder="Argos"
-                onChangeText={(v) => updateUserProfile({ name: v })} />
+                onChangeText={(v) => updatePersonality({ name: v })} />
             </GlassCard>
 
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>

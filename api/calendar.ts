@@ -54,7 +54,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const auth = await getUserFromAuthHeader(req.headers.authorization ?? null);
     if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
-    await supabaseAsUser(auth.token).from('google_calendar_accounts').delete().eq('user_id', auth.user.id);
+    const sb = supabaseAsUser(auth.token);
+    // Busca o token antes de deletar para revogar no Google (best-effort)
+    const { data: tokenRow } = await sb
+      .from('google_calendar_accounts')
+      .select('access_token, refresh_token')
+      .eq('user_id', auth.user.id)
+      .single();
+    if (tokenRow) {
+      const tokenToRevoke = (tokenRow.refresh_token ?? tokenRow.access_token) as string | null;
+      if (tokenToRevoke) {
+        try {
+          await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(tokenToRevoke)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          });
+        } catch {}
+      }
+    }
+
+    await sb.from('google_calendar_accounts').delete().eq('user_id', auth.user.id);
     return res.json({ ok: true });
   }
 

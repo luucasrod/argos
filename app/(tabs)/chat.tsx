@@ -24,11 +24,11 @@ import { Colors } from '@/constants/colors';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
 
 export default function ChatScreen() {
-  const { messages, clearMessages, currentInput, setCurrentInput } = useAIStore();
+  const { messages, clearMessages, currentInput, setCurrentInput, setLastInputMode } = useAIStore();
   const { settings } = useSettingsStore();
   const { sendMessage, status } = useArgos();
   const { isListening, transcript, error: voiceError, startListening, stopListening } = useVoice({
-    onAutoSend: (text) => { sendMessage(text); },
+    onAutoSend: (text) => { setLastInputMode('voice'); sendMessage(text); },
   });
   const { light, medium } = useHaptic();
   const listRef = useRef<FlatList>(null);
