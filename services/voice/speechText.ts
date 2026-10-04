@@ -60,6 +60,49 @@ export function resolveIntentSpeech(intent: ParsedIntent): string {
   return '';
 }
 
+/**
+ * Pré-processa texto para leitura natural em pt-BR pelo TTS.
+ *
+ * O ElevenLabs recebe texto bruto como "23.5°C" ou "15km/h" e os pronuncia
+ * de forma estranha. Esta função converte essas expressões para formas que
+ * o sintetizador lê corretamente.
+ *
+ * Ordem importa: tratar sequências específicas antes das genéricas.
+ */
+export function preprocessForSpeech(text: string): string {
+  return (
+    text
+      // Moeda: R$25,50 → "25 reais e 50 centavos"
+      .replace(/R\$\s*(\d+),(\d{2})/g, (_m, int, dec) => {
+        const intN = parseInt(int, 10);
+        const decN = parseInt(dec, 10);
+        const reaisPart = `${intN} ${intN === 1 ? 'real' : 'reais'}`;
+        if (decN === 0) return reaisPart;
+        const centavosPart = `${decN} ${decN === 1 ? 'centavo' : 'centavos'}`;
+        return `${reaisPart} e ${centavosPart}`;
+      })
+      // Moeda inteira: R$25 → "25 reais"
+      .replace(/R\$\s*(\d+)(?![,\d])/g, (_m, n) => {
+        const v = parseInt(n, 10);
+        return `${v} ${v === 1 ? 'real' : 'reais'}`;
+      })
+      // Temperatura com decimal: 23.5°C → "23 vírgula 5 graus"
+      .replace(/(-?\d+)\.(\d+)\s*°[Cc]/g, (_m, int, dec) => `${int} vírgula ${dec} graus`)
+      // Temperatura inteira: 23°C → "23 graus"
+      .replace(/(-?\d+)\s*°[Cc]/g, '$1 graus')
+      // Velocidade km/h: 15km/h → "15 quilômetros por hora"
+      .replace(/(\d+(?:[.,]\d+)?)\s*km\/h/gi, '$1 quilômetros por hora')
+      // Velocidade m/s: 15m/s → "15 metros por segundo"
+      .replace(/(\d+(?:[.,]\d+)?)\s*m\/s/g, '$1 metros por segundo')
+      // Grau sozinho: 15° → "15 graus"
+      .replace(/(-?\d+(?:[.,]\d+)?)\s*°/g, '$1 graus')
+      // Percentual: 70% → "70 por cento"
+      .replace(/(\d+(?:[.,]\d+)?)\s*%/g, '$1 por cento')
+      // Decimais com ponto → vírgula em contexto numérico (sem unidade já tratada)
+      .replace(/(\d+)\.(\d+)/g, '$1 vírgula $2')
+  );
+}
+
 /*
  * A-022: confirmação sutil para ações triviais bem-sucedidas, quando o
  * usuário escolhe verbosidade mínima. Só entra em uso nos pontos que o

@@ -17,6 +17,7 @@ import { API_BASE } from '@/constants/api';
 import { perfMark, perfEnd } from '@/services/voice/perfLog';
 import { prefetch as prefetchInCache, takeCached } from '@/services/voice/ttsPrefetchCache';
 import { consumeStreamingTts } from '@/services/voice/streamingTtsState';
+import { preprocessForSpeech } from '@/services/voice/speechText';
 
 const TIMEOUT_MS = 8000;
 
@@ -123,6 +124,8 @@ export async function speakWithCloud(text: string, opts: CloudTtsOpts = {}): Pro
   const clean = text.trim();
   if (!clean) return false;
 
+  const preprocessed = preprocessForSpeech(clean);
+
   // Se o streaming TTS já está tocando este texto, apenas aguarda terminar.
   const streamingCompletion = consumeStreamingTts(clean);
   if (streamingCompletion !== null) {
@@ -134,8 +137,8 @@ export async function speakWithCloud(text: string, opts: CloudTtsOpts = {}): Pro
 
   let base64: string;
   try {
-    const cached = takeCached(clean, opts);
-    base64 = cached ? await cached : await synthesizeBase64(clean, opts);
+    const cached = takeCached(preprocessed, opts);
+    base64 = cached ? await cached : await synthesizeBase64(preprocessed, opts);
   } catch {
     return false;
   }
