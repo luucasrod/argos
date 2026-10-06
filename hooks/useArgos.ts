@@ -925,11 +925,13 @@ export function useArgos() {
         // Confirma o estado real dos dispositivos eWeLink antes do Argos decidir
         // qualquer coisa — sem isso ele podia responder com base num estado
         // antigo guardado localmente (ex.: dizer "já está desligada" estando ligada).
+        // .catch(() => {}) é obrigatório: sem ele o timeout rejection cai no catch
+        // externo e gera mensagem de erro espúria + handleSessionExpired().
         if (ewelinkConnected) {
-          await syncEwelinkDevices();
+          await withTimeout(syncEwelinkDevices(), 4000, 'sync timeout').catch(() => {});
         }
         if (tuyaConnected) {
-          await syncTuyaDevices();
+          await withTimeout(syncTuyaDevices(), 4000, 'sync timeout').catch(() => {});
         }
 
         const model = resolveAnthropicModel(settings.model);
