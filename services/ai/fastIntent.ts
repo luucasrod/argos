@@ -1,5 +1,6 @@
-import { speakToggle, speakToggleMany, speakBrightness } from '@/services/ai/fastIntentSpeech';
+import { speakToggle, speakToggleMany, speakBrightness, speakColor } from '@/services/ai/fastIntentSpeech';
 import { Device } from '@/types/device.types';
+import { Automation } from '@/types/automation.types';
 import { ParsedIntent } from './intentParser';
 
 const DIACRITICS_RE = new RegExp('[\\u0300-\\u036f]', 'g');
@@ -18,18 +19,30 @@ const BRIGHT_HIGH = ['alto', 'alta', 'mais', 'aumenta', 'aumentar', 'sobe', 'sub
 const BRIGHT_LOW = ['baixo', 'baixa', 'menos', 'diminui', 'diminuir', 'desce', 'descer', 'fraca'];
 const BRIGHT_MIN = ['minimo', 'quase', 'pouco'];
 
-/*
- * Palavras de cor. O atalho rápido só sabe ligar/desligar/brilho — se a frase
- * também pedir cor, ele reconhecia só o "liga" e IGNORAVA o resto em silêncio,
- * porque devolve o intent assim que acha um verbo on/off e nunca mais olha pra
- * frase. "Liga a luz do escritório e deixa vermelho" virava só "liga a luz do
- * escritório". Aqui a frase é rejeitada cedo para cair na IA, que processa
- * várias ações (ligar + cor) na mesma resposta.
- */
+// Palavras de cor RGB (mapeadas para hex) e temperatura de cor.
+// Comandos mistos (ligar + cor) ainda vão para a IA; comandos só de cor são
+// resolvidos localmente aqui.
 const COLOR_WORDS = [
   'cor', 'vermelha', 'vermelho', 'verde', 'azul', 'amarela', 'amarelo',
   'laranja', 'roxa', 'roxo', 'rosa', 'ciano', 'quente', 'fria', 'neutra',
 ];
+
+const COLOR_HEX_MAP: Record<string, string> = {
+  vermelha: '#FF0000', vermelho: '#FF0000',
+  verde: '#00C800',
+  azul: '#0000FF',
+  amarela: '#FFFF00', amarelo: '#FFFF00',
+  laranja: '#FF7800',
+  roxa: '#8B00FF', roxo: '#8B00FF',
+  rosa: '#FF69B4',
+  ciano: '#00FFFF',
+};
+
+const COLOR_TEMP_MAP: Record<string, 'warm' | 'neutral' | 'cool'> = {
+  quente: 'warm',
+  fria: 'cool',
+  neutra: 'neutral',
+};
 
 /*
  * Conectores que não distinguem aparelho nenhum. Sem tirá-los, o "do" de
@@ -165,7 +178,67 @@ function matchBrightnessCommand(text: string, devices: Device[]): ParsedIntent |
 }
 
 /**
- * Detecta comandos óbvios de ligar/desligar/brilho sem passar pela IA.
+ * Detecta comandos de cor/temperatura de cor sem chamar a IA.
+ * Retorna null se nenhum dispositivo online suportar a propriedade pedida.
+ */
+function matchColorCommand(text: string, devices: Device[], words: string[]): ParsedIntent | null {
+  // Temperatura de cor primeiro (quente/fria/neutra) — mais comum no dia a dia
+  const tempWord = words.find((w) => COLOR_TEMP_MAP[w]);
+  if (tempWord) {
+    const targets = devices.filter(
+      (d) => d.status === 'online' && d.capabilities.some((c) => c.property === 'colorTemperature')
+    );
+    if (targets.length === 0) return null;
+
+    const named = targets.filter((d) => text.includes(normalize(d.name)));
+    const finalTargets = named.length > 0 ? named : targets;
+    const tempValue = COLOR_TEMP_MAP[tempWord];
+
+    const actions = finalTargets.map((d) => ({
+      deviceId: d.id,
+      action: 'setValue',
+      property: 'colorTemperature',
+      value: tempValue,
+      label: `Temperatura ${tempWord} em ${d.name}`,
+    }));
+
+    const speech = speakColor(
+      finalTargets.length === 1 ? finalTargets[0].name : `${finalTargets.length} lâmpadas`,
+      tempWord
+    );
+    return { type: 'device_control', speech, text: speech, actions };
+  }
+
+  // Cor RGB
+  const colorWord = words.find((w) => COLOR_HEX_MAP[w]);
+  if (!colorWord) return null;
+
+  const targets = devices.filter(
+    (d) => d.status === 'online' && d.capabilities.some((c) => c.type === 'color')
+  );
+  if (targets.length === 0) return null;
+
+  const named = targets.filter((d) => text.includes(normalize(d.name)));
+  const finalTargets = named.length > 0 ? named : targets;
+  const colorHex = COLOR_HEX_MAP[colorWord];
+
+  const actions = finalTargets.map((d) => ({
+    deviceId: d.id,
+    action: 'setValue',
+    property: 'color',
+    value: colorHex,
+    label: `Cor ${colorWord} em ${d.name}`,
+  }));
+
+  const speech = speakColor(
+    finalTargets.length === 1 ? finalTargets[0].name : `${finalTargets.length} lâmpadas`,
+    colorWord
+  );
+  return { type: 'device_control', speech, text: speech, actions };
+}
+
+/**
+ * Detecta comandos óbvios de ligar/desligar/brilho/cor sem passar pela IA.
  */
 export function matchFastDeviceCommand(input: string, devices: Device[]): ParsedIntent | null {
   const text = normalize(input);
@@ -175,8 +248,17 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
   // Frases longas tendem a ter contexto/condições — deixa a IA interpretar.
   if (words.length > 10) return null;
 
-  // Pedido de cor: o atalho não sabe processar, deixa a IA cuidar da frase inteira.
-  if (COLOR_WORDS.some((w) => words.includes(w))) return null;
+  const hasColorWord = COLOR_WORDS.some((w) => words.includes(w));
+  const hasActionWord =
+    ON_WORDS.some((w) => words.includes(w)) || OFF_WORDS.some((w) => words.includes(w));
+
+  // Comando misto (ligar + cor): a IA processa as duas ações juntas.
+  if (hasColorWord && hasActionWord) return null;
+
+  // Comando só de cor: tenta resolver localmente.
+  if (hasColorWord) {
+    return matchColorCommand(text, devices, words);
+  }
 
   const houseMatch = matchHouseCommand(text, devices);
   if (houseMatch) return houseMatch;
@@ -245,4 +327,22 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
     text: speech,
     actions,
   };
+}
+
+/**
+ * Verifica se o input casa com o trigger de voz de alguma automação ativa.
+ * Executar a automação é responsabilidade do chamador (runAutomation).
+ * Retorna a automação correspondente ou null.
+ */
+export function matchVoiceTriggeredAutomation(input: string, automations: Automation[]): Automation | null {
+  const text = normalize(input);
+  if (!text) return null;
+
+  return automations.find((a) => {
+    if (!a.isActive) return false;
+    if (a.trigger?.type !== 'voice') return false;
+    const phrase = a.trigger.config?.phrase as string | undefined;
+    if (!phrase) return false;
+    return normalize(phrase) === text || text.includes(normalize(phrase));
+  }) ?? null;
 }

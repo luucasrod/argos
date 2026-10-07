@@ -19,6 +19,7 @@ import { useArgos } from '@/hooks/useArgos';
 import { useVoice } from '@/hooks/useVoice';
 import { useHaptic } from '@/hooks/useHaptic';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { ConnectivityBadge } from '@/components/ui/ConnectivityBadge';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Colors } from '@/constants/colors';
 import { unlockSpeech } from '@/services/voice/speechUnlock';
@@ -73,15 +74,18 @@ export default function ChatScreen() {
             <Text style={styles.headerTitle}>{settings.personality.name}</Text>
             <Text style={styles.headerSubtitle}>{statusLabel}</Text>
           </View>
-          <Pressable
-            onPress={() => {
-              medium();
-              clearMessages();
-            }}
-            style={styles.clearButton}
-          >
-            <Text style={styles.clearButtonText}>Limpar</Text>
-          </Pressable>
+          <View style={styles.headerRight}>
+            <ConnectivityBadge />
+            <Pressable
+              onPress={() => {
+                medium();
+                clearMessages();
+              }}
+              style={styles.clearButton}
+            >
+              <Text style={styles.clearButtonText}>Limpar</Text>
+            </Pressable>
+          </View>
         </View>
 
         <KeyboardAvoidingView
@@ -165,6 +169,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: Colors.text.primary, fontSize: 20, fontWeight: '700' },
   headerSubtitle: { color: Colors.text.muted, fontSize: 13, marginTop: 2 },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   clearButton: {
     backgroundColor: Colors.glass.medium,
     borderRadius: 8,

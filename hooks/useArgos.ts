@@ -11,7 +11,10 @@ import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
-import { matchFastDeviceCommand } from '@/services/ai/fastIntent';
+import { matchFastDeviceCommand, matchVoiceTriggeredAutomation } from '@/services/ai/fastIntent';
+import { runAutomation } from '@/services/automation/automationEngine';
+import { logRoute } from '@/services/telemetry/routeMetrics';
+import { useConnectivityStore } from '@/stores/useConnectivityStore';
 import { textToSpeech } from '@/services/voice/textToSpeech';
 import {
   beginTtsTurn,
@@ -849,6 +852,34 @@ export function useArgos() {
           return;
         }
 
+        // Automação com trigger de voz: executa direto sem passar pela IA.
+        const _routeStart = Date.now();
+        const voiceAutomation = matchVoiceTriggeredAutomation(trimmed, automations);
+        if (voiceAutomation) {
+          perfMark('voice_automation_trigger');
+          heavy();
+          try {
+            await runAutomation(voiceAutomation);
+            const speech = `Executando ${voiceAutomation.name}, senhor.`;
+            await speak(speech);
+            logRoute({ ts: _routeStart, route: 'local', intent: 'automation', latencyMs: Date.now() - _routeStart, success: true });
+            addMessage({
+              id: `msg-${Date.now()}-auto`,
+              role: 'assistant',
+              content: speech,
+              timestamp: new Date(),
+              type: 'text',
+            });
+          } catch (err) {
+            if (__DEV__) console.error('[Argos] Falha na automação por voz:', err);
+            setStatus('error');
+            setTimeout(() => setStatus('idle'), 2000);
+          } finally {
+            releaseTurnGuard();
+          }
+          return;
+        }
+
         // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
       // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
       const fastIntent = matchFastDeviceCommand(trimmed, useDeviceStore.getState().devices);
@@ -876,6 +907,7 @@ export function useArgos() {
             });
           } else {
             await processIntent(fastIntent);
+            logRoute({ ts: _routeStart, route: 'local', intent: fastIntent.type, latencyMs: Date.now() - _routeStart, success: true });
           }
         } catch (err) {
           // Sem este catch, uma exceção aqui escapava de sendMessage e deixava o
@@ -919,6 +951,22 @@ export function useArgos() {
             type: 'error',
           });
           setTimeout(() => setStatus('idle'), 2500);
+          return;
+        }
+
+        // Modo offline: a IA precisa de internet — informa o usuário e para aqui.
+        if (!useConnectivityStore.getState().isOnline) {
+          const offlineMsg = 'Estou sem acesso à internet agora, senhor. Só consigo executar comandos de dispositivos e automações locais.';
+          await speak(offlineMsg);
+          setStatus('idle');
+          addMessage({
+            id: `msg-${Date.now()}-offline`,
+            role: 'assistant',
+            content: offlineMsg,
+            timestamp: new Date(),
+            type: 'text',
+          });
+          releaseTurnGuard();
           return;
         }
 
@@ -1002,6 +1050,7 @@ export function useArgos() {
           rawText = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
         }
         perfMark('llm_resposta_recebida');
+        logRoute({ ts: _routeStart, route: 'cloud', intent: 'llm', latencyMs: Date.now() - _routeStart, success: true });
 
         const intent = parseAIResponse(rawText);
         perfMark('intent_parseado');

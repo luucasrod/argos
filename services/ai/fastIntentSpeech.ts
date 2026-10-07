@@ -68,3 +68,13 @@ export function speakBrightness(target: string, label: string): string {
     `${target} em ${label}, senhor. Do jeito que o senhor gosta.`,
   ]);
 }
+
+/** Confirmação de mudança de cor ou temperatura de cor. */
+export function speakColor(target: string, colorName: string): string {
+  return pick('color', [
+    `${target} em ${colorName}, senhor.`,
+    `Cor ${colorName} aplicada em ${target}. Feito.`,
+    `Pronto, senhor. ${target} agora em ${colorName}.`,
+    `${colorName} em ${target}. Elegante escolha, senhor.`,
+  ]);
+}
