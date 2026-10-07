@@ -330,6 +330,63 @@ export function matchFastDeviceCommand(input: string, devices: Device[]): Parsed
 }
 
 /**
+ * Detecta queries de estado de dispositivo e responde com dados locais,
+ * sem chamar a IA. Ex: "está ligada?", "qual o brilho?", "que horas são?"
+ * não se aplica — só perguntas sobre o estado atual de aparelhos.
+ */
+export function matchDeviceStateQuery(input: string, devices: Device[]): ParsedIntent | null {
+  const text = normalize(input);
+  const words = text.split(/\s+/);
+
+  const isQuery =
+    /\b(esta|esta ligad|esta desligad|qual|como esta|ta ligad|ta desligad|mostrar|ver)\b/.test(text) ||
+    text.endsWith('?');
+
+  if (!isQuery) return null;
+
+  // Tenta casar com um dispositivo pelo nome parcial
+  const online = devices.filter((d) => d.status === 'online');
+  let target: Device | null = null;
+
+  for (const d of online) {
+    if (text.includes(normalize(d.name))) { target = d; break; }
+  }
+  if (!target) {
+    const partial = online.filter((d) =>
+      nameTokens(d.name).some((tok) => words.includes(tok))
+    );
+    if (partial.length === 1) target = partial[0];
+  }
+  if (!target) return null;
+
+  // Determina o que foi perguntado
+  const asksBrightness = /brilho|luminosidade|intensidade/.test(text);
+  const asksColor = /cor|temperatura/.test(text);
+  const asksStatus = !asksBrightness && !asksColor;
+
+  let answer = '';
+  if (asksStatus) {
+    const isOn = target.state?.isOn ?? target.state?.onOff ?? target.state?.power;
+    answer = isOn ? `${target.name} está ligada, senhor.` : `${target.name} está desligada, senhor.`;
+  } else if (asksBrightness) {
+    const br = target.state?.brightness;
+    answer = br != null
+      ? `Brilho de ${target.name} está em ${br}%, senhor.`
+      : `${target.name} não suporta brilho ajustável.`;
+  } else if (asksColor) {
+    const ct = target.state?.colorTemperature;
+    const color = target.state?.color;
+    if (ct) answer = `Temperatura de cor de ${target.name}: ${ct}.`;
+    else if (color) answer = `Cor atual de ${target.name}: ${color}, senhor.`;
+    else answer = `${target.name} não tem cor configurada.`;
+  }
+
+  if (!answer) return null;
+
+  return { type: 'query', speech: answer, text: answer };
+}
+
+/**
  * Verifica se o input casa com o trigger de voz de alguma automação ativa.
  * Executar a automação é responsabilidade do chamador (runAutomation).
  * Retorna a automação correspondente ou null.

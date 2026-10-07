@@ -11,7 +11,7 @@ import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
-import { matchFastDeviceCommand, matchVoiceTriggeredAutomation } from '@/services/ai/fastIntent';
+import { matchFastDeviceCommand, matchVoiceTriggeredAutomation, matchDeviceStateQuery } from '@/services/ai/fastIntent';
 import { runAutomation } from '@/services/automation/automationEngine';
 import { logRoute } from '@/services/telemetry/routeMetrics';
 import { useConnectivityStore } from '@/stores/useConnectivityStore';
@@ -108,8 +108,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
+/**
+ * Comandos de alto impacto que SEMPRE pedem confirmação, independente do
+ * nível de autonomia. FASE 16 — safety_level: 'high'.
+ */
+function isHighImpact(intent: ParsedIntent): boolean {
+  if (intent.type !== 'device_control') return false;
+  const actions = intent.actions ?? [];
+  // Mais de 3 dispositivos de uma vez = alto impacto
+  if (actions.length > 3) return true;
+  // Desligar tudo (flag "tudo" no label) = alto impacto
+  if (actions.some((a) => a.action === 'setOff' && actions.length > 2)) return true;
+  return false;
+}
+
 /** Determina se um intent precisa de confirmação no modo assistido */
 function needsConfirmation(intent: ParsedIntent): boolean {
+  if (isHighImpact(intent)) return true;
   return ['device_control', 'automation', 'open_url', 'set_reminder', 'save_note'].includes(
     intent.type
   );
@@ -874,6 +889,29 @@ export function useArgos() {
             if (__DEV__) console.error('[Argos] Falha na automação por voz:', err);
             setStatus('error');
             setTimeout(() => setStatus('idle'), 2000);
+          } finally {
+            releaseTurnGuard();
+          }
+          return;
+        }
+
+        // Query de estado local (ex: "está ligada?") — responde do cache sem IA.
+        const stateQuery = matchDeviceStateQuery(trimmed, useDeviceStore.getState().devices);
+        if (stateQuery) {
+          perfMark('state_query (local)');
+          heavy();
+          try {
+            await speak(stateQuery.speech);
+            logRoute({ ts: _routeStart, route: 'local', intent: 'query', latencyMs: Date.now() - _routeStart, success: true });
+            addMessage({
+              id: `msg-${Date.now()}-query`,
+              role: 'assistant',
+              content: stateQuery.speech,
+              timestamp: new Date(),
+              type: 'text',
+            });
+          } catch (err) {
+            if (__DEV__) console.error('[Argos] Falha na query local:', err);
           } finally {
             releaseTurnGuard();
           }

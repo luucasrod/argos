@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import type { MemorySuggestion } from '@/services/ai/memorySuggestions';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { getRouteStats, type RouteStats } from '@/services/telemetry/routeMetrics';
 import { useGoalsStore, type Goal, type UpdateGoalInput } from '@/stores/useGoalsStore';
 import { SwipeCardDeck } from '@/components/memory/SwipeCardDeck';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -140,6 +141,11 @@ export default function InteligenciaScreen() {
   const insights = getActiveInsights();
   const suggestions = getSuggestions().filter((s) => !dismissedSuggestionIds.has(s.id));
 
+  const [routeStats, setRouteStats] = useState<RouteStats | null>(null);
+  useEffect(() => {
+    getRouteStats().then(setRouteStats).catch(() => {});
+  }, [activeTab]);
+
   const handleAcceptSuggestion = (suggestion: MemorySuggestion) => {
     router.push({
       pathname: suggestion.action.route,
@@ -185,6 +191,29 @@ export default function InteligenciaScreen() {
       case 'insights':
         return (
           <ScrollView contentContainerStyle={styles.scrollContent}>
+            {routeStats && routeStats.totalCommands > 0 && (
+              <GlassCard style={styles.insightCard}>
+                <Text style={styles.insightMsg}>Roteamento de IA</Text>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statNum}>{routeStats.totalCommands}</Text>
+                    <Text style={styles.statLabel}>comandos</Text>
+                  </View>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statNum}>{routeStats.localPercent}%</Text>
+                    <Text style={styles.statLabel}>local</Text>
+                  </View>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statNum}>{routeStats.avgLocalMs}ms</Text>
+                    <Text style={styles.statLabel}>avg local</Text>
+                  </View>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statNum}>{routeStats.avgCloudMs}ms</Text>
+                    <Text style={styles.statLabel}>avg cloud</Text>
+                  </View>
+                </View>
+              </GlassCard>
+            )}
             <Text style={styles.sectionLabel}>{insights.length} ativo{insights.length !== 1 ? 's' : ''}</Text>
             {insights.length === 0 ? (
               <EmptyState emoji="💡" text="Nenhum insight ativo" />
@@ -549,6 +578,17 @@ const styles = StyleSheet.create({
   insightFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   insightType: { color: Colors.text.muted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   insightDismiss: { color: Colors.text.muted, fontSize: 12 },
+
+  statPill: {
+    backgroundColor: Colors.glass.medium,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 64,
+  },
+  statNum: { color: Colors.text.primary, fontSize: 16, fontWeight: '700' },
+  statLabel: { color: Colors.text.muted, fontSize: 10, marginTop: 2 },
 
   prefCard: { padding: 0, overflow: 'hidden' },
   prefRow: {

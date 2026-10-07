@@ -1,5 +1,8 @@
 /**
- * transcribeNative.ts — envia o arquivo gravado para /api/transcribe (Whisper).
+ * transcribeNative.ts — envia o arquivo gravado para STT.
+ *
+ * Prefere Deepgram (menor latência, melhor pt-BR) quando disponível;
+ * cai para Whisper se Deepgram não estiver configurado no servidor.
  *
  * Usa FormData com `{ uri, name, type }`, que é o caminho de upload de arquivo
  * do React Native: a camada nativa de rede lê o arquivo direto do disco. É de
@@ -16,10 +19,11 @@
  */
 import { getAccessToken } from '@/services/auth/session';
 import { API_BASE } from '@/constants/api';
+import { deepgramTranscribeRecording, isDeepgramAvailable } from './deepgramTranscribe.native';
 
 const TIMEOUT_MS = 20000;
 
-export async function transcribeRecording(uri: string): Promise<string> {
+async function whisperTranscribeRecording(uri: string): Promise<string> {
   const token = await getAccessToken().catch(() => null);
 
   const form = new FormData();
@@ -51,4 +55,18 @@ export async function transcribeRecording(uri: string): Promise<string> {
 
   const json = (await res.json()) as { text?: string };
   return (json.text ?? '').trim();
+}
+
+export async function transcribeRecording(uri: string): Promise<string> {
+  // Tenta Deepgram primeiro; cai no Whisper se não estiver configurado
+  try {
+    const deepgramAvail = await isDeepgramAvailable();
+    if (deepgramAvail) {
+      return await deepgramTranscribeRecording(uri);
+    }
+  } catch (err) {
+    // Deepgram configurado mas falhou — cai no Whisper
+    if (__DEV__) console.warn('[transcribe] Deepgram falhou, usando Whisper:', err);
+  }
+  return whisperTranscribeRecording(uri);
 }
