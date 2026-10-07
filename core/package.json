@@ -1,0 +1,27 @@
+{
+  "name": "argos-core",
+  "version": "1.0.0",
+  "description": "Argos Core — serviço local que roda no PC e expõe dispositivos locais ao app mobile",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "install-service": "node scripts/install-service.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "cors": "^2.8.5",
+    "node-machine-id": "^1.1.12",
+    "robotjs": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.10",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "ts-node-dev": "^2.0.0"
+  }
+}

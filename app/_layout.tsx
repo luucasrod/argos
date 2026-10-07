@@ -1,6 +1,8 @@
 import '../global.css';
 import 'react-native-reanimated';
 import 'react-native-gesture-handler';
+// Registra adaptadores HomeProvider (eWeLink, Tuya, WiZ) — import com efeito colateral.
+import '@/services/devices/homeProviderAdapters';
 import { Stack, router, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
