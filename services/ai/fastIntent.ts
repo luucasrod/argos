@@ -2,6 +2,7 @@ import { speakToggle, speakToggleMany, speakBrightness, speakColor } from '@/ser
 import { Device } from '@/types/device.types';
 import { Automation } from '@/types/automation.types';
 import { ParsedIntent } from './intentParser';
+import { getLastIntentContext } from '@/services/voice/intentContext';
 
 const DIACRITICS_RE = new RegExp('[\\u0300-\\u036f]', 'g');
 
@@ -101,20 +102,58 @@ function matchHouseCommand(text: string, devices: Device[]): ParsedIntent | null
 
   const words = text.split(/\s+/);
   const asksToTurnOff = OFF_WORDS.some((word) => words.includes(word));
+  const asksToTurnOn = ON_WORDS.some((word) => words.includes(word));
   const asksForLights = words.some((word) => ['luz', 'luzes', 'lampada', 'lampadas'].includes(word));
   const isCompound = /\b(e|depois|tambem)\b/.test(text);
-  if (!asksToTurnOff || !asksForLights || isCompound) return null;
+  if ((!asksToTurnOff && !asksToTurnOn) || !asksForLights || isCompound) return null;
 
   const lights = available.filter((device) => device.category === 'lights');
-  const mentionedRooms = [...new Set(
-    devices
-      .filter((device) => device.category === 'lights')
-      .map((device) => normalize(device.room))
-      .filter((room) => room && text.includes(room))
-  )];
+
+  // Room inference: casar por substring (escritório ≈ "escrit") e sinônimos comuns
+  const ROOM_ALIASES: Record<string, string[]> = {
+    sala: ['sala', 'living', 'estar'],
+    quarto: ['quarto', 'bedroom', 'suite', 'suíte', 'dormitorio'],
+    cozinha: ['cozinha', 'kitchen'],
+    banheiro: ['banheiro', 'lavabo', 'banho'],
+    escritorio: ['escritorio', 'escrit', 'office', 'trabalho'],
+    varanda: ['varanda', 'sacada', 'terraço', 'terraco'],
+    garagem: ['garagem', 'garage'],
+  };
+
+  const allRooms = [...new Set(
+    devices.filter((d) => d.category === 'lights').map((d) => normalize(d.room ?? ''))
+  )].filter(Boolean);
+
+  const mentionedRooms = allRooms.filter((room) => {
+    if (text.includes(room)) return true;
+    // Verifica aliases para a sala normalizada
+    for (const aliases of Object.values(ROOM_ALIASES)) {
+      if (aliases.some((alias) => room.includes(alias) && text.includes(alias))) return true;
+    }
+    // Verifica se alguma palavra significativa do nome do quarto está no texto
+    const tokens = room.split(/\s+/).filter((t) => t.length > 3);
+    return tokens.some((t) => text.includes(t));
+  });
+
   const targets = mentionedRooms.length > 0
-    ? lights.filter((device) => mentionedRooms.includes(normalize(device.room)))
+    ? lights.filter((device) => mentionedRooms.includes(normalize(device.room ?? '')))
     : lights;
+
+  if (targets.length === 0) return null;
+
+  if (asksToTurnOn) {
+    const actions = targets.map((d) => ({
+      deviceId: d.id,
+      action: 'setOn',
+      property: 'isOn',
+      value: true,
+      label: `Ligando ${d.name}`,
+    }));
+    const speech = targets.length === 1
+      ? speakToggle(targets[0].name, true)
+      : speakToggleMany(targets.length, 'Ligando');
+    return { type: 'device_control', speech, text: speech, actions };
+  }
 
   return setOffIntent(
     targets,
@@ -235,6 +274,97 @@ function matchColorCommand(text: string, devices: Device[], words: string[]): Pa
     colorWord
   );
   return { type: 'device_control', speech, text: speech, actions };
+}
+
+// Frases típicas de follow-up que se referem ao contexto anterior
+const FOLLOWUP_PHRASES = [
+  'e o', 'e a', 'e os', 'e as',
+  'tambem o', 'tambem a', 'tambem os', 'tambem as',
+  'mais o', 'mais a', 'e esse', 'e essa',
+];
+
+/**
+ * Detecta follow-up contextual: "e a do quarto também" → repete a última
+ * ação sobre um dispositivo diferente, sem precisar mencionar a ação.
+ */
+export function matchFollowUpCommand(input: string, devices: Device[]): ParsedIntent | null {
+  const text = normalize(input);
+  const ctx = getLastIntentContext();
+  if (!ctx || !ctx.action) return null;
+
+  const isFollowUp = FOLLOWUP_PHRASES.some((p) => text.startsWith(p)) ||
+    /^(tambem|igualmente|idem)/.test(text);
+  if (!isFollowUp) return null;
+
+  // Remove o prefixo de follow-up para extrair só o nome do dispositivo
+  let devicePart = text;
+  for (const p of FOLLOWUP_PHRASES) {
+    if (text.startsWith(p)) {
+      devicePart = text.slice(p.length).trim();
+      break;
+    }
+  }
+  if (!devicePart) return null;
+
+  const online = devices.filter((d) => d.status === 'online');
+  let target: Device | null = null;
+
+  for (const d of online) {
+    if (devicePart.includes(normalize(d.name))) { target = d; break; }
+  }
+  if (!target) {
+    const partial = online.filter((d) =>
+      nameTokens(d.name).some((tok) => devicePart.includes(tok))
+    );
+    if (partial.length === 1) target = partial[0];
+  }
+  if (!target) return null;
+
+  const prevAction = ctx.intent.actions?.[0];
+  const action = ctx.action;
+  const verb = action === 'setOff' ? 'Desligando' : action === 'setOn' ? 'Ligando' : 'Alternando';
+
+  const actions = [{
+    deviceId: target.id,
+    action,
+    property: prevAction?.property ?? 'isOn',
+    value: prevAction?.value,
+    label: `${verb} ${target.name}`,
+  }];
+
+  const speech = speakToggle(target.name, action !== 'setOff');
+  return { type: 'device_control', speech, text: speech, actions };
+}
+
+/**
+ * Decompõe comandos compostos por "e" em múltiplas ações no mesmo intent.
+ * Ex: "liga a luz e a TV" → [{setOn luz}, {setOn TV}]
+ * Só funciona quando TODAS as partes são resolvíveis localmente.
+ */
+export function matchCompoundDeviceCommand(input: string, devices: Device[]): ParsedIntent | null {
+  const text = normalize(input);
+  // Precisa conter conector explícito "e"
+  if (!/\b(e|mais|tambem)\b/.test(text)) return null;
+
+  // Divide nos conectores, tenta resolver cada parte individualmente
+  const parts = text.split(/\b(?:e|mais|tambem)\b/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2 || parts.length > 4) return null;
+
+  const allActions: ParsedIntent['actions'] = [];
+  let combinedSpeech = '';
+
+  for (const part of parts) {
+    // Cada parte deve ser um comando simples (sem sub-compostos)
+    if (/\b(?:e|mais|tambem)\b/.test(part)) return null;
+    const sub = matchFastDeviceCommand(part, devices);
+    if (!sub || sub.type !== 'device_control' || !sub.actions?.length) return null;
+    allActions.push(...sub.actions);
+  }
+
+  if (allActions.length === 0) return null;
+
+  combinedSpeech = speakToggleMany(allActions.length, 'Executando');
+  return { type: 'device_control', speech: combinedSpeech, text: combinedSpeech, actions: allActions };
 }
 
 /**

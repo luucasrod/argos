@@ -11,7 +11,8 @@ import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
-import { matchFastDeviceCommand, matchVoiceTriggeredAutomation, matchDeviceStateQuery } from '@/services/ai/fastIntent';
+import { matchFastDeviceCommand, matchVoiceTriggeredAutomation, matchDeviceStateQuery, matchCompoundDeviceCommand, matchFollowUpCommand } from '@/services/ai/fastIntent';
+import { setLastIntentContext } from '@/services/voice/intentContext';
 import { runAutomation } from '@/services/automation/automationEngine';
 import { logRoute } from '@/services/telemetry/routeMetrics';
 import { useConnectivityStore } from '@/stores/useConnectivityStore';
@@ -919,8 +920,12 @@ export function useArgos() {
         }
 
         // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
-      // sem chamar a IA. Corta toda a espera de "pensando" pro caso mais comum.
-      const fastIntent = matchFastDeviceCommand(trimmed, useDeviceStore.getState().devices);
+      // sem chamar a IA. Ordem: follow-up → composto → simples.
+      const currentDevices = useDeviceStore.getState().devices;
+      const fastIntent =
+        matchFollowUpCommand(trimmed, currentDevices) ??
+        matchCompoundDeviceCommand(trimmed, currentDevices) ??
+        matchFastDeviceCommand(trimmed, currentDevices);
       if (fastIntent) {
         perfMark('fast_intent (sem chamar a IA)');
         heavy();
@@ -945,6 +950,7 @@ export function useArgos() {
             });
           } else {
             await processIntent(fastIntent);
+            setLastIntentContext(fastIntent);
             logRoute({ ts: _routeStart, route: 'local', intent: fastIntent.type, latencyMs: Date.now() - _routeStart, success: true });
           }
         } catch (err) {
