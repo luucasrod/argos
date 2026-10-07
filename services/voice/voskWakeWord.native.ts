@@ -394,7 +394,7 @@ let streamingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
  */
 // Falou por isto ou mais e o texto final ainda ficou curto: sinal de que a
 // gramática fechada descartou boa parte do que foi dito.
-const SUSPICIOUS_MIN_SPEECH_MS = 2500;
+const SUSPICIOUS_MIN_SPEECH_MS = 1000;
 // "curto" aqui é o comprimento do texto final, não contagem de palavras —
 // mais simples e já cobre o caso real (comando genuíno raramente cabe nisso
 // se levou SUSPICIOUS_MIN_SPEECH_MS inteiros para ser dito).
@@ -492,16 +492,16 @@ async function submitLocked(): Promise<void> {
   vlog('gramatica reconheceu: "' + grammarText + '" (' + speechMs + 'ms de fala)');
   perfStart('fim_da_fala (silencio detectado)');
 
-  // Mesma heurística que já existia só pra registrar tentativa suspeita (ver
-  // SUSPICIOUS_* acima) — reaproveitada agora pra decidir quando vale a pena
-  // tentar o Whisper. Texto vazio também cai aqui (0 <= SUSPICIOUS_MAX_CHARS).
+  // Gramática não produziu nada: sempre tenta o Whisper se houve áudio capturado.
+  // Acontece quando a fala não bate em nenhuma entrada da gramática fechada.
+  const alwaysTryOnEmpty = grammarText.length === 0;
   const shortForDuration = speechMs >= SUSPICIOUS_MIN_SPEECH_MS && grammarText.length <= SUSPICIOUS_MAX_CHARS;
   // A-065: mesmo com texto mais longo, terminar em conector solto ("clima
   // em") é corte real — a janela de silêncio maior por conector
   // (silenceWindowFor) já tenta evitar isso, mas quando ainda assim
   // acontece, vale tentar o Whisper em vez de aceitar a frase incompleta.
   const truncated = grammarText.length > 0 && endsWithDanglingWord(grammarText);
-  const suspicious = shortForDuration || truncated;
+  const suspicious = alwaysTryOnEmpty || shortForDuration || truncated;
   if (grammarText.length > 0 && shortForDuration) {
     void recordSuspiciousAttempt({ text: grammarText, speechMs, reason: 'curta_para_duracao' });
   } else if (truncated) {

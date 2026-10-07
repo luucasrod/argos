@@ -130,10 +130,10 @@ export function useVoice(options?: UseVoiceOptions) {
           setIsListening(false);
           const clean = resolveDeviceVoiceAlias(text, devices);
           if (!clean) {
-            // Wake word disparou mas não veio comando (silêncio total depois
-            // dela) — o turno de medição foi aberto em submit() e nunca vai
-            // ser fechado por speak(), então fecha aqui sem imprimir resumo.
+            // Wake word disparou mas Whisper também não entendeu nada.
             perfAbort();
+            setTranscript('Não entendi. Tente de novo.');
+            setTimeout(() => setTranscript(''), 2500);
             setStatus('idle');
             return;
           }
