@@ -14,6 +14,8 @@ export type RouteEntry = {
   intent: string;
   latencyMs: number;
   success: boolean;
+  /** Texto normalizado do comando — opcional para compatibilidade retroativa */
+  command?: string;
 };
 
 export type RouteStats = {

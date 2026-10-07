@@ -14,7 +14,8 @@ import { router } from 'expo-router';
 import { useMemoryStore } from '@/stores/useMemoryStore';
 import type { MemorySuggestion } from '@/services/ai/memorySuggestions';
 import { useSettingsStore } from '@/stores/useSettingsStore';
-import { getRouteStats, type RouteStats } from '@/services/telemetry/routeMetrics';
+import { getRouteStats, getRouteMetrics, type RouteStats } from '@/services/telemetry/routeMetrics';
+import { buildPatternSuggestions } from '@/services/ai/memorySuggestions';
 import { useGoalsStore, type Goal, type UpdateGoalInput } from '@/stores/useGoalsStore';
 import { SwipeCardDeck } from '@/components/memory/SwipeCardDeck';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -139,11 +140,18 @@ export default function InteligenciaScreen() {
   const confirmedMemories = memories.filter((m) => m.status === 'confirmed' && m.isActive);
   const pendingMemories = getPendingMemories();
   const insights = getActiveInsights();
-  const suggestions = getSuggestions().filter((s) => !dismissedSuggestionIds.has(s.id));
+  const memorySuggestions = getSuggestions().filter((s) => !dismissedSuggestionIds.has(s.id));
+  const [patternSuggestions, setPatternSuggestions] = useState<MemorySuggestion[]>([]);
+  const suggestions = [...memorySuggestions, ...patternSuggestions].filter(
+    (s) => !dismissedSuggestionIds.has(s.id)
+  );
 
   const [routeStats, setRouteStats] = useState<RouteStats | null>(null);
   useEffect(() => {
     getRouteStats().then(setRouteStats).catch(() => {});
+    getRouteMetrics().then((entries) => {
+      setPatternSuggestions(buildPatternSuggestions(entries));
+    }).catch(() => {});
   }, [activeTab]);
 
   const handleAcceptSuggestion = (suggestion: MemorySuggestion) => {

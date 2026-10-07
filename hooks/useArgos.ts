@@ -11,7 +11,7 @@ import { resolveAnthropicModel } from '@/services/ai/config';
 import { buildApiMessageHistory } from '@/services/ai/chatMessages';
 import { buildSystemPrompt } from '@/services/ai/systemPrompt';
 import { parseAIResponse, ParsedIntent } from '@/services/ai/intentParser';
-import { matchFastDeviceCommand, matchVoiceTriggeredAutomation, matchDeviceStateQuery, matchCompoundDeviceCommand, matchFollowUpCommand } from '@/services/ai/fastIntent';
+import { matchFastDeviceCommand, matchVoiceTriggeredAutomation, matchDeviceStateQuery, matchCompoundDeviceCommand, matchFollowUpCommand, matchMemoryAwareDeviceCommand } from '@/services/ai/fastIntent';
 import { setLastIntentContext } from '@/services/voice/intentContext';
 import { runAutomation } from '@/services/automation/automationEngine';
 import { logRoute } from '@/services/telemetry/routeMetrics';
@@ -920,11 +920,12 @@ export function useArgos() {
         }
 
         // Comando óbvio de dispositivo (ex: "desliga a tomada") — executa direto,
-      // sem chamar a IA. Ordem: follow-up → composto → simples.
+      // sem chamar a IA. Ordem: follow-up → composto → alias-de-memória → simples.
       const currentDevices = useDeviceStore.getState().devices;
       const fastIntent =
         matchFollowUpCommand(trimmed, currentDevices) ??
         matchCompoundDeviceCommand(trimmed, currentDevices) ??
+        matchMemoryAwareDeviceCommand(trimmed, currentDevices, memories) ??
         matchFastDeviceCommand(trimmed, currentDevices);
       if (fastIntent) {
         perfMark('fast_intent (sem chamar a IA)');
@@ -951,7 +952,7 @@ export function useArgos() {
           } else {
             await processIntent(fastIntent);
             setLastIntentContext(fastIntent);
-            logRoute({ ts: _routeStart, route: 'local', intent: fastIntent.type, latencyMs: Date.now() - _routeStart, success: true });
+            logRoute({ ts: _routeStart, route: 'local', intent: fastIntent.type, latencyMs: Date.now() - _routeStart, success: true, command: trimmed });
           }
         } catch (err) {
           // Sem este catch, uma exceção aqui escapava de sendMessage e deixava o
@@ -1094,7 +1095,7 @@ export function useArgos() {
           rawText = response.content[0].type === 'text' ? (response.content[0].text ?? '') : '';
         }
         perfMark('llm_resposta_recebida');
-        logRoute({ ts: _routeStart, route: 'cloud', intent: 'llm', latencyMs: Date.now() - _routeStart, success: true });
+        logRoute({ ts: _routeStart, route: 'cloud', intent: 'llm', latencyMs: Date.now() - _routeStart, success: true, command: trimmed });
 
         const intent = parseAIResponse(rawText);
         perfMark('intent_parseado');

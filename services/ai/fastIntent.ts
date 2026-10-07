@@ -1,6 +1,7 @@
 import { speakToggle, speakToggleMany, speakBrightness, speakColor } from '@/services/ai/fastIntentSpeech';
 import { Device } from '@/types/device.types';
 import { Automation } from '@/types/automation.types';
+import { Memory } from '@/types/memory.types';
 import { ParsedIntent } from './intentParser';
 import { getLastIntentContext } from '@/services/voice/intentContext';
 
@@ -532,4 +533,77 @@ export function matchVoiceTriggeredAutomation(input: string, automations: Automa
     if (!phrase) return false;
     return normalize(phrase) === text || text.includes(normalize(phrase));
   }) ?? null;
+}
+
+/**
+ * Extrai aliases de dispositivos de memórias do tipo 'preference' ou 'location'.
+ * Ex: memória "minha lâmpada favorita é a Luz do Escritório"
+ *   → alias "minha lampada favorita" → Device{Luz do Escritório}
+ */
+function extractDeviceAliases(memories: Memory[], devices: Device[]): Map<string, Device> {
+  const map = new Map<string, Device>();
+
+  for (const mem of memories) {
+    if (!mem.isActive) continue;
+    if (mem.category !== 'preference' && mem.category !== 'location') continue;
+
+    // Preserva "é" (acento) antes de normalizar — normalize() transforma "é" → "e"
+    // que colide com a conjunção. Por isso usamos toLowerCase() aqui.
+    const content = mem.content.toLowerCase();
+    const eIdx = content.indexOf(' é ');
+    if (eIdx === -1) continue;
+
+    const rawLeft = content.slice(0, eIdx).trim();
+    const rawRight = content.slice(eIdx + 3)
+      .replace(/^(o|a|os|as|minha|meu|meus|minhas)\s+/, '')
+      .trim();
+
+    for (const device of devices) {
+      const deviceLower = device.name.toLowerCase();
+
+      if (rawRight.includes(deviceLower) || deviceLower.includes(rawRight)) {
+        const alias = normalize(rawLeft);
+        if (alias.length > 3) map.set(alias, device);
+      } else if (rawLeft.includes(deviceLower) || deviceLower.includes(rawLeft)) {
+        const alias = normalize(rawRight);
+        if (alias.length > 3) map.set(alias, device);
+      }
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Resolve aliases definidos pelo usuário em memórias antes de tentar o fast path.
+ * Ex: "desliga minha lâmpada favorita" → substitui alias pelo nome real → fast path resolve.
+ * FASE 18 do Prompt Master.
+ */
+export function matchMemoryAwareDeviceCommand(
+  input: string,
+  devices: Device[],
+  memories: Memory[]
+): ParsedIntent | null {
+  if (!memories.length) return null;
+
+  const aliases = extractDeviceAliases(memories, devices);
+  if (!aliases.size) return null;
+
+  const textNorm = normalize(input);
+  let resolvedInput = input;
+  let matched = false;
+
+  for (const [alias, device] of aliases) {
+    if (textNorm.includes(alias)) {
+      // Substitui o alias pelo nome do dispositivo, preservando maiúsculas originais
+      const re = new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      resolvedInput = resolvedInput.replace(re, device.name);
+      matched = true;
+      break;
+    }
+  }
+
+  if (!matched) return null;
+
+  return matchFastDeviceCommand(resolvedInput, devices);
 }
