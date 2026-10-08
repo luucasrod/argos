@@ -64,6 +64,18 @@ export class SpeechTokenScanner {
             case 'n': extracted += '\n'; break;
             case 'r': extracted += '\r'; break;
             case 't': extracted += '\t'; break;
+            case 'u': {
+              // \uXXXX — need 4 more hex digits after j+2
+              if (j + 5 >= buf.length) {
+                // incomplete escape — wait for more data
+                this.lastPos = j;
+                return extracted || null;
+              }
+              const hex = buf.slice(j + 2, j + 6);
+              try { extracted += JSON.parse(`"\\u${hex}"`); } catch { extracted += hex; }
+              j += 4; // j+=2 below covers \u, these 4 cover XXXX
+              break;
+            }
             default: extracted += next; break;
           }
           j += 2;
