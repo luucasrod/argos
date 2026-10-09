@@ -126,19 +126,114 @@ function withArgosVoiceGradleDeps(config) {
   });
 }
 
+/**
+ * Copia CMakeLists.txt e jni/WhisperJni.cpp para android/app/,
+ * e adiciona externalNativeBuild + abiFilters no build.gradle do app.
+ *
+ * O CMake baixa whisper.cpp via FetchContent no primeiro build.
+ * Para o modelo GGML, veja withArgosVoiceModelAsset abaixo.
+ */
 function withArgosVoiceCMakeConfig(config) {
   return withDangerousMod(config, [
     'android',
     (cfg) => {
+      const appDir = cfg.modRequest.platformProjectRoot;
+
+      // Copiar CMakeLists.txt para android/app/
+      const cmakeSrc = path.join(__dirname, 'native', 'CMakeLists.txt');
+      const cmakeDest = path.join(appDir, 'app', 'CMakeLists.txt');
+      if (fs.existsSync(cmakeSrc)) {
+        fs.copyFileSync(cmakeSrc, cmakeDest);
+      }
+
+      // Copiar jni/ para android/app/src/main/jni/
+      const jniSrcDir = path.join(__dirname, 'native', 'jni');
+      const jniDestDir = path.join(appDir, 'app', 'src', 'main', 'jni');
+      if (fs.existsSync(jniSrcDir)) {
+        fs.mkdirSync(jniDestDir, { recursive: true });
+        for (const file of fs.readdirSync(jniSrcDir)) {
+          fs.copyFileSync(
+            path.join(jniSrcDir, file),
+            path.join(jniDestDir, file)
+          );
+        }
+      }
+
+      // Adicionar externalNativeBuild e abiFilters ao app/build.gradle
+      const gradlePath = path.join(appDir, 'app', 'build.gradle');
+      if (fs.existsSync(gradlePath)) {
+        let gradle = fs.readFileSync(gradlePath, 'utf8');
+
+        // externalNativeBuild dentro de android {}
+        const cmakeMarker = 'externalNativeBuild {';
+        if (!gradle.includes(cmakeMarker)) {
+          gradle = gradle.replace(
+            /android\s*\{/,
+            `android {
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            version "3.22.1+"
+        }
+    }`
+          );
+        }
+
+        // abiFilters dentro de defaultConfig {}
+        const abiMarker = 'abiFilters';
+        if (!gradle.includes(abiMarker)) {
+          gradle = gradle.replace(
+            /defaultConfig\s*\{/,
+            `defaultConfig {
+        externalNativeBuild {
+            cmake {
+                abiFilters "arm64-v8a", "x86_64"
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }`
+          );
+        }
+
+        fs.writeFileSync(gradlePath, gradle);
+      }
+
       return cfg;
     },
   ]);
 }
 
+/**
+ * Instrução sobre o modelo GGML (não baixa automaticamente — o arquivo
+ * é grande demais para empacotamento automático sem escolha do usuário).
+ *
+ * Para preparar o modelo:
+ *   1. Baixe de https://huggingface.co/ggerganov/whisper.cpp/tree/main
+ *      o arquivo ggml-tiny-q5_1.bin (~31 MB) ou ggml-base-q5_1.bin (~57 MB)
+ *   2. Renomeie para ggml-model.bin
+ *   3. Coloque em: assets/whisper-pt/ggml-model.bin
+ *
+ * O módulo copia o arquivo para getFilesDir() no primeiro loadModel().
+ * Sem o modelo, loadModel() falha com MODEL_LOAD_ERROR (fallback cloud).
+ */
 function withArgosVoiceModelAsset(config) {
   return withDangerousMod(config, [
     'android',
     (cfg) => {
+      // Verifica se o modelo foi adicionado pelo desenvolvedor
+      const modelSrc = path.join(
+        cfg.modRequest.projectRoot,
+        'assets',
+        'whisper-pt',
+        'ggml-model.bin'
+      );
+      if (!fs.existsSync(modelSrc)) {
+        console.warn(
+          '[withArgosVoiceModule] Modelo GGML não encontrado em assets/whisper-pt/ggml-model.bin.\n' +
+          '  Baixe ggml-tiny-q5_1.bin ou ggml-base-q5_1.bin de:\n' +
+          '  https://huggingface.co/ggerganov/whisper.cpp/tree/main\n' +
+          '  e renomeie para ggml-model.bin nesse diretório.'
+        );
+      }
       return cfg;
     },
   ]);

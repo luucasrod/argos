@@ -19,7 +19,7 @@
  */
 import { NativeEventEmitter, NativeModules, Platform, type EventSubscription } from 'react-native';
 
-const { ArgosVoice, WhisperCpp, AudioProcessing } = NativeModules as {
+const { ArgosVoice, WhisperCppSTT, AudioProcessing } = NativeModules as {
   ArgosVoice: {
     loadModel(path: string): Promise<string>;
     start(options?: { grammar?: string[] }): Promise<string>;
@@ -30,9 +30,10 @@ const { ArgosVoice, WhisperCpp, AudioProcessing } = NativeModules as {
     addListener(eventName: string): void;
     removeListeners(count: number): void;
   };
-  WhisperCpp: {
-    transcribeAudioWhisper(audioBase64: string, language: string): Promise<{text: string; confidence: number; duration_ms: number}>;
-    getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}>;
+  WhisperCppSTT: {
+    loadModel(path: string): Promise<string>;
+    transcribeAudioWhisper(audioBase64: string, language: string): Promise<{text: string; confidence: number; duration_ms: number; language: string}>;
+    getModelInfo(): Promise<{modelPath: string; nativeAvailable: boolean; modelLoaded: boolean; sampleRateHz: number; language: string}>;
   };
   AudioProcessing: {
     enableEchoCancellation(enable: boolean): Promise<string>;
@@ -84,16 +85,37 @@ export function cancelCommandCapture(): void {
   ArgosVoice.cancelCommandCapture();
 }
 
-/** Transcreve áudio usando Whisper.cpp on-device (V-002, preferred).
- *  Recebe áudio em base64 e retorna o texto transcrito.
- *  Se falhar (modelo insuficiente ou dispositivo fraco), pode fallback para Deepgram. */
-export function transcribeAudioWhisper(audioBase64: string, language: string = "pt"): Promise<{text: string; confidence: number; duration_ms: number}> {
-  return WhisperCpp.transcribeAudioWhisper(audioBase64, language);
+/**
+ * Inicializa o modelo GGML do Whisper.cpp (copia asset pra armazenamento).
+ * Chamar uma vez no boot, antes de qualquer transcrição local.
+ * Falha silenciosamente se a lib nativa não estiver disponível (build sem CMake).
+ */
+export async function loadWhisperModel(path = ''): Promise<void> {
+  if (!WhisperCppSTT) return;
+  try {
+    await WhisperCppSTT.loadModel(path);
+  } catch (e) {
+    console.warn('[WhisperCppSTT] loadModel falhou (normal em builds sem lib nativa):', e);
+  }
 }
 
-/** Obtém informações sobre o modelo Whisper carregado. */
-export function getModelInfo(): Promise<{modelPath: string; modelSizeMB: number; language: string; sampleRateHz: number}> {
-  return WhisperCpp.getModelInfo();
+/** Transcreve áudio WAV ou PCM16 (base64) via whisper.cpp on-device (V-002). */
+export function transcribeAudioWhisper(
+  audioBase64: string,
+  language = 'pt',
+): Promise<{ text: string; confidence: number; duration_ms: number; language: string }> {
+  return WhisperCppSTT.transcribeAudioWhisper(audioBase64, language);
+}
+
+/** Retorna informações sobre disponibilidade do módulo e do modelo. */
+export function getWhisperModelInfo(): Promise<{
+  modelPath: string;
+  nativeAvailable: boolean;
+  modelLoaded: boolean;
+  sampleRateHz: number;
+  language: string;
+}> {
+  return WhisperCppSTT.getModelInfo();
 }
 
 /** Habilita ou desabilita o AEC (Acoustic Echo Cancellation) nativo.

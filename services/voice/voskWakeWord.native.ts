@@ -669,6 +669,9 @@ async function ensureModel(): Promise<boolean> {
   try {
     await Vosk.loadModel(MODEL_PATH);
     modelLoaded = true;
+    // V-002: inicializa o modelo Whisper.cpp em background sem bloquear a wake word.
+    // Falha silenciosamente se a lib nativa não estiver no APK.
+    void Vosk.loadWhisperModel();
     return true;
   } catch {
     return false;
