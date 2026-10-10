@@ -1,61 +1,66 @@
 package com.masya.argos.modules
 
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import org.webrtc.audio.AudioProcessing
 
 /**
- * AudioProcessingModule — controle de AEC (Acoustic Echo Cancellation) nativo.
+ * AudioProcessingModule — controle de AEC via Android AudioFx nativo.
  *
- * Usa a biblioteca WebRTC AudioProcessing para remover o eco do próprio TTS
- * que seria captado pelo microfone durante a escuta de barge-in.
- *
- * Injetado via config plugin (plugins/withArgosVoiceModule.js) — android/ é
- * gitignored e desaparece no próximo `expo prebuild`.
+ * Usa AcousticEchoCanceler, AutomaticGainControl e NoiseSuppressor do
+ * Android (sem dependência de WebRTC) aplicados sobre o AudioRecord da
+ * sessão de voz. O session ID deve ser registrado via setAudioSessionId()
+ * pelo ArgosVoiceModule quando cria o AudioRecord.
  */
 class AudioProcessingModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
   override fun getName(): String = "AudioProcessing"
 
-  private var audioProcessing: AudioProcessing? = null
+  private var aec: AcousticEchoCanceler? = null
+  private var agc: AutomaticGainControl? = null
+  private var ns: NoiseSuppressor? = null
   private var echoCancellationEnabled = false
   private val TAG = "ArgosAudioProcessing"
 
-  /**
-   * Cria a instância do WebRTC AudioProcessing se ainda não existir.
-   * O WebRTC AudioProcessing é thread-safe e pode ser criado uma vez.
-   */
-  private fun ensureAudioProcessing(): AudioProcessing {
-    return audioProcessing ?: AudioProcessing.createBuiltinAudioProcessing().also {
-      audioProcessing = it
-    }
+  companion object {
+    /** Atualizado por ArgosVoiceModule quando cria o AudioRecord. */
+    var audioSessionId: Int = -1
   }
 
-  /**
-   * Habilita ou desabilita o cancelamento de eco acústico (AEC).
-   *
-   * Deve ser chamado:
-   * - `enableEchoCancellation(true)` em `beginTtsTurn()` (antes de começar a falar)
-   * - `enableEchoCancellation(false)` em `endTtsTurn()` (após terminar de falar)
-   *
-   * O WebRTC AudioProcessing aplica AEC no nível do AudioRecord — o áudio
-   * que chega ao recognizer (Vosk) já vem com o eco removido.
-   */
+  private fun ensureEffects(): Boolean {
+    val sid = audioSessionId
+    if (sid < 0) {
+      Log.w(TAG, "audioSessionId não configurado — AEC indisponível")
+      return false
+    }
+    if (aec == null && AcousticEchoCanceler.isAvailable()) {
+      aec = AcousticEchoCanceler.create(sid)
+    }
+    if (agc == null && AutomaticGainControl.isAvailable()) {
+      agc = AutomaticGainControl.create(sid)
+    }
+    if (ns == null && NoiseSuppressor.isAvailable()) {
+      ns = NoiseSuppressor.create(sid)
+    }
+    return true
+  }
+
   @ReactMethod
   fun enableEchoCancellation(enable: Boolean, promise: Promise) {
     try {
-      val ap = ensureAudioProcessing()
-      ap.setEchoCancellation(enable)
-      // AGC e NS ajudam na qualidade geral durante a escuta ativa
-      ap.setAutoGainControl(true)
-      ap.setNoiseSuppression(true)
-
+      if (ensureEffects()) {
+        aec?.enabled = enable
+        agc?.enabled = enable
+        ns?.enabled = enable
+      }
       echoCancellationEnabled = enable
-      Log.d(TAG, "Echo cancellation ${if (enable) "enabled" else "disabled"}")
+      Log.d(TAG, "Echo cancellation ${if (enable) "enabled" else "disabled"} (hw AEC)")
       promise.resolve("ok")
     } catch (e: Exception) {
       Log.e(TAG, "Failed to set echo cancellation: ${e.message}")
@@ -63,23 +68,17 @@ class AudioProcessingModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  /**
-   * Verifica se o AEC está atualmente habilitado.
-   */
   @ReactMethod
   fun isEchoCancellationEnabled(promise: Promise) {
     promise.resolve(echoCancellationEnabled)
   }
 
-  /**
-   * Libera recursos do AudioProcessing.
-   * Chamado quando o módulo de voz é parado completamente.
-   */
   @ReactMethod
   fun release(promise: Promise) {
     try {
-      audioProcessing?.also { it.release() }
-      audioProcessing = null
+      aec?.release(); aec = null
+      agc?.release(); agc = null
+      ns?.release();  ns = null
       echoCancellationEnabled = false
       Log.d(TAG, "AudioProcessing released")
       promise.resolve("ok")
@@ -89,13 +88,6 @@ class AudioProcessingModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  // Necessários pro NativeEventEmitter do lado JS não reclamar de
-  // "missing addListener/removeListeners" — módulo old-bridge
-  // (ReactContextBaseJavaModule) não tem essas assinaturas como abstratas
-  // pra usar `override` (diferente do NativeVoskSpec com codegen).
-  @ReactMethod
-  fun addListener(eventName: String) {}
-
-  @ReactMethod
-  fun removeListeners(count: Double) {}
+  @ReactMethod fun addListener(eventName: String) {}
+  @ReactMethod fun removeListeners(count: Double) {}
 }

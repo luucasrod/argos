@@ -75,7 +75,7 @@ function withArgosVoiceRegistration(config) {
         );
       }
 
-      const WHISPER_IMPORT_LINE = 'import com.masya.argos.modules.WhisperCppSTT';
+      const WHISPER_IMPORT_LINE = 'import com.masya.argos.modules.WhisperCppSTTPackage';
       if (!content.includes(WHISPER_IMPORT_LINE)) {
         content = content.replace(
           /^(package com\.masya\.argos\s*\n)/m,
