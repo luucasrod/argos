@@ -30,6 +30,7 @@ import { resolveIntentSpeech, minimalConfirmation, stripForSpeech } from '@/serv
 import { isVoiceSessionV2Enabled } from '@/contracts';
 import { sendChatMessageStreaming } from '@/services/voice/streamingConversation';
 import { prefetchCloudSpeech } from '@/services/voice/cloudTts';
+import { detectEmotion } from '@/services/voice/emotionEngine';
 import { perfMark } from '@/services/voice/perfLog';
 import { markAwaitingFollowUp } from '@/services/voice/followUpMode';
 import { recordValueAction, handleCorrectionReply } from '@/services/voice/correctionMemory';
@@ -1069,9 +1070,11 @@ export function useArgos() {
                 // Prefetch legacy (ativo só quando streaming TTS não iniciou)
                 const spoken = stripForSpeech(speech.trim());
                 if (!spoken) return;
+                const emotion = detectEmotion({ responseText: spoken, userMessage: trimmed });
                 prefetchCloudSpeech(spoken, {
                   rate: Math.min(2, Math.max(0.5, settings.personality.voiceSpeed ?? 1.0)),
                   gender: settings.personality.voiceGender,
+                  emotion,
                 });
               },
               {
