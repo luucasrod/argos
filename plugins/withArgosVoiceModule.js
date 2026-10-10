@@ -114,7 +114,6 @@ function withArgosVoiceGradleDeps(config) {
       /dependencies\s*\{/,
       `dependencies {
     implementation 'com.alphacephei:vosk-android:0.3.70@aar'
-    implementation 'net.java.dev.jna:jna:5.17.0@aar'
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.+'
     implementation 'org.tensorflow:tensorflow-lite:2.14.0'
     implementation 'com.google.android.gms:play-services-basement:18.0.0'

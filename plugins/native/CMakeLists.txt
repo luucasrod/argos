@@ -25,7 +25,7 @@ FetchContent_MakeAvailable(whisper_cpp)
 
 # Nossa shared library JNI que wraps whisper.cpp
 add_library(whisper-jni SHARED
-    ${CMAKE_SOURCE_DIR}/jni/WhisperJni.cpp
+    src/main/jni/WhisperJni.cpp
 )
 
 target_include_directories(whisper-jni PRIVATE
