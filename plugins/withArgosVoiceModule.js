@@ -117,7 +117,6 @@ function withArgosVoiceGradleDeps(config) {
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.17.+'
     implementation 'org.tensorflow:tensorflow-lite:2.14.0'
     implementation 'com.google.android.gms:play-services-basement:18.0.0'
-    implementation 'org.webrtc:google-webrtc:1.0.32006'
     `
     );
     return cfg;
